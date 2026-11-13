@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /** Labelled field wrapper. */
-export function Field({ label, children, hint, htmlFor }: { label: string; children: ReactNode; hint?: string; htmlFor?: string }) {
+export function Field({ label, children, hint, htmlFor }: { label: string; children: ReactNode; hint?: string | undefined; htmlFor?: string | undefined }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
@@ -25,7 +25,7 @@ export function Field({ label, children, hint, htmlFor }: { label: string; child
 }
 
 /** Native select styled to match inputs (accessible and mobile-friendly). */
-export function NativeSelect({ id, value, onChange, options, ariaLabel }: { id?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; ariaLabel?: string }) {
+export function NativeSelect({ id, value, onChange, options, ariaLabel }: { id?: string | undefined; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; ariaLabel?: string | undefined }) {
   return (
     <select
       id={id}
@@ -59,14 +59,14 @@ export function FormDialog({
   disabled,
 }: {
   trigger: ReactNode;
-  triggerVariant?: ButtonProps["variant"];
+  triggerVariant?: ButtonProps["variant"] | undefined;
   title: string;
-  description?: string;
-  submitLabel?: string;
+  description?: string | undefined;
+  submitLabel?: string | undefined;
   onSubmit: () => Promise<boolean | undefined> | boolean | undefined;
   children: ReactNode;
-  allowed?: boolean;
-  disabled?: boolean;
+  allowed?: boolean | undefined;
+  disabled?: boolean | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -106,7 +106,7 @@ export function FormDialog({
   );
 }
 
-export function SearchInput({ value, onChange, placeholder = "Search…", label = "Search" }: { value: string; onChange: (v: string) => void; placeholder?: string; label?: string }) {
+export function SearchInput({ value, onChange, placeholder = "Search…", label = "Search" }: { value: string; onChange: (v: string) => void; placeholder?: string | undefined; label?: string | undefined }) {
   const id = useId();
   return (
     <div className="relative w-full sm:max-w-xs">

@@ -36,7 +36,7 @@ function audit(
   event: string,
   subjectType: string,
   subjectId: string,
-  detail?: string,
+  detail?: string | undefined,
 ) {
   s.audit.unshift({ id: nextId(s, "audit", "AU"), at: now(), actorId: actor.id, category, event, subjectType, subjectId, detail });
 }
@@ -47,7 +47,7 @@ function garmentEvent(s: DemoState, garmentId: string, label: string, actor: Sta
 
 function addTask(
   s: DemoState,
-  t: Omit<Task, "id" | "status" | "createdAt"> & { status?: Task["status"] },
+  t: Omit<Task, "id" | "status" | "createdAt"> & { status?: Task["status"] | undefined },
 ) {
   const task: Task = { ...t, id: nextId(s, "task", "T"), status: t.status ?? "open", createdAt: now() };
   s.tasks.push(task);
@@ -176,8 +176,12 @@ export function assignTask(s: DemoState, actor: StaffUser, taskId: string, userI
 // ---------------------------------------------------------------- workstation
 
 function ws(s: DemoState, actor: StaffUser) {
-  if (!s.workstations[actor.id]) s.workstations[actor.id] = { armed: false, needsClear: false, log: [] };
-  return s.workstations[actor.id];
+  let w = s.workstations[actor.id];
+  if (!w) {
+    w = { armed: false, needsClear: false, log: [] };
+    s.workstations[actor.id] = w;
+  }
+  return w;
 }
 
 export function selectWorkstationTask(s: DemoState, actor: StaffUser, taskId: string) {
@@ -266,7 +270,7 @@ export function handOverTask(s: DemoState, actor: StaffUser) {
 export function submitInspection(
   s: DemoState,
   actor: StaffUser,
-  input: { inspectionId: string; checklist: ChecklistItem[]; notes: string; result: "pass" | "fail"; defectReason?: string },
+  input: { inspectionId: string; checklist: ChecklistItem[]; notes: string; result: "pass" | "fail"; defectReason?: string | undefined },
 ) {
   const insp = findOrThrow(s.inspections, input.inspectionId, "Inspection");
   ensure(can.submitInspection(actor, insp), "forbidden", "Only the quality inspector can submit results. Managers have read-only access.");

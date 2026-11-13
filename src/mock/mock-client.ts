@@ -306,7 +306,7 @@ function reports(s: DemoState, u: StaffUser): ReportsData {
       ],
       columns: ["Open", "Passed", "Failed"],
       rows: kinds.map((k) => ({
-        label: `${k[0].toUpperCase()}${k.slice(1)} inspections`,
+        label: `${k.charAt(0).toUpperCase()}${k.slice(1)} inspections`,
         columns: {
           Open: s.inspections.filter((i) => i.kind === k && i.status === "open").length,
           Passed: s.inspections.filter((i) => i.kind === k && i.status === "passed").length,

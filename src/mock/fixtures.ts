@@ -4,7 +4,7 @@
  */
 import type { ChecklistItem, DemoState, StaffUser } from "@/domain/types";
 
-export const DEMO_STATE_VERSION = 3;
+export const DEMO_STATE_VERSION = 4;
 
 const user = (
   id: string,
@@ -123,7 +123,7 @@ export function createSeed(): DemoState {
         size: "M",
         cuttingOutputId: "CUT-001",
         stage: "dispatched",
-        disposition: "passed",
+        disposition: "released",
         hold: null,
         packageId: "PKG-001",
         shipmentId: "SHP-001",
@@ -145,7 +145,10 @@ export function createSeed(): DemoState {
       { id: "GE-001", garmentId: "SHIRT-001", at: "2026-10-07T10:00:00Z", label: "Cut from FAB-001", detail: "Panel set PS-001-A", actorId: "u-cutting", department: "cutting" },
       { id: "GE-002", garmentId: "SHIRT-001", at: "2026-10-09T13:00:00Z", label: "Stitching completed", actorId: "u-stitching", department: "stitching" },
       { id: "GE-003", garmentId: "SHIRT-001", at: "2026-10-10T11:30:00Z", label: "Finishing completed", actorId: "u-finishing", department: "finishing" },
-      { id: "GE-004", garmentId: "SHIRT-001", at: "2026-10-11T09:10:00Z", label: "Final inspection passed", detail: "INSP-000", actorId: "u-quality", department: "quality" },
+      { id: "GE-008", garmentId: "SHIRT-001", at: "2026-10-10T14:00:00Z", label: "Final inspection failed — garment on hold", detail: "Loose thread at hem", actorId: "u-quality", department: "quality" },
+      { id: "GE-009", garmentId: "SHIRT-001", at: "2026-10-10T16:30:00Z", label: "Repair completed — awaiting reinspection", detail: "RW-001", actorId: "u-finishing", department: "finishing" },
+      { id: "GE-004", garmentId: "SHIRT-001", at: "2026-10-11T09:10:00Z", label: "Reinspection passed — hold awaits explicit release", detail: "INSP-000", actorId: "u-quality", department: "quality" },
+      { id: "GE-004b", garmentId: "SHIRT-001", at: "2026-10-11T09:15:00Z", label: "Quality hold released", detail: "INSP-000", actorId: "u-quality", department: "quality" },
       { id: "GE-005", garmentId: "SHIRT-001", at: "2026-10-12T08:00:00Z", label: "Packed into PKG-001", actorId: "u-packing", department: "packing" },
       { id: "GE-006", garmentId: "SHIRT-001", at: "2026-10-12T15:00:00Z", label: "Received into finished stock", actorId: "u-warehouse", department: "warehouse" },
       { id: "GE-007", garmentId: "SHIRT-001", at: "2026-10-14T07:45:00Z", label: "Dispatched on SHP-001", actorId: "u-dispatch", department: "dispatch" },
@@ -160,9 +163,14 @@ export function createSeed(): DemoState {
         submittedAt: "2026-10-03T10:00:00Z", submittedBy: "u-quality", createdAt: "2026-10-02T09:00:00Z",
       },
       {
-        id: "INSP-000", kind: "final", subjectType: "garment", subjectId: "SHIRT-001", status: "passed",
-        assigneeId: "u-quality", checklist: allChecked(finalChecklist()), notes: "All checks passed.",
-        submittedAt: "2026-10-11T09:10:00Z", submittedBy: "u-quality", createdAt: "2026-10-10T12:00:00Z",
+        id: "INSP-000F", kind: "final", subjectType: "garment", subjectId: "SHIRT-001", status: "failed",
+        assigneeId: "u-quality", checklist: finalChecklist().map((c) => ({ ...c, checked: c.id !== "c4" })), notes: "Loose thread found at hem.",
+        defectReason: "Loose thread at hem", submittedAt: "2026-10-10T14:00:00Z", submittedBy: "u-quality", createdAt: "2026-10-10T12:00:00Z",
+      },
+      {
+        id: "INSP-000", kind: "reinspection", subjectType: "garment", subjectId: "SHIRT-001", status: "passed",
+        assigneeId: "u-quality", checklist: allChecked(finalChecklist()), notes: "All checks passed after repair.",
+        submittedAt: "2026-10-11T09:10:00Z", submittedBy: "u-quality", createdAt: "2026-10-10T16:30:00Z", previousInspectionId: "INSP-000F",
       },
       {
         id: "INSP-002", kind: "final", subjectType: "garment", subjectId: "SHIRT-002", status: "open",
@@ -173,7 +181,19 @@ export function createSeed(): DemoState {
         assigneeId: "u-quality", checklist: incomingChecklist(), notes: "", createdAt: "2026-11-10T09:30:00Z",
       },
     ],
-    rework: [],
+    rework: [
+      {
+        id: "RW-001", garmentId: "SHIRT-001", inspectionId: "INSP-000F", defectReason: "Loose thread at hem", status: "closed",
+        assignedDepartment: "finishing", assignedBy: "u-manager", repairNote: "Trimmed and secured hem thread.", repairedBy: "u-finishing",
+        reinspectionId: "INSP-000", createdAt: "2026-10-10T14:00:00Z",
+        history: [
+          { at: "2026-10-10T14:00:00Z", label: "Opened from INSP-000F: Loose thread at hem", actorId: "u-quality" },
+          { at: "2026-10-10T14:30:00Z", label: "Assigned to finishing", actorId: "u-manager" },
+          { at: "2026-10-10T16:30:00Z", label: "Repair completed; fresh reinspection INSP-000 opened", actorId: "u-finishing" },
+          { at: "2026-10-11T09:15:00Z", label: "Hold released after passing reinspection", actorId: "u-quality" },
+        ],
+      },
+    ],
     tasks: [
       { id: "T-101", kind: "final-qc-presentation", title: "Present SHIRT-002 for final QC", department: "quality", subjectType: "garment", subjectId: "SHIRT-002", checkpoint: "S4", status: "claimed", assigneeId: "u-quality", createdAt: "2026-11-09T12:15:00Z" },
       { id: "T-102", kind: "incoming-qc", title: "Incoming inspection for FAB-002", department: "quality", subjectType: "lot", subjectId: "FAB-002", status: "open", createdAt: "2026-11-10T09:30:00Z" },
@@ -209,7 +229,7 @@ export function createSeed(): DemoState {
       { id: "AU-002", at: "2026-10-03T10:00:00Z", actorId: "u-quality", category: "quality", event: "Incoming inspection passed", subjectType: "inspection", subjectId: "INSP-001" },
       { id: "AU-003", at: "2026-10-06T07:30:00Z", actorId: "u-rawstore", category: "materials", event: "Material issued", subjectType: "lot", subjectId: "FAB-001", detail: "4.2 m to ORDER-001" },
       { id: "AU-004", at: "2026-10-07T10:00:00Z", actorId: "u-cutting", category: "production", event: "Cutting output recorded", subjectType: "garment", subjectId: "SHIRT-001" },
-      { id: "AU-005", at: "2026-10-11T09:10:00Z", actorId: "u-quality", category: "quality", event: "Final inspection passed", subjectType: "garment", subjectId: "SHIRT-001" },
+      { id: "AU-005", at: "2026-10-11T09:15:00Z", actorId: "u-quality", category: "quality", event: "Hold released", subjectType: "garment", subjectId: "SHIRT-001", detail: "INSP-000 · RW-001" },
       { id: "AU-006", at: "2026-10-14T07:45:00Z", actorId: "u-dispatch", category: "logistics", event: "Shipment departed", subjectType: "shipment", subjectId: "SHP-001" },
       { id: "AU-007", at: "2026-10-28T10:20:00Z", actorId: "u-cutting", category: "production", event: "Cutting output recorded", subjectType: "garment", subjectId: "SHIRT-002" },
       { id: "AU-008", at: "2026-11-09T12:10:00Z", actorId: "u-finishing", category: "production", event: "Finishing completed", subjectType: "garment", subjectId: "SHIRT-002" },
@@ -235,6 +255,6 @@ export function createSeed(): DemoState {
       },
     },
     workstations: {},
-    counters: { task: 200, inspection: 10, rework: 0, package: 1, shipment: 2, ledger: 5, audit: 11, event: 20, lot: 2, issue: 1, order: 2, cut: 2 },
+    counters: { task: 200, inspection: 10, rework: 1, package: 1, shipment: 2, ledger: 5, audit: 11, event: 20, lot: 2, issue: 1, order: 2, cut: 2 },
   };
 }

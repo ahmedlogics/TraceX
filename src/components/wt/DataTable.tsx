@@ -5,7 +5,7 @@ import { EmptyState } from "./states";
 export interface Column<T> {
   header: string;
   cell: (row: T) => ReactNode;
-  className?: string;
+  className?: string | undefined;
 }
 
 /** Responsive table: scrolls horizontally on narrow screens. */
@@ -19,8 +19,8 @@ export function DataTable<T>({
   rows: T[];
   columns: Column<T>[];
   rowKey: (row: T) => string;
-  empty?: string;
-  caption?: string;
+  empty?: string | undefined;
+  caption?: string | undefined;
 }) {
   if (rows.length === 0) return <EmptyState title={empty} />;
   return (

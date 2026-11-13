@@ -9,7 +9,7 @@ export interface PublicProductRecord {
   productDescription: string;
   sampleCommitmentRef: string;
   /** Optional advisory shown on the journey; never blocks access. */
-  advisory?: string;
+  advisory?: string | undefined;
 }
 
 export const publicProductRecords: PublicProductRecord[] = [

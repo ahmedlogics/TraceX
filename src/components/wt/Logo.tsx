@@ -3,7 +3,7 @@ import logo from "@/assets/weartrail-logo.png.asset.json";
 import { cn } from "@/lib/utils";
 
 /** Shared WearTrail brand mark. Falls back to a text wordmark if the image fails. */
-export function Logo({ className, height = 28 }: { className?: string; height?: number }) {
+export function Logo({ className, height = 28 }: { className?: string | undefined; height?: number | undefined }) {
   const [failed, setFailed] = useState(false);
   if (failed)
     return (

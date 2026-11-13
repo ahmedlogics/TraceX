@@ -85,6 +85,9 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
                 />
               </Section>
               <Section title="Eligibility checks" className="lg:col-span-2" description="Hold status is re-checked at departure.">
+                {sh.status === "departed" ? (
+                  <p className="flex items-center gap-2 text-sm"><CheckCircle2 className="size-4 text-success" aria-hidden /> All checks passed when dispatch confirmed departure.</p>
+                ) : (
                 <ul className="space-y-1.5">
                   {d.eligibility.map((c) => (
                     <li key={c.label} className="flex items-start gap-2 text-sm">
@@ -96,6 +99,7 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
                     </li>
                   ))}
                 </ul>
+                )}
                 {sh.status !== "departed" && !can.confirmDeparture(me) && (
                   <div className="mt-3">
                     <ScopeNote>{me.department === "packing" ? "Packing staff cannot dispatch." : "Only dispatch staff confirm departure."}</ScopeNote>
