@@ -28,3 +28,13 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+
+- Feature views (`src/features/**`) never import the router; they use `src/app/navigation.tsx` and `src/app/paths.ts` so the code can move to React Router.
+- Route files in `src/routes/**` stay thin: params, head metadata, `staticData.access`, and one feature view.
+- All data access goes through the `WearTrailClient` interface (`src/lib/data/client.ts`); the mock lives in `src/mock/` so an Express client can replace it.
+- Workflow and permission rules live in `src/mock/engine.ts` and `src/domain/permissions.ts`; views only use `can.*` to show/hide actions.
+- Public shopper data comes only from `src/mock/projection.ts` with types in `src/domain/public-types.ts`, so internal details never leak.
+- Lifecycle stage, quality disposition, hold and ledger status stay separate fields.
+- Staff and public route trees use `ssr: false` because the mock session and state live in localStorage.
