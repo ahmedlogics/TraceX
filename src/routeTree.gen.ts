@@ -10,33 +10,395 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PRouteRouteImport } from './routes/p/route'
+import { Route as StaffRouteRouteImport } from './routes/staff/route'
+import { Route as StaffWorkspaceRouteRouteImport } from './routes/staff/_workspace/route'
+import { Route as StaffLoginRouteImport } from './routes/staff/login'
+import { Route as PPublicIdIndexRouteImport } from './routes/p/$publicId/index'
+import { Route as PPublicIdProofRouteImport } from './routes/p/$publicId/proof'
+import { Route as StaffWorkspaceIndexRouteImport } from './routes/staff/_workspace/index'
+import { Route as StaffWorkspaceAccountRouteImport } from './routes/staff/_workspace/account'
+import { Route as StaffWorkspaceAuditRouteImport } from './routes/staff/_workspace/audit'
+import { Route as StaffWorkspaceFulfilmentRouteImport } from './routes/staff/_workspace/fulfilment'
+import { Route as StaffWorkspaceLedgerRouteImport } from './routes/staff/_workspace/ledger'
+import { Route as StaffWorkspaceReportsRouteImport } from './routes/staff/_workspace/reports'
+import { Route as StaffWorkspaceSettingsRouteImport } from './routes/staff/_workspace/settings'
+import { Route as StaffWorkspaceTasksRouteImport } from './routes/staff/_workspace/tasks'
+import { Route as StaffWorkspaceWorkstationRouteImport } from './routes/staff/_workspace/workstation'
+import { Route as StaffCredentialsTokenRouteImport } from './routes/staff/credentials.$token'
+import { Route as StaffWorkspaceAdminUsersRouteImport } from './routes/staff/_workspace/admin/users'
+import { Route as StaffWorkspaceGarmentsIndexRouteImport } from './routes/staff/_workspace/garments/index'
+import { Route as StaffWorkspaceGarmentsGarmentIdRouteImport } from './routes/staff/_workspace/garments/$garmentId'
+import { Route as StaffWorkspaceMaterialLotsIndexRouteImport } from './routes/staff/_workspace/material-lots/index'
+import { Route as StaffWorkspaceMaterialLotsLotIdRouteImport } from './routes/staff/_workspace/material-lots/$lotId'
+import { Route as StaffWorkspaceProductionOrdersIndexRouteImport } from './routes/staff/_workspace/production-orders/index'
+import { Route as StaffWorkspaceProductionOrdersOrderIdRouteImport } from './routes/staff/_workspace/production-orders/$orderId'
+import { Route as StaffWorkspaceQualityIndexRouteImport } from './routes/staff/_workspace/quality/index'
+import { Route as StaffWorkspaceReworkIndexRouteImport } from './routes/staff/_workspace/rework/index'
+import { Route as StaffWorkspaceReworkCaseIdRouteImport } from './routes/staff/_workspace/rework/$caseId'
+import { Route as StaffWorkspaceShipmentsIndexRouteImport } from './routes/staff/_workspace/shipments/index'
+import { Route as StaffWorkspaceShipmentsShipmentIdRouteImport } from './routes/staff/_workspace/shipments/$shipmentId'
+import { Route as StaffWorkspaceQualityInspectionsInspectionIdRouteImport } from './routes/staff/_workspace/quality/inspections/$inspectionId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PRouteRoute = PRouteRouteImport.update({
+  id: '/p',
+  path: '/p',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffRouteRoute = StaffRouteRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffWorkspaceRouteRoute = StaffWorkspaceRouteRouteImport.update({
+  id: '/_workspace',
+  getParentRoute: () => StaffRouteRoute,
+} as any)
+const StaffLoginRoute = StaffLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => StaffRouteRoute,
+} as any)
+const PPublicIdIndexRoute = PPublicIdIndexRouteImport.update({
+  id: '/$publicId/',
+  path: '/$publicId/',
+  getParentRoute: () => PRouteRoute,
+} as any)
+const PPublicIdProofRoute = PPublicIdProofRouteImport.update({
+  id: '/$publicId/proof',
+  path: '/$publicId/proof',
+  getParentRoute: () => PRouteRoute,
+} as any)
+const StaffWorkspaceIndexRoute = StaffWorkspaceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceAccountRoute = StaffWorkspaceAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceAuditRoute = StaffWorkspaceAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceFulfilmentRoute =
+  StaffWorkspaceFulfilmentRouteImport.update({
+    id: '/fulfilment',
+    path: '/fulfilment',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceLedgerRoute = StaffWorkspaceLedgerRouteImport.update({
+  id: '/ledger',
+  path: '/ledger',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceReportsRoute = StaffWorkspaceReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceSettingsRoute = StaffWorkspaceSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceTasksRoute = StaffWorkspaceTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceWorkstationRoute =
+  StaffWorkspaceWorkstationRouteImport.update({
+    id: '/workstation',
+    path: '/workstation',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffCredentialsTokenRoute = StaffCredentialsTokenRouteImport.update({
+  id: '/credentials/$token',
+  path: '/credentials/$token',
+  getParentRoute: () => StaffRouteRoute,
+} as any)
+const StaffWorkspaceAdminUsersRoute =
+  StaffWorkspaceAdminUsersRouteImport.update({
+    id: '/admin/users',
+    path: '/admin/users',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceGarmentsIndexRoute =
+  StaffWorkspaceGarmentsIndexRouteImport.update({
+    id: '/garments/',
+    path: '/garments/',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceGarmentsGarmentIdRoute =
+  StaffWorkspaceGarmentsGarmentIdRouteImport.update({
+    id: '/garments/$garmentId',
+    path: '/garments/$garmentId',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceMaterialLotsIndexRoute =
+  StaffWorkspaceMaterialLotsIndexRouteImport.update({
+    id: '/material-lots/',
+    path: '/material-lots/',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceMaterialLotsLotIdRoute =
+  StaffWorkspaceMaterialLotsLotIdRouteImport.update({
+    id: '/material-lots/$lotId',
+    path: '/material-lots/$lotId',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceProductionOrdersIndexRoute =
+  StaffWorkspaceProductionOrdersIndexRouteImport.update({
+    id: '/production-orders/',
+    path: '/production-orders/',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceProductionOrdersOrderIdRoute =
+  StaffWorkspaceProductionOrdersOrderIdRouteImport.update({
+    id: '/production-orders/$orderId',
+    path: '/production-orders/$orderId',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceQualityIndexRoute =
+  StaffWorkspaceQualityIndexRouteImport.update({
+    id: '/quality/',
+    path: '/quality/',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceReworkIndexRoute =
+  StaffWorkspaceReworkIndexRouteImport.update({
+    id: '/rework/',
+    path: '/rework/',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceReworkCaseIdRoute =
+  StaffWorkspaceReworkCaseIdRouteImport.update({
+    id: '/rework/$caseId',
+    path: '/rework/$caseId',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceShipmentsIndexRoute =
+  StaffWorkspaceShipmentsIndexRouteImport.update({
+    id: '/shipments/',
+    path: '/shipments/',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceShipmentsShipmentIdRoute =
+  StaffWorkspaceShipmentsShipmentIdRouteImport.update({
+    id: '/shipments/$shipmentId',
+    path: '/shipments/$shipmentId',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
+const StaffWorkspaceQualityInspectionsInspectionIdRoute =
+  StaffWorkspaceQualityInspectionsInspectionIdRouteImport.update({
+    id: '/quality/inspections/$inspectionId',
+    path: '/quality/inspections/$inspectionId',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/p': typeof PRouteRouteWithChildren
+  '/staff': typeof StaffRouteRouteWithChildren
+  '/staff/login': typeof StaffLoginRoute
+  '/p/$publicId/proof': typeof PPublicIdProofRoute
+  '/staff/account': typeof StaffWorkspaceAccountRoute
+  '/staff/audit': typeof StaffWorkspaceAuditRoute
+  '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
+  '/staff/ledger': typeof StaffWorkspaceLedgerRoute
+  '/staff/reports': typeof StaffWorkspaceReportsRoute
+  '/staff/settings': typeof StaffWorkspaceSettingsRoute
+  '/staff/tasks': typeof StaffWorkspaceTasksRoute
+  '/staff/workstation': typeof StaffWorkspaceWorkstationRoute
+  '/staff/credentials/$token': typeof StaffCredentialsTokenRoute
+  '/p/$publicId/': typeof PPublicIdIndexRoute
+  '/staff/': typeof StaffWorkspaceIndexRoute
+  '/staff/admin/users': typeof StaffWorkspaceAdminUsersRoute
+  '/staff/garments/$garmentId': typeof StaffWorkspaceGarmentsGarmentIdRoute
+  '/staff/material-lots/$lotId': typeof StaffWorkspaceMaterialLotsLotIdRoute
+  '/staff/production-orders/$orderId': typeof StaffWorkspaceProductionOrdersOrderIdRoute
+  '/staff/rework/$caseId': typeof StaffWorkspaceReworkCaseIdRoute
+  '/staff/shipments/$shipmentId': typeof StaffWorkspaceShipmentsShipmentIdRoute
+  '/staff/garments/': typeof StaffWorkspaceGarmentsIndexRoute
+  '/staff/material-lots/': typeof StaffWorkspaceMaterialLotsIndexRoute
+  '/staff/production-orders/': typeof StaffWorkspaceProductionOrdersIndexRoute
+  '/staff/quality/': typeof StaffWorkspaceQualityIndexRoute
+  '/staff/rework/': typeof StaffWorkspaceReworkIndexRoute
+  '/staff/shipments/': typeof StaffWorkspaceShipmentsIndexRoute
+  '/staff/quality/inspections/$inspectionId': typeof StaffWorkspaceQualityInspectionsInspectionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/p': typeof PRouteRouteWithChildren
+  '/staff': typeof StaffWorkspaceIndexRoute
+  '/staff/login': typeof StaffLoginRoute
+  '/p/$publicId/proof': typeof PPublicIdProofRoute
+  '/staff/account': typeof StaffWorkspaceAccountRoute
+  '/staff/audit': typeof StaffWorkspaceAuditRoute
+  '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
+  '/staff/ledger': typeof StaffWorkspaceLedgerRoute
+  '/staff/reports': typeof StaffWorkspaceReportsRoute
+  '/staff/settings': typeof StaffWorkspaceSettingsRoute
+  '/staff/tasks': typeof StaffWorkspaceTasksRoute
+  '/staff/workstation': typeof StaffWorkspaceWorkstationRoute
+  '/staff/credentials/$token': typeof StaffCredentialsTokenRoute
+  '/p/$publicId': typeof PPublicIdIndexRoute
+  '/staff/admin/users': typeof StaffWorkspaceAdminUsersRoute
+  '/staff/garments/$garmentId': typeof StaffWorkspaceGarmentsGarmentIdRoute
+  '/staff/material-lots/$lotId': typeof StaffWorkspaceMaterialLotsLotIdRoute
+  '/staff/production-orders/$orderId': typeof StaffWorkspaceProductionOrdersOrderIdRoute
+  '/staff/rework/$caseId': typeof StaffWorkspaceReworkCaseIdRoute
+  '/staff/shipments/$shipmentId': typeof StaffWorkspaceShipmentsShipmentIdRoute
+  '/staff/garments': typeof StaffWorkspaceGarmentsIndexRoute
+  '/staff/material-lots': typeof StaffWorkspaceMaterialLotsIndexRoute
+  '/staff/production-orders': typeof StaffWorkspaceProductionOrdersIndexRoute
+  '/staff/quality': typeof StaffWorkspaceQualityIndexRoute
+  '/staff/rework': typeof StaffWorkspaceReworkIndexRoute
+  '/staff/shipments': typeof StaffWorkspaceShipmentsIndexRoute
+  '/staff/quality/inspections/$inspectionId': typeof StaffWorkspaceQualityInspectionsInspectionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/p': typeof PRouteRouteWithChildren
+  '/staff': typeof StaffRouteRouteWithChildren
+  '/staff/_workspace': typeof StaffWorkspaceRouteRouteWithChildren
+  '/staff/login': typeof StaffLoginRoute
+  '/p/$publicId/proof': typeof PPublicIdProofRoute
+  '/staff/_workspace/account': typeof StaffWorkspaceAccountRoute
+  '/staff/_workspace/audit': typeof StaffWorkspaceAuditRoute
+  '/staff/_workspace/fulfilment': typeof StaffWorkspaceFulfilmentRoute
+  '/staff/_workspace/ledger': typeof StaffWorkspaceLedgerRoute
+  '/staff/_workspace/reports': typeof StaffWorkspaceReportsRoute
+  '/staff/_workspace/settings': typeof StaffWorkspaceSettingsRoute
+  '/staff/_workspace/tasks': typeof StaffWorkspaceTasksRoute
+  '/staff/_workspace/workstation': typeof StaffWorkspaceWorkstationRoute
+  '/staff/credentials/$token': typeof StaffCredentialsTokenRoute
+  '/p/$publicId/': typeof PPublicIdIndexRoute
+  '/staff/_workspace/': typeof StaffWorkspaceIndexRoute
+  '/staff/_workspace/admin/users': typeof StaffWorkspaceAdminUsersRoute
+  '/staff/_workspace/garments/$garmentId': typeof StaffWorkspaceGarmentsGarmentIdRoute
+  '/staff/_workspace/material-lots/$lotId': typeof StaffWorkspaceMaterialLotsLotIdRoute
+  '/staff/_workspace/production-orders/$orderId': typeof StaffWorkspaceProductionOrdersOrderIdRoute
+  '/staff/_workspace/rework/$caseId': typeof StaffWorkspaceReworkCaseIdRoute
+  '/staff/_workspace/shipments/$shipmentId': typeof StaffWorkspaceShipmentsShipmentIdRoute
+  '/staff/_workspace/garments/': typeof StaffWorkspaceGarmentsIndexRoute
+  '/staff/_workspace/material-lots/': typeof StaffWorkspaceMaterialLotsIndexRoute
+  '/staff/_workspace/production-orders/': typeof StaffWorkspaceProductionOrdersIndexRoute
+  '/staff/_workspace/quality/': typeof StaffWorkspaceQualityIndexRoute
+  '/staff/_workspace/rework/': typeof StaffWorkspaceReworkIndexRoute
+  '/staff/_workspace/shipments/': typeof StaffWorkspaceShipmentsIndexRoute
+  '/staff/_workspace/quality/inspections/$inspectionId': typeof StaffWorkspaceQualityInspectionsInspectionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/p'
+    | '/staff'
+    | '/staff/login'
+    | '/p/$publicId/proof'
+    | '/staff/account'
+    | '/staff/audit'
+    | '/staff/fulfilment'
+    | '/staff/ledger'
+    | '/staff/reports'
+    | '/staff/settings'
+    | '/staff/tasks'
+    | '/staff/workstation'
+    | '/staff/credentials/$token'
+    | '/p/$publicId/'
+    | '/staff/'
+    | '/staff/admin/users'
+    | '/staff/garments/$garmentId'
+    | '/staff/material-lots/$lotId'
+    | '/staff/production-orders/$orderId'
+    | '/staff/rework/$caseId'
+    | '/staff/shipments/$shipmentId'
+    | '/staff/garments/'
+    | '/staff/material-lots/'
+    | '/staff/production-orders/'
+    | '/staff/quality/'
+    | '/staff/rework/'
+    | '/staff/shipments/'
+    | '/staff/quality/inspections/$inspectionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/p'
+    | '/staff'
+    | '/staff/login'
+    | '/p/$publicId/proof'
+    | '/staff/account'
+    | '/staff/audit'
+    | '/staff/fulfilment'
+    | '/staff/ledger'
+    | '/staff/reports'
+    | '/staff/settings'
+    | '/staff/tasks'
+    | '/staff/workstation'
+    | '/staff/credentials/$token'
+    | '/p/$publicId'
+    | '/staff/admin/users'
+    | '/staff/garments/$garmentId'
+    | '/staff/material-lots/$lotId'
+    | '/staff/production-orders/$orderId'
+    | '/staff/rework/$caseId'
+    | '/staff/shipments/$shipmentId'
+    | '/staff/garments'
+    | '/staff/material-lots'
+    | '/staff/production-orders'
+    | '/staff/quality'
+    | '/staff/rework'
+    | '/staff/shipments'
+    | '/staff/quality/inspections/$inspectionId'
+  id:
+    | '__root__'
+    | '/'
+    | '/p'
+    | '/staff'
+    | '/staff/_workspace'
+    | '/staff/login'
+    | '/p/$publicId/proof'
+    | '/staff/_workspace/account'
+    | '/staff/_workspace/audit'
+    | '/staff/_workspace/fulfilment'
+    | '/staff/_workspace/ledger'
+    | '/staff/_workspace/reports'
+    | '/staff/_workspace/settings'
+    | '/staff/_workspace/tasks'
+    | '/staff/_workspace/workstation'
+    | '/staff/credentials/$token'
+    | '/p/$publicId/'
+    | '/staff/_workspace/'
+    | '/staff/_workspace/admin/users'
+    | '/staff/_workspace/garments/$garmentId'
+    | '/staff/_workspace/material-lots/$lotId'
+    | '/staff/_workspace/production-orders/$orderId'
+    | '/staff/_workspace/rework/$caseId'
+    | '/staff/_workspace/shipments/$shipmentId'
+    | '/staff/_workspace/garments/'
+    | '/staff/_workspace/material-lots/'
+    | '/staff/_workspace/production-orders/'
+    | '/staff/_workspace/quality/'
+    | '/staff/_workspace/rework/'
+    | '/staff/_workspace/shipments/'
+    | '/staff/_workspace/quality/inspections/$inspectionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PRouteRoute: typeof PRouteRouteWithChildren
+  StaffRouteRoute: typeof StaffRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +410,302 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/p': {
+      id: '/p'
+      path: '/p'
+      fullPath: '/p'
+      preLoaderRoute: typeof PRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff/_workspace': {
+      id: '/staff/_workspace'
+      path: ''
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffWorkspaceRouteRouteImport
+      parentRoute: typeof StaffRouteRoute
+    }
+    '/staff/login': {
+      id: '/staff/login'
+      path: '/login'
+      fullPath: '/staff/login'
+      preLoaderRoute: typeof StaffLoginRouteImport
+      parentRoute: typeof StaffRouteRoute
+    }
+    '/p/$publicId/': {
+      id: '/p/$publicId/'
+      path: '/$publicId'
+      fullPath: '/p/$publicId/'
+      preLoaderRoute: typeof PPublicIdIndexRouteImport
+      parentRoute: typeof PRouteRoute
+    }
+    '/p/$publicId/proof': {
+      id: '/p/$publicId/proof'
+      path: '/$publicId/proof'
+      fullPath: '/p/$publicId/proof'
+      preLoaderRoute: typeof PPublicIdProofRouteImport
+      parentRoute: typeof PRouteRoute
+    }
+    '/staff/_workspace/': {
+      id: '/staff/_workspace/'
+      path: '/'
+      fullPath: '/staff/'
+      preLoaderRoute: typeof StaffWorkspaceIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/account': {
+      id: '/staff/_workspace/account'
+      path: '/account'
+      fullPath: '/staff/account'
+      preLoaderRoute: typeof StaffWorkspaceAccountRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/audit': {
+      id: '/staff/_workspace/audit'
+      path: '/audit'
+      fullPath: '/staff/audit'
+      preLoaderRoute: typeof StaffWorkspaceAuditRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/fulfilment': {
+      id: '/staff/_workspace/fulfilment'
+      path: '/fulfilment'
+      fullPath: '/staff/fulfilment'
+      preLoaderRoute: typeof StaffWorkspaceFulfilmentRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/ledger': {
+      id: '/staff/_workspace/ledger'
+      path: '/ledger'
+      fullPath: '/staff/ledger'
+      preLoaderRoute: typeof StaffWorkspaceLedgerRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/reports': {
+      id: '/staff/_workspace/reports'
+      path: '/reports'
+      fullPath: '/staff/reports'
+      preLoaderRoute: typeof StaffWorkspaceReportsRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/settings': {
+      id: '/staff/_workspace/settings'
+      path: '/settings'
+      fullPath: '/staff/settings'
+      preLoaderRoute: typeof StaffWorkspaceSettingsRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/tasks': {
+      id: '/staff/_workspace/tasks'
+      path: '/tasks'
+      fullPath: '/staff/tasks'
+      preLoaderRoute: typeof StaffWorkspaceTasksRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/workstation': {
+      id: '/staff/_workspace/workstation'
+      path: '/workstation'
+      fullPath: '/staff/workstation'
+      preLoaderRoute: typeof StaffWorkspaceWorkstationRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/credentials/$token': {
+      id: '/staff/credentials/$token'
+      path: '/credentials/$token'
+      fullPath: '/staff/credentials/$token'
+      preLoaderRoute: typeof StaffCredentialsTokenRouteImport
+      parentRoute: typeof StaffRouteRoute
+    }
+    '/staff/_workspace/admin/users': {
+      id: '/staff/_workspace/admin/users'
+      path: '/admin/users'
+      fullPath: '/staff/admin/users'
+      preLoaderRoute: typeof StaffWorkspaceAdminUsersRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/garments/': {
+      id: '/staff/_workspace/garments/'
+      path: '/garments'
+      fullPath: '/staff/garments/'
+      preLoaderRoute: typeof StaffWorkspaceGarmentsIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/garments/$garmentId': {
+      id: '/staff/_workspace/garments/$garmentId'
+      path: '/garments/$garmentId'
+      fullPath: '/staff/garments/$garmentId'
+      preLoaderRoute: typeof StaffWorkspaceGarmentsGarmentIdRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/material-lots/': {
+      id: '/staff/_workspace/material-lots/'
+      path: '/material-lots'
+      fullPath: '/staff/material-lots/'
+      preLoaderRoute: typeof StaffWorkspaceMaterialLotsIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/material-lots/$lotId': {
+      id: '/staff/_workspace/material-lots/$lotId'
+      path: '/material-lots/$lotId'
+      fullPath: '/staff/material-lots/$lotId'
+      preLoaderRoute: typeof StaffWorkspaceMaterialLotsLotIdRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/production-orders/': {
+      id: '/staff/_workspace/production-orders/'
+      path: '/production-orders'
+      fullPath: '/staff/production-orders/'
+      preLoaderRoute: typeof StaffWorkspaceProductionOrdersIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/production-orders/$orderId': {
+      id: '/staff/_workspace/production-orders/$orderId'
+      path: '/production-orders/$orderId'
+      fullPath: '/staff/production-orders/$orderId'
+      preLoaderRoute: typeof StaffWorkspaceProductionOrdersOrderIdRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/quality/': {
+      id: '/staff/_workspace/quality/'
+      path: '/quality'
+      fullPath: '/staff/quality/'
+      preLoaderRoute: typeof StaffWorkspaceQualityIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/rework/': {
+      id: '/staff/_workspace/rework/'
+      path: '/rework'
+      fullPath: '/staff/rework/'
+      preLoaderRoute: typeof StaffWorkspaceReworkIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/rework/$caseId': {
+      id: '/staff/_workspace/rework/$caseId'
+      path: '/rework/$caseId'
+      fullPath: '/staff/rework/$caseId'
+      preLoaderRoute: typeof StaffWorkspaceReworkCaseIdRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/shipments/': {
+      id: '/staff/_workspace/shipments/'
+      path: '/shipments'
+      fullPath: '/staff/shipments/'
+      preLoaderRoute: typeof StaffWorkspaceShipmentsIndexRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/shipments/$shipmentId': {
+      id: '/staff/_workspace/shipments/$shipmentId'
+      path: '/shipments/$shipmentId'
+      fullPath: '/staff/shipments/$shipmentId'
+      preLoaderRoute: typeof StaffWorkspaceShipmentsShipmentIdRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/quality/inspections/$inspectionId': {
+      id: '/staff/_workspace/quality/inspections/$inspectionId'
+      path: '/quality/inspections/$inspectionId'
+      fullPath: '/staff/quality/inspections/$inspectionId'
+      preLoaderRoute: typeof StaffWorkspaceQualityInspectionsInspectionIdRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
   }
 }
 
+interface PRouteRouteChildren {
+  PPublicIdProofRoute: typeof PPublicIdProofRoute
+  PPublicIdIndexRoute: typeof PPublicIdIndexRoute
+}
+
+const PRouteRouteChildren: PRouteRouteChildren = {
+  PPublicIdProofRoute: PPublicIdProofRoute,
+  PPublicIdIndexRoute: PPublicIdIndexRoute,
+}
+
+const PRouteRouteWithChildren =
+  PRouteRoute._addFileChildren(PRouteRouteChildren)
+
+interface StaffWorkspaceRouteRouteChildren {
+  StaffWorkspaceAccountRoute: typeof StaffWorkspaceAccountRoute
+  StaffWorkspaceAuditRoute: typeof StaffWorkspaceAuditRoute
+  StaffWorkspaceFulfilmentRoute: typeof StaffWorkspaceFulfilmentRoute
+  StaffWorkspaceLedgerRoute: typeof StaffWorkspaceLedgerRoute
+  StaffWorkspaceReportsRoute: typeof StaffWorkspaceReportsRoute
+  StaffWorkspaceSettingsRoute: typeof StaffWorkspaceSettingsRoute
+  StaffWorkspaceTasksRoute: typeof StaffWorkspaceTasksRoute
+  StaffWorkspaceWorkstationRoute: typeof StaffWorkspaceWorkstationRoute
+  StaffWorkspaceIndexRoute: typeof StaffWorkspaceIndexRoute
+  StaffWorkspaceAdminUsersRoute: typeof StaffWorkspaceAdminUsersRoute
+  StaffWorkspaceGarmentsGarmentIdRoute: typeof StaffWorkspaceGarmentsGarmentIdRoute
+  StaffWorkspaceMaterialLotsLotIdRoute: typeof StaffWorkspaceMaterialLotsLotIdRoute
+  StaffWorkspaceProductionOrdersOrderIdRoute: typeof StaffWorkspaceProductionOrdersOrderIdRoute
+  StaffWorkspaceReworkCaseIdRoute: typeof StaffWorkspaceReworkCaseIdRoute
+  StaffWorkspaceShipmentsShipmentIdRoute: typeof StaffWorkspaceShipmentsShipmentIdRoute
+  StaffWorkspaceGarmentsIndexRoute: typeof StaffWorkspaceGarmentsIndexRoute
+  StaffWorkspaceMaterialLotsIndexRoute: typeof StaffWorkspaceMaterialLotsIndexRoute
+  StaffWorkspaceProductionOrdersIndexRoute: typeof StaffWorkspaceProductionOrdersIndexRoute
+  StaffWorkspaceQualityIndexRoute: typeof StaffWorkspaceQualityIndexRoute
+  StaffWorkspaceReworkIndexRoute: typeof StaffWorkspaceReworkIndexRoute
+  StaffWorkspaceShipmentsIndexRoute: typeof StaffWorkspaceShipmentsIndexRoute
+  StaffWorkspaceQualityInspectionsInspectionIdRoute: typeof StaffWorkspaceQualityInspectionsInspectionIdRoute
+}
+
+const StaffWorkspaceRouteRouteChildren: StaffWorkspaceRouteRouteChildren = {
+  StaffWorkspaceAccountRoute: StaffWorkspaceAccountRoute,
+  StaffWorkspaceAuditRoute: StaffWorkspaceAuditRoute,
+  StaffWorkspaceFulfilmentRoute: StaffWorkspaceFulfilmentRoute,
+  StaffWorkspaceLedgerRoute: StaffWorkspaceLedgerRoute,
+  StaffWorkspaceReportsRoute: StaffWorkspaceReportsRoute,
+  StaffWorkspaceSettingsRoute: StaffWorkspaceSettingsRoute,
+  StaffWorkspaceTasksRoute: StaffWorkspaceTasksRoute,
+  StaffWorkspaceWorkstationRoute: StaffWorkspaceWorkstationRoute,
+  StaffWorkspaceIndexRoute: StaffWorkspaceIndexRoute,
+  StaffWorkspaceAdminUsersRoute: StaffWorkspaceAdminUsersRoute,
+  StaffWorkspaceGarmentsGarmentIdRoute: StaffWorkspaceGarmentsGarmentIdRoute,
+  StaffWorkspaceMaterialLotsLotIdRoute: StaffWorkspaceMaterialLotsLotIdRoute,
+  StaffWorkspaceProductionOrdersOrderIdRoute:
+    StaffWorkspaceProductionOrdersOrderIdRoute,
+  StaffWorkspaceReworkCaseIdRoute: StaffWorkspaceReworkCaseIdRoute,
+  StaffWorkspaceShipmentsShipmentIdRoute:
+    StaffWorkspaceShipmentsShipmentIdRoute,
+  StaffWorkspaceGarmentsIndexRoute: StaffWorkspaceGarmentsIndexRoute,
+  StaffWorkspaceMaterialLotsIndexRoute: StaffWorkspaceMaterialLotsIndexRoute,
+  StaffWorkspaceProductionOrdersIndexRoute:
+    StaffWorkspaceProductionOrdersIndexRoute,
+  StaffWorkspaceQualityIndexRoute: StaffWorkspaceQualityIndexRoute,
+  StaffWorkspaceReworkIndexRoute: StaffWorkspaceReworkIndexRoute,
+  StaffWorkspaceShipmentsIndexRoute: StaffWorkspaceShipmentsIndexRoute,
+  StaffWorkspaceQualityInspectionsInspectionIdRoute:
+    StaffWorkspaceQualityInspectionsInspectionIdRoute,
+}
+
+const StaffWorkspaceRouteRouteWithChildren =
+  StaffWorkspaceRouteRoute._addFileChildren(StaffWorkspaceRouteRouteChildren)
+
+interface StaffRouteRouteChildren {
+  StaffWorkspaceRouteRoute: typeof StaffWorkspaceRouteRouteWithChildren
+  StaffLoginRoute: typeof StaffLoginRoute
+  StaffCredentialsTokenRoute: typeof StaffCredentialsTokenRoute
+}
+
+const StaffRouteRouteChildren: StaffRouteRouteChildren = {
+  StaffWorkspaceRouteRoute: StaffWorkspaceRouteRouteWithChildren,
+  StaffLoginRoute: StaffLoginRoute,
+  StaffCredentialsTokenRoute: StaffCredentialsTokenRoute,
+}
+
+const StaffRouteRouteWithChildren = StaffRouteRoute._addFileChildren(
+  StaffRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PRouteRoute: PRouteRouteWithChildren,
+  StaffRouteRoute: StaffRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
