@@ -44,7 +44,7 @@ describe("SHIRT-002 fail → repair → reinspect → release → dispatch", () 
     const g = () => s.garments.find((x) => x.id === "SHIRT-002")!;
     expect(g().hold).not.toBeNull();
     expect(projectJourney(s, "shirt-002-demo")?.status).toBe("Temporarily on hold");
-    const rc = s.rework[0]!;
+    const rc = s.rework.find((r) => r.garmentId === "SHIRT-002")!;
 
     // Held garment on a planned shipment stays blocked.
     E.updateShipmentPlan(s, as(s, "manager.demo"), { shipmentId: "SHP-002", garmentIds: ["SHIRT-002"], markPlanned: true });
@@ -55,7 +55,7 @@ describe("SHIRT-002 fail → repair → reinspect → release → dispatch", () 
     E.completeRework(s, as(s, "stitching.demo"), rc.id, "Re-stitched");
     expect(() => E.releaseHold(s, as(s, "stitching.demo"), "SHIRT-002")).toThrow();
 
-    const reId = s.rework[0]!.reinspectionId!;
+    const reId = s.rework.find((r) => r.garmentId === "SHIRT-002")!.reinspectionId!;
     E.submitInspection(s, q, { inspectionId: reId, checklist: checked(s, reId), notes: "", result: "pass" });
     expect(g().hold).not.toBeNull(); // still held until explicit release
     E.releaseHold(s, q, "SHIRT-002");
