@@ -58,7 +58,7 @@ const toneFor: Record<string, Tone> = {
   hold: "danger",
 };
 
-const pretty = (s: string) => s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+const pretty = (s: string) => (/\s/.test(s) ? s : s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()));
 
 /** Text-labelled status badge. Pass `label` to prefix a field name (e.g. "Stage"). */
 export function StatusBadge({ status, label, tone: forced, className }: { status: string; label?: string | undefined; tone?: Tone | undefined; className?: string | undefined }) {
