@@ -25,7 +25,7 @@ export const AppLink = forwardRef<HTMLAnchorElement, AppLinkProps>(function AppL
 export function useAppNavigate() {
   const router = useRouter();
   return useCallback(
-    (href: string, opts?: { replace?: boolean }) => router.navigate({ href, replace: opts?.replace ?? false }),
+    (href: string, opts?: { replace?: boolean | undefined }) => router.navigate({ href, replace: opts?.replace ?? false }),
     [router],
   );
 }

@@ -6,7 +6,7 @@ import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { errorCode, errorMessage } from "@/lib/data/hooks";
 
-function StateBox({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
+function StateBox({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode | undefined }) {
   return (
     <div role="status" className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-card px-6 py-12 text-center">
       <div className="text-muted-foreground">{icon}</div>
@@ -16,11 +16,11 @@ function StateBox({ icon, title, children }: { icon: ReactNode; title: string; c
   );
 }
 
-export function LoadingState({ label = "Loading…" }: { label?: string }) {
+export function LoadingState({ label = "Loading…" }: { label?: string | undefined }) {
   return <StateBox icon={<Loader2 className="size-5 animate-spin" />} title={label} />;
 }
 
-export function EmptyState({ title = "Nothing here yet", children }: { title?: string; children?: ReactNode }) {
+export function EmptyState({ title = "Nothing here yet", children }: { title?: string | undefined; children?: ReactNode | undefined }) {
   return <StateBox icon={<Inbox className="size-5" />} title={title}>{children}</StateBox>;
 }
 
@@ -37,7 +37,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-export function ForbiddenState({ message, returnHref = paths.home }: { message?: string; returnHref?: string }) {
+export function ForbiddenState({ message, returnHref = paths.home }: { message?: string | undefined; returnHref?: string | undefined }) {
   return (
     <StateBox icon={<Lock className="size-5" />} title="Access denied">
       <p>{message ?? "Your role or department does not include this area."}</p>
@@ -48,7 +48,7 @@ export function ForbiddenState({ message, returnHref = paths.home }: { message?:
   );
 }
 
-export function NotFoundState({ what = "record", backHref, backLabel = "Back" }: { what?: string; backHref?: string; backLabel?: string }) {
+export function NotFoundState({ what = "record", backHref, backLabel = "Back" }: { what?: string | undefined; backHref?: string | undefined; backLabel?: string | undefined }) {
   return (
     <StateBox icon={<SearchX className="size-5" />} title={`We couldn't find that ${what}`}>
       <p>It may have been removed, or the link may be mistyped.</p>
@@ -69,8 +69,8 @@ export function Loadable<T>({
   children,
 }: {
   query: UseQueryResult<T | null>;
-  what?: string;
-  backHref?: string;
+  what?: string | undefined;
+  backHref?: string | undefined;
   children: (data: T) => ReactNode;
 }) {
   if (query.isPending) return <LoadingState />;

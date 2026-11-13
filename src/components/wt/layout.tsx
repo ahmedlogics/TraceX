@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 export interface Crumb {
   label: string;
-  href?: string;
+  href?: string | undefined;
 }
 
 export function PageHeader({
@@ -23,10 +23,10 @@ export function PageHeader({
   meta,
 }: {
   title: ReactNode;
-  description?: ReactNode;
-  crumbs?: Crumb[];
-  actions?: ReactNode;
-  meta?: ReactNode;
+  description?: ReactNode | undefined;
+  crumbs?: Crumb[] | undefined;
+  actions?: ReactNode | undefined;
+  meta?: ReactNode | undefined;
 }) {
   return (
     <header className="mb-6 space-y-3">
@@ -70,10 +70,10 @@ export function Section({
   className,
 }: {
   title: ReactNode;
-  description?: ReactNode;
-  actions?: ReactNode;
+  description?: ReactNode | undefined;
+  actions?: ReactNode | undefined;
   children: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
     <section className={cn("rounded-lg border bg-card", className)}>
@@ -102,7 +102,7 @@ export function KeyValue({ items }: { items: { label: string; value: ReactNode }
   );
 }
 
-export function MetricGrid({ metrics }: { metrics: { label: string; value: ReactNode; hint?: string }[] }) {
+export function MetricGrid({ metrics }: { metrics: { label: string; value: ReactNode; hint?: string | undefined }[] }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {metrics.map((m) => (
@@ -124,7 +124,7 @@ export function IdLink({ href, id }: { href: string; id: string }) {
   );
 }
 
-export function Timeline({ items }: { items: { key: string; title: ReactNode; meta?: ReactNode; body?: ReactNode; tone?: "default" | "danger" | "success" }[] }) {
+export function Timeline({ items }: { items: { key: string; title: ReactNode; meta?: ReactNode | undefined; body?: ReactNode | undefined; tone?: "default" | "danger" | "success" | undefined }[] }) {
   return (
     <ol className="relative space-y-5 border-l pl-6">
       {items.map((i) => (
