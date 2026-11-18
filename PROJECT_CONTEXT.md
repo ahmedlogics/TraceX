@@ -72,6 +72,8 @@ The repository is a TypeScript full-stack monorepo built on the Lovable TanStack
 | **Primitive Components** | Radix UI primitives | Various (`^1.1.8` - `^2.2.16`) | [package.json](package.json#L21-L46), [src/components/ui/](src/components/ui/) |
 | **Icons** | `lucide-react` | `^0.575.0` | [package.json](package.json#L58) |
 | **Form Management** | `react-hook-form` / `zod` | `rhf: ^7.71.2`, `zod: ^3.25.76` | [package.json](package.json#L62-L71) |
+| **Database ORM (Server-Only)** | `prisma` / `@prisma/client` | `7.10.1` | [package.json](package.json), [prisma.config.ts](prisma.config.ts), [prisma/schema.prisma](prisma/schema.prisma) |
+| **Database Driver Adapter** | `@prisma/adapter-pg` / `pg` | `adapter: 7.10.1`, `pg: ^8.13.3` | [src/server/db/client.ts](src/server/db/client.ts), [src/server/db/pool.ts](src/server/db/pool.ts) |
 | **Unit & Integration Testing** | `vitest` / `@testing-library/react` | `vitest: ^4.1.10`, `react: ^16.0.0` | [vitest.config.ts](vitest.config.ts), [src/test/workflow.test.ts](src/test/workflow.test.ts) |
 | **Linting & Formatting** | `eslint` / `prettier` | `eslint: ^9.32.0`, `prettier: ^3.7.3` | [eslint.config.js](eslint.config.js), [.prettierrc](.prettierrc) |
 
@@ -840,10 +842,10 @@ flowchart LR
   - Implemented 9-station RFID shell and dedicated feature panels.
   - Implemented pure domain engine ([src/mock/engine.ts](src/mock/engine.ts)) with `DEMO_STATE_VERSION = 5`.
   - Verified 12 Vitest unit and integration tests passing.
-- **Milestone 2: Express API & Database Integration (`PLANNED`):**
-  - Implement Express server with REST endpoints matching [src/lib/data/client.ts](src/lib/data/client.ts).
-  - Apply `WearTrail_Complete_Schema.sql` to Supabase PostgreSQL.
-  - Introspect schema into Prisma ORM; replace mock client with fetch-based HTTP client.
+- **Milestone 2: Database Foundation & Express API (`IN PROGRESS`):**
+  - **Prisma 7 Foundation (COMPLETED):** Configured Prisma 7 (`7.10.1`) with `@prisma/adapter-pg` driver adapter targeting private `supplyease` schema, singleton connection pool with graceful shutdown in [src/server/db/](src/server/db/), typed transaction client, `.env.example`, `.env` ignore rules, and [scripts/check-db-connection.ts](scripts/check-db-connection.ts).
+  - **Introspection & Baseline (PENDING CREDENTIALS):** Run `npm run db:pull` once credentials are populated in local `.env`, verify models, and register initial baseline migration.
+  - **Express Server (NEXT):** Implement Express server with REST endpoints matching [src/lib/data/client.ts](src/lib/data/client.ts) and replace mock client with fetch adapter.
 - **Milestone 3: USB Serial Bridge & ESP32 Bench Integration (`PLANNED`):**
   - Flash ESP32 controller firmware; connect 9 RC522 reader modules.
   - Test physical channels; record and activate draft `device_reader_mappings`.
@@ -877,6 +879,18 @@ npm run dev
 
 # 7. Production build with Vite and Nitro
 npm run build
+
+# 8. Database connectivity check (non-destructive; uses DATABASE_URL in .env)
+npm run db:check
+
+# 9. Validate Prisma 7 schema and configuration
+npm run db:validate
+
+# 10. Generate Prisma Client (does not require database connection)
+npm run db:generate
+
+# 11. Introspect Supabase database into prisma/schema.prisma (requires MIGRATION_DATABASE_URL in .env)
+npm run db:pull
 ```
 
 ### 11.3 Environment Variable Specification
@@ -885,8 +899,8 @@ Server-side environment variables required for backend integration (stored secur
 
 | Variable Name | Purpose / Description | Allowed Environments |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection pool string for Prisma (Supabase `supplyease` schema). | Backend / Server |
-| `DIRECT_URL` | Direct PostgreSQL connection string for Prisma migrations. | Backend / Server |
+| `DATABASE_URL` | Runtime PostgreSQL connection pool string using restricted `weartrail_api` role (Supabase Session Pooler on port 5432). | Backend / Server |
+| `MIGRATION_DATABASE_URL` | Lead-only administrative PostgreSQL connection string using `postgres` owner role for CLI introspection (`npm run db:pull`) and migrations. | CLI / Lead Only |
 | `WEARTRAIL_PORT` | Port for Express REST & SSE server (default: `4000`). | Backend / Server |
 | `BRIDGE_SHARED_SECRET`| Shared HMAC token authenticating the USB serial bridge to Express. | Backend / Bridge |
 | `LEDGER_RPC_URL` | JSON-RPC provider URL for target blockchain testnet. | Backend / Worker |
@@ -939,7 +953,7 @@ To maintain transparent engineering discipline across the team:
 | **ESP32 Hardware Bench Mapping** | `Planned` / Unmapped | Logical stations defined in [src/domain/types.ts](src/domain/types.ts); hardware indices unmeasured. | Wire 9 readers to ESP32; record antenna indices in draft `device_reader_mappings`. | Team Member 1 (Hardware) |
 | **USB Serial Bridge Script** | `Planned` / Unimplemented | Bridge message JSON specified in guide; bridge script absent from repo. | Create Node.js script using `serialport` forwarding lines to Express. | Team Member 1 (Hardware) |
 | **Express REST Endpoints** | `Mocked` in browser | Mock client implements full workflow; Express endpoints do not exist yet. | Implement Express routes matching `WearTrailClient` interface. | Team Member 2 (Backend) |
-| **Prisma ORM Models** | `Planned` / Schema specified | Complete SQL schema available; Prisma schema not yet generated. | Run `npx prisma db pull` against Supabase to generate Prisma client. | Team Member 2 (Backend) |
+| **Prisma ORM Models** | `Foundation Implemented` / Introspection Pending | Server-only Prisma 7 foundation and connection pooling implemented in `src/server/db/`; awaiting local `.env` credentials for `npm run db:pull`. | Run `npm run db:pull` after populating `.env` to generate models. | Team Member 2 (Backend) |
 | **Smart Contract & Ledger Worker** | `Planned` / Schema designed | `ledger_commitments` and outbox tables defined; smart contract absent. | Write Solidity commitment contract; implement Node outbox processor. | Team Member 4 (Ledger) |
 | **Prettier CRLF Line Endings** | `Known Lint Warning` | `npm run lint` reports CRLF warnings in config files on Windows. | Run `npm run format` when repository formatting window is approved. | Team Member 1 (Foundation) |
 

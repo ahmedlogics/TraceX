@@ -84,14 +84,68 @@ npm run test             # vitest (12 unit and end-to-end integration tests)
 npm run lint             # eslint validation across codebase
 npm run format           # prettier formatting
 npm run dev              # local dev server on http://localhost:8080
+npm run db:check         # test database connectivity using DATABASE_URL in .env
+npm run db:validate      # validate prisma schema and config
+npm run db:generate      # generate prisma client (no DB credentials required)
+npm run db:pull          # introspect Supabase supplyease schema (requires MIGRATION_DATABASE_URL)
 ```
 
 ### Verification Checks Performed
 
-- **TypeScript (`tsc --noEmit`):** Passed with 0 errors across all feature views, domain types, client adapters, and mock engine.
+- **TypeScript (`tsc --noEmit`):** Passed with 0 errors across all feature views, domain types, client adapters, server database modules, and mock engine.
 - **Unit & Workflow Tests (`vitest run`):** 12 tests passed (including access rules, SHIRT-002 lifecycle, station-by-station RFID validation, over-allocation prevention, and hold isolation).
 - **ESLint (`eslint src`):** Passed with 0 errors.
-- **Vite Production Build (`vite build`):** Client bundles and Nitro server workers built successfully.
+- **Vite Production Build (`vite build`):** Client bundles and Nitro server workers built successfully with Prisma strictly isolated on the server.
+
+---
+
+## Database & Server-Only Prisma 7 Foundation
+
+WearTrail uses **Prisma 7 (`7.10.1`)** with `@prisma/adapter-pg` driver adapter, configured to target the private **`supplyease`** PostgreSQL schema.
+
+### Local Environment Configuration
+
+1. Copy `.env.example` to `.env` (which is strictly ignored by Git):
+   ```bash
+   cp .env.example .env
+   ```
+2. Populate the connection strings in `.env`:
+   - `DATABASE_URL`: Runtime connection string using the restricted `weartrail_api` role. On IPv4 networks (e.g. local Express server), use the Supabase Session Pooler on port **5432** (not transaction pooler 6543):
+     ```env
+     DATABASE_URL="postgresql://weartrail_api.[project-ref]:[password]@[pooler-host]:5432/postgres?schema=supplyease&sslmode=require"
+     ```
+   - `MIGRATION_DATABASE_URL`: Lead-only administrative connection string using `postgres` (database owner) for CLI introspection and migrations:
+     ```env
+     MIGRATION_DATABASE_URL="postgresql://postgres.[project-ref]:[password]@[pooler-host]:5432/postgres?schema=supplyease&sslmode=require"
+     ```
+
+### Provisioning the Restricted Runtime Role (`weartrail_api`)
+
+If the restricted `weartrail_api` role has not yet been provisioned in your Supabase project:
+1. Open your Supabase project $\rightarrow$ **SQL Editor**.
+2. Run the role creation and permission grants:
+   ```sql
+   -- 1. Create restricted runtime login
+   CREATE ROLE weartrail_api WITH LOGIN PASSWORD 'YOUR_STRONG_PASSWORD_HERE';
+
+   -- 2. Grant schema usage and table privileges in supplyease
+   GRANT USAGE ON SCHEMA supplyease TO weartrail_api;
+   GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA supplyease TO weartrail_api;
+   GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA supplyease TO weartrail_api;
+   GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA supplyease TO weartrail_api;
+
+   -- 3. Set default search path
+   ALTER ROLE weartrail_api SET search_path TO supplyease, public;
+   ```
+3. Use the chosen password in `DATABASE_URL` in your ignored `.env`.
+
+### Testing Connectivity
+
+Run the non-destructive server-side connectivity check:
+```bash
+npm run db:check
+```
+This queries session metadata and counts tables in `supplyease` without reading business records or printing connection credentials.
 
 ---
 
