@@ -4,7 +4,8 @@ import { InspectionDetailView } from "@/features/quality/InspectionDetailView";
 
 export const Route = createFileRoute("/staff/_workspace/quality/inspections/$inspectionId")({
   staticData: { access: "inspection" },
-  head: ({ params }) => pageHead(`${params.inspectionId} · Inspection`, "Checklist, notes and inspector results."),
+  head: ({ params }) =>
+    pageHead(`${params.inspectionId} · Inspection`, "Checklist, notes and inspector results."),
   component: InspectionDetailRoute,
 });
 

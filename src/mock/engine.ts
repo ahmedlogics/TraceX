@@ -2,31 +2,56 @@
  * Pure workflow rules for the mock backend. Every function receives a draft state
  * and the acting staff user, checks scope, and mutates the draft or throws DemoError.
  * The Express API should implement the same rules server-side.
+ *
+ * RFID additions:
+ *  - resolveRfidScan: routes a tag UID to the correct handler based on the caller's
+ *    station state and active action context.
+ *  - prepareActionContext: creates a one-use context (server-generated UUID equivalent).
+ *  - acknowledgeContext: marks awaiting_ack → ready.
+ *  - Cutting source selection: scan bundle → confirmCuttingSource; then scan fresh cards
+ *    for each garment → createGarmentFromRfid.
+ *  - QA: prepareQcContext → scan garment → submitQcFromScan.
+ *  - Logistics: select package/bin/shipment → scan garment → confirm.
  */
 import { can } from "@/domain/permissions";
 import type {
+  ActionContext,
+  ActionContextKind,
+  ActionContextPayload,
+  AuditCategory,
   ChecklistItem,
   DemoState,
   Department,
   Garment,
   Inspection,
+  RfidStationCode,
+  RfidTagBinding,
+  RfidUid,
+  ScanOutcome,
+  ScanResolution,
   SensorId,
   Shipment,
   StaffUser,
   Task,
   TaskKind,
   TriggerOutcome,
-  AuditCategory,
-  Role,
 } from "@/domain/types";
 import { DemoError, ensure } from "./errors";
 import { finalChecklist, incomingChecklist } from "./fixtures";
 
 export const now = () => new Date().toISOString();
 
+// Context TTL: 10 minutes in demo
+const CONTEXT_TTL_MS = 10 * 60 * 1000;
+
 function nextId(s: DemoState, counter: string, prefix: string, pad = 3) {
   s.counters[counter] = (s.counters[counter] ?? 0) + 1;
   return `${prefix}-${String(s.counters[counter]).padStart(pad, "0")}`;
+}
+
+function uuid(s: DemoState): string {
+  s.counters["context"] = (s.counters["context"] ?? 0) + 1;
+  return `ctx-mock-${String(s.counters["context"]).padStart(6, "0")}`;
 }
 
 function audit(
@@ -38,18 +63,46 @@ function audit(
   subjectId: string,
   detail?: string | undefined,
 ) {
-  s.audit.unshift({ id: nextId(s, "audit", "AU"), at: now(), actorId: actor.id, category, event, subjectType, subjectId, detail });
+  s.audit.unshift({
+    id: nextId(s, "audit", "AU"),
+    at: now(),
+    actorId: actor.id,
+    category,
+    event,
+    subjectType,
+    subjectId,
+    detail,
+  });
 }
 
-function garmentEvent(s: DemoState, garmentId: string, label: string, actor: StaffUser, detail?: string) {
-  s.garmentEvents.push({ id: nextId(s, "event", "GE"), garmentId, at: now(), label, detail, actorId: actor.id, department: actor.department });
+function garmentEvent(
+  s: DemoState,
+  garmentId: string,
+  label: string,
+  actor: StaffUser,
+  detail?: string,
+) {
+  s.garmentEvents.push({
+    id: nextId(s, "event", "GE"),
+    garmentId,
+    at: now(),
+    label,
+    detail,
+    actorId: actor.id,
+    department: actor.department,
+  });
 }
 
 function addTask(
   s: DemoState,
   t: Omit<Task, "id" | "status" | "createdAt"> & { status?: Task["status"] | undefined },
 ) {
-  const task: Task = { ...t, id: nextId(s, "task", "T"), status: t.status ?? "open", createdAt: now() };
+  const task: Task = {
+    ...t,
+    id: nextId(s, "task", "T"),
+    status: t.status ?? "open",
+    createdAt: now(),
+  };
   s.tasks.push(task);
   return task;
 }
@@ -78,6 +131,1052 @@ export function latestGarmentInspection(s: DemoState, garmentId: string): Inspec
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
+// ---------------------------------------------------------------- RFID: tag bindings
+
+function findBindingByUid(s: DemoState, uid: RfidUid): RfidTagBinding | undefined {
+  return s.rfidTagBindings.find((b) => b.uid === uid && b.active);
+}
+
+function normalizeUid(uid: string): RfidUid {
+  return uid.replace(/[\s:-]/g, "").toUpperCase();
+}
+
+function isCardAlreadyBound(s: DemoState, uid: RfidUid): boolean {
+  return s.rfidTagBindings.some((b) => b.uid === uid && b.active);
+}
+
+function bindCard(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  subjectType: "lot" | "garment",
+  subjectId: string,
+): RfidTagBinding {
+  const id = nextId(s, "binding", "BIND");
+  const binding: RfidTagBinding = {
+    id,
+    uid,
+    subjectType,
+    subjectId,
+    boundAt: now(),
+    boundBy: actor.id,
+    active: true,
+  };
+  s.rfidTagBindings.push(binding);
+  if (subjectType === "lot") {
+    const lot = s.lots.find((l) => l.id === subjectId);
+    if (lot) lot.rfidUid = uid;
+  } else {
+    const garment = s.garments.find((g) => g.id === subjectId);
+    if (garment) garment.rfidUid = uid;
+  }
+  return binding;
+}
+
+// ---------------------------------------------------------------- RFID: action contexts
+
+function getActiveContext(s: DemoState, operatorId: string): ActionContext | undefined {
+  const state = s.rfidStationStates[operatorId];
+  if (!state?.activeContextId) return undefined;
+  return s.actionContexts.find(
+    (c) => c.id === state.activeContextId && c.status !== "expired" && c.status !== "cancelled",
+  );
+}
+
+function expireOldContexts(s: DemoState) {
+  const n = new Date().getTime();
+  s.actionContexts.forEach((c) => {
+    if (c.status === "awaiting_ack" || c.status === "ready") {
+      if (new Date(c.expiresAt).getTime() <= n) {
+        c.status = "expired";
+        c.closedAt = now();
+      }
+    }
+  });
+}
+
+export function prepareActionContext(
+  s: DemoState,
+  actor: StaffUser,
+  stationCode: RfidStationCode,
+  kind: ActionContextKind,
+  payload: ActionContextPayload,
+): string {
+  expireOldContexts(s);
+  // Cancel any existing context for this operator at this station
+  const existing = getActiveContext(s, actor.id);
+  if (existing) {
+    existing.status = "cancelled";
+    existing.closedAt = now();
+  }
+  const id = uuid(s);
+  const expiresAt = new Date(Date.now() + CONTEXT_TTL_MS).toISOString();
+  const ctx: ActionContext = {
+    id,
+    stationCode,
+    operatorId: actor.id,
+    kind,
+    payload,
+    status: "awaiting_ack",
+    createdAt: now(),
+    expiresAt,
+  };
+  s.actionContexts.push(ctx);
+  // Update station state
+  const st =
+    s.rfidStationStates[actor.id] ??
+    (s.rfidStationStates[actor.id] = { stationCode, operatorId: actor.id });
+  st.activeContextId = id;
+  audit(s, actor, "rfid", `Context prepared: ${kind}`, "context", id);
+  return id;
+}
+
+export function acknowledgeContext(s: DemoState, actor: StaffUser, contextId: string): void {
+  expireOldContexts(s);
+  const ctx = findOrThrow(s.actionContexts, contextId, "Action context");
+  ensure(ctx.operatorId === actor.id, "forbidden", "This context belongs to another operator.");
+  ensure(
+    ctx.status === "awaiting_ack",
+    "conflict",
+    `Context is ${ctx.status}, not awaiting acknowledgement.`,
+  );
+  ctx.status = "ready";
+  ctx.acknowledgedAt = now();
+  audit(s, actor, "rfid", "Context acknowledged — ready to scan", "context", contextId);
+}
+
+export function cancelContext(s: DemoState, actor: StaffUser, contextId: string): void {
+  const ctx = findOrThrow(s.actionContexts, contextId, "Action context");
+  ensure(ctx.operatorId === actor.id, "forbidden", "This context belongs to another operator.");
+  ctx.status = "cancelled";
+  ctx.closedAt = now();
+  const st = s.rfidStationStates[actor.id];
+  if (st?.activeContextId === contextId) {
+    st.activeContextId = undefined;
+  }
+  audit(s, actor, "rfid", "Context cancelled", "context", contextId);
+}
+
+function appendScanLog(s: DemoState, outcome: ScanOutcome) {
+  s.rfidScanLog.unshift(outcome);
+  s.rfidScanLog = s.rfidScanLog.slice(0, 50);
+}
+
+function rejectScan(
+  s: DemoState,
+  uid: RfidUid,
+  resolution: ScanResolution,
+  reason: string,
+  contextId?: string,
+): ScanOutcome {
+  const outcome: ScanOutcome = { uid, resolution, contextId, rejectReason: reason, at: now() };
+  appendScanLog(s, outcome);
+  return outcome;
+}
+
+// ---------------------------------------------------------------- RFID: main scan resolver
+
+/**
+ * Resolve an RFID scan. The mock adapter calls this; the Express API implements the same logic.
+ * The context is resolved from the ORIGINAL context id — not whatever is currently selected.
+ */
+export function resolveRfidScan(s: DemoState, actor: StaffUser, uid: string): ScanOutcome {
+  expireOldContexts(s);
+  const normUid = normalizeUid(uid);
+  const stateEntry = s.rfidStationStates[actor.id];
+  const ctx = getActiveContext(s, actor.id);
+
+  if (!ctx) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_no_context",
+      "No active action context. Prepare an action first.",
+    );
+  }
+  if (ctx.status === "expired") {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_expired_context",
+      "The action context has expired. Prepare a new one.",
+      ctx.id,
+    );
+  }
+  if (ctx.status !== "ready") {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_no_context",
+      `Context is ${ctx.status} — acknowledge it first.`,
+      ctx.id,
+    );
+  }
+
+  // Dispatch by context kind
+  switch (ctx.payload.kind) {
+    case "assign_bundle_card":
+      return handleAssignBundleCard(s, actor, normUid, ctx);
+    case "confirm_issue":
+      return handleConfirmIssue(s, actor, normUid, ctx);
+    case "select_cutting_source":
+      return handleSelectCuttingSource(s, actor, normUid, ctx);
+    case "bind_garment_tag":
+      return handleBindGarmentTag(s, actor, normUid, ctx);
+    case "submit_qc":
+      return handleSubmitQc(s, actor, normUid, ctx);
+    case "pack_garment":
+      return handlePackGarment(s, actor, normUid, ctx);
+    case "warehouse_receive":
+      return handleWarehouseReceive(s, actor, normUid, ctx);
+    case "dispatch_garment":
+      return handleDispatchGarment(s, actor, normUid, ctx);
+    default:
+      return rejectScan(s, normUid, "rejected_no_context", "Unknown context kind.", ctx.id);
+  }
+}
+
+function consumeContext(s: DemoState, ctx: ActionContext) {
+  ctx.status = "confirmed";
+  ctx.closedAt = now();
+  const st = s.rfidStationStates[ctx.operatorId];
+  if (st?.activeContextId === ctx.id) {
+    st.activeContextId = undefined;
+  }
+}
+
+// ---------------------------------------------------------------- Receiving: assign bundle card
+
+function handleAssignBundleCard(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as { kind: "assign_bundle_card"; lotId: string };
+  if (isCardAlreadyBound(s, uid)) {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_active_card",
+      `UID ${uid} is already assigned to another subject. Use a fresh unbound card.`,
+      ctx.id,
+    );
+  }
+  const lot = s.lots.find((l) => l.id === payload.lotId);
+  if (!lot)
+    return rejectScan(s, uid, "rejected_business_rule", `Lot ${payload.lotId} not found.`, ctx.id);
+  // Unbind any existing card for this lot
+  s.rfidTagBindings
+    .filter((b) => b.subjectType === "lot" && b.subjectId === lot.id && b.active)
+    .forEach((b) => {
+      b.active = false;
+      b.unboundAt = now();
+    });
+  bindCard(s, actor, uid, "lot", lot.id);
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: lot.id,
+    rejectReason: undefined,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  const ast = s.rfidStationStates[actor.id];
+  if (ast) ast.lastConfirmedSubjectId = lot.id;
+  audit(s, actor, "rfid", "Bundle card assigned", "lot", lot.id, `UID ${uid}`);
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Fabric Issue: confirm issue
+
+function handleConfirmIssue(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as {
+    kind: "confirm_issue";
+    lotId: string;
+    orderId: string;
+    qty: number;
+  };
+  const binding = findBindingByUid(s, uid);
+  if (!binding)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_unknown_card",
+      `UID ${uid} is not assigned to any lot or garment.`,
+      ctx.id,
+    );
+  if (binding.subjectType !== "lot")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_subject_type",
+      "Expected a bundle card. Got a garment card.",
+      ctx.id,
+    );
+  if (binding.subjectId !== payload.lotId)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `Card belongs to ${binding.subjectId}, not the selected lot ${payload.lotId}.`,
+      ctx.id,
+    );
+  // Perform the actual issue
+  const lot = findOrThrow(s.lots, payload.lotId, "Lot");
+  ensure(lot.status === "accepted", "conflict", `${lot.id} has not passed incoming inspection.`);
+  ensure(
+    payload.qty > 0 && payload.qty <= lot.balanceQty,
+    "invalid",
+    `Quantity must be between 0 and ${lot.balanceQty} ${lot.unit}.`,
+  );
+  const order = findOrThrow(s.orders, payload.orderId, "Order");
+  const issId = nextId(s, "issue", "ISS");
+  s.issues.push({
+    id: issId,
+    lotId: lot.id,
+    orderId: order.id,
+    qty: payload.qty,
+    at: now(),
+    by: actor.id,
+  });
+  lot.balanceQty = Math.round((lot.balanceQty - payload.qty) * 1000) / 1000;
+  if (order.status === "planned" || order.status === "approved") order.status = "in-progress";
+  closeTasks(s, order.id, ["issue-material"]);
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: lot.id,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  const ast = s.rfidStationStates[actor.id];
+  if (ast) ast.lastConfirmedSubjectId = lot.id;
+  audit(
+    s,
+    actor,
+    "materials",
+    "Material issued via RFID scan",
+    "lot",
+    lot.id,
+    `${payload.qty} ${lot.unit} to ${order.id} · scan ${uid}`,
+  );
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Cutting: select source
+
+function handleSelectCuttingSource(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as {
+    kind: "select_cutting_source";
+    orderId: string;
+    issueId: string;
+    consumedQty: number;
+    wasteQty: number;
+  };
+  const binding = findBindingByUid(s, uid);
+  if (!binding)
+    return rejectScan(s, uid, "rejected_unknown_card", `UID ${uid} is not recognised.`, ctx.id);
+  if (binding.subjectType !== "lot")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_subject_type",
+      "Expected a bundle card. Got a garment card.",
+      ctx.id,
+    );
+  const issue = findOrThrow(s.issues, payload.issueId, "Issue");
+  if (binding.subjectId !== issue.lotId)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `Card belongs to lot ${binding.subjectId}, not the lot behind issue ${payload.issueId}.`,
+      ctx.id,
+    );
+  // Validate allocation
+  const alreadyUsed = s.cuttingOutputs
+    .filter((c) => c.issueId === issue.id)
+    .reduce((a, c) => a + c.fabricUsed, 0);
+  ensure(
+    payload.consumedQty > 0 && alreadyUsed + payload.consumedQty <= issue.qty + 1e-9,
+    "invalid",
+    `Only ${(issue.qty - alreadyUsed).toFixed(3)} ${s.lots.find((l) => l.id === issue.lotId)?.unit ?? "m"} of issue ${issue.id} remains.`,
+  );
+  // Deactivate any old active cutting source for this operator
+  s.cuttingSourceSelections
+    .filter((cs) => cs.confirmedBy === actor.id && cs.active)
+    .forEach((cs) => {
+      cs.active = false;
+    });
+  const selId = nextId(s, "cuttingSource", "CSS");
+  s.cuttingSourceSelections.push({
+    id: selId,
+    orderId: payload.orderId,
+    issueId: payload.issueId,
+    lotId: binding.subjectId,
+    consumedQty: payload.consumedQty,
+    wasteQty: payload.wasteQty,
+    confirmedAt: now(),
+    confirmedBy: actor.id,
+    active: true,
+  });
+  const cst =
+    s.rfidStationStates[actor.id] ??
+    (s.rfidStationStates[actor.id] = { stationCode: "cutting", operatorId: actor.id });
+  cst.cuttingSourceSelectionId = selId;
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: binding.subjectId,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  audit(
+    s,
+    actor,
+    "production",
+    "Cutting source confirmed by RFID",
+    "lot",
+    binding.subjectId,
+    `issue ${payload.issueId} · selection ${selId}`,
+  );
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Cutting: bind garment tag
+
+function handleBindGarmentTag(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as {
+    kind: "bind_garment_tag";
+    cuttingSourceSelectionId: string;
+    orderId: string;
+    size: string;
+  };
+  if (isCardAlreadyBound(s, uid)) {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_active_card",
+      `UID ${uid} is already assigned. Use a fresh unbound card.`,
+      ctx.id,
+    );
+  }
+  const sel = s.cuttingSourceSelections.find(
+    (cs) => cs.id === payload.cuttingSourceSelectionId && cs.active,
+  );
+  if (!sel)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `Cutting source selection ${payload.cuttingSourceSelectionId} is not active.`,
+      ctx.id,
+    );
+  const order = findOrThrow(s.orders, payload.orderId, "Order");
+  const issue = findOrThrow(s.issues, sel.issueId, "Issue");
+  // Check remaining fabric in this issue
+  const usedInIssue = s.cuttingOutputs
+    .filter((c) => c.issueId === sel.issueId)
+    .reduce((a, c) => a + c.fabricUsed, 0);
+  const orderGarments = s.garments.filter((g) => g.orderId === payload.orderId).length;
+  const remainingInOrder = Math.max(1, order.plannedQty - orderGarments);
+  const perGarment = +(sel.consumedQty / remainingInOrder).toFixed(3);
+  ensure(
+    usedInIssue + perGarment <= issue.qty + 1e-9,
+    "invalid",
+    `No fabric remaining in material issue ${issue.id}.`,
+  );
+  // Create garment
+  s.counters["garment"] = (s.counters["garment"] ?? 0) + 1;
+  const garmentCode = `${order.styleCode.startsWith("WT-TR") ? "TROUSER" : "SHIRT"}-${String(s.counters["garment"]).padStart(3, "0")}`;
+  const publicId = `${garmentCode.toLowerCase()}-${Date.now().toString(36)}`;
+  const cutId = nextId(s, "cut", "CUT");
+  const panelLabel = `PS-${order.id.split("-")[1] ?? "X"}-${String.fromCharCode(64 + s.cuttingOutputs.filter((c) => c.orderId === order.id).length + 1)}`;
+  s.cuttingOutputs.push({
+    id: cutId,
+    orderId: order.id,
+    lotId: sel.lotId,
+    issueId: issue.id,
+    panelSetLabel: panelLabel,
+    fabricUsed: perGarment,
+    garmentId: garmentCode,
+    at: now(),
+    by: actor.id,
+  });
+  s.garments.push({
+    id: garmentCode,
+    orderId: order.id,
+    publicId,
+    productName: `${order.product} — ${payload.size}`,
+    size: payload.size,
+    cuttingOutputId: cutId,
+    stage: "stitching",
+    disposition: "not-inspected",
+    hold: null,
+    rfidUid: uid,
+  });
+  bindCard(s, actor, uid, "garment", garmentCode);
+  garmentEvent(
+    s,
+    garmentCode,
+    `Cut from ${sel.lotId} · RFID card ${uid} assigned`,
+    actor,
+    `Panel set ${panelLabel} · source ${sel.id}`,
+  );
+  addTask(s, {
+    kind: "stitch",
+    title: `Stitch ${garmentCode}`,
+    department: "stitching",
+    subjectType: "garment",
+    subjectId: garmentCode,
+    checkpoint: "S3",
+  });
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: garmentCode,
+    garmentCode,
+    productName: `${order.product} — ${payload.size}`,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  const gst = s.rfidStationStates[actor.id];
+  if (gst) gst.lastConfirmedSubjectId = garmentCode;
+  audit(
+    s,
+    actor,
+    "production",
+    "Garment created via RFID tag assignment",
+    "garment",
+    garmentCode,
+    `UID ${uid} · ${panelLabel}`,
+  );
+  return outcome;
+}
+
+// ---------------------------------------------------------------- QA: submit inspection via scan
+
+function handleSubmitQc(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as {
+    kind: "submit_qc";
+    result: "pass" | "fail";
+    defectReason?: string;
+    checklist: ChecklistItem[];
+    notes: string;
+  };
+  const binding = findBindingByUid(s, uid);
+  if (!binding)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_unknown_card",
+      `UID ${uid} is not recognised. Scan the garment's RFID card.`,
+      ctx.id,
+    );
+  if (binding.subjectType !== "garment")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_subject_type",
+      "Expected a garment card. Got a bundle card.",
+      ctx.id,
+    );
+  const g = s.garments.find((x) => x.id === binding.subjectId);
+  if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  // Find the open inspection for this garment
+  const insp = s.inspections
+    .filter((i) => i.subjectType === "garment" && i.subjectId === g.id && i.status === "open")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!insp)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `No open inspection found for ${g.id}. Inspection may already be submitted.`,
+      ctx.id,
+    );
+  if (payload.result === "pass" && !payload.checklist.every((c) => c.checked)) {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      "Complete every checklist item before passing.",
+      ctx.id,
+    );
+  }
+  if (payload.result === "fail" && !payload.defectReason?.trim()) {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      "A defect reason is required to fail.",
+      ctx.id,
+    );
+  }
+  // Submit
+  insp.checklist = payload.checklist;
+  insp.notes = payload.notes;
+  insp.status = payload.result === "pass" ? "passed" : "failed";
+  insp.defectReason = payload.result === "fail" ? payload.defectReason!.trim() : undefined;
+  insp.submittedAt = now();
+  insp.submittedBy = actor.id;
+  closeTasks(s, g.id, ["final-qc-presentation"]);
+  const kindLabel = insp.kind === "reinspection" ? "Reinspection" : "Final inspection";
+  if (payload.result === "pass") {
+    g.disposition = "passed";
+    if (!g.hold) {
+      g.stage = "packing";
+      addTask(s, {
+        kind: "pack",
+        title: `Pack ${g.id}`,
+        department: "packing",
+        subjectType: "garment",
+        subjectId: g.id,
+        checkpoint: "S5",
+      });
+      garmentEvent(s, g.id, `${kindLabel} passed`, actor, insp.id);
+    } else {
+      garmentEvent(s, g.id, `${kindLabel} passed — hold awaits explicit release`, actor, insp.id);
+    }
+    audit(s, actor, "quality", `${kindLabel} passed via RFID scan`, "garment", g.id, insp.id);
+  } else {
+    g.disposition = "failed";
+    g.stage = "rework";
+    const existing = g.hold?.reworkCaseId
+      ? s.rework.find((r) => r.id === g.hold!.reworkCaseId)
+      : undefined;
+    let caseId: string;
+    if (existing) {
+      existing.status = "awaiting-assignment";
+      existing.defectReason = insp.defectReason!;
+      existing.inspectionId = insp.id;
+      existing.assignedDepartment = undefined;
+      existing.history.push({
+        at: now(),
+        label: `Reinspection failed: ${insp.defectReason}`,
+        actorId: actor.id,
+      });
+      caseId = existing.id;
+    } else {
+      caseId = nextId(s, "rework", "RW");
+      s.rework.push({
+        id: caseId,
+        garmentId: g.id,
+        inspectionId: insp.id,
+        defectReason: insp.defectReason!,
+        status: "awaiting-assignment",
+        createdAt: now(),
+        history: [
+          { at: now(), label: `Opened from ${insp.id}: ${insp.defectReason}`, actorId: actor.id },
+        ],
+      });
+    }
+    g.hold = {
+      reason: insp.defectReason!,
+      since: g.hold?.since ?? now(),
+      inspectionId: insp.id,
+      reworkCaseId: caseId,
+    };
+    garmentEvent(s, g.id, `${kindLabel} failed — garment on hold`, actor, insp.defectReason);
+    audit(
+      s,
+      actor,
+      "quality",
+      `${kindLabel} failed via RFID scan`,
+      "garment",
+      g.id,
+      `${insp.defectReason} · ${caseId}`,
+    );
+  }
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: g.productName,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  const qst = s.rfidStationStates[actor.id];
+  if (qst) {
+    qst.lastConfirmedSubjectId = g.id;
+    qst.lastScanOutcome = outcome;
+  }
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Packing: scan garment
+
+function handlePackGarment(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as { kind: "pack_garment"; packageId: string };
+  const binding = findBindingByUid(s, uid);
+  if (!binding)
+    return rejectScan(s, uid, "rejected_unknown_card", `UID ${uid} is not recognised.`, ctx.id);
+  if (binding.subjectType !== "garment")
+    return rejectScan(s, uid, "rejected_wrong_subject_type", "Expected a garment card.", ctx.id);
+  const g = s.garments.find((x) => x.id === binding.subjectId);
+  if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  if (g.hold)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `${g.id} is on quality hold and cannot be packed.`,
+      ctx.id,
+    );
+  if (g.stage !== "packing")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_stage",
+      `${g.id} is at stage '${g.stage}', not 'packing'.`,
+      ctx.id,
+    );
+  if (g.disposition !== "passed" && g.disposition !== "released")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `${g.id} has not passed quality control (disposition: ${g.disposition}).`,
+      ctx.id,
+    );
+  if (g.packageId)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_duplicate",
+      `${g.id} is already packed into ${g.packageId}.`,
+      ctx.id,
+    );
+  const pkg = s.packages.find((p) => p.id === payload.packageId && p.status === "open");
+  if (!pkg)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `Package ${payload.packageId} is not open.`,
+      ctx.id,
+    );
+  pkg.garmentIds.push(g.id);
+  g.packageId = pkg.id;
+  closeTasks(s, g.id, ["pack"]);
+  addTask(s, {
+    kind: "warehouse-receive",
+    title: `Receive ${g.id} into finished stock`,
+    department: "warehouse",
+    subjectType: "garment",
+    subjectId: g.id,
+  });
+  garmentEvent(s, g.id, `Packed into ${pkg.id} via RFID scan`, actor);
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: g.productName,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  audit(s, actor, "logistics", "Garment packed via RFID scan", "garment", g.id, pkg.id);
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Warehouse receive: scan garment
+
+function handleWarehouseReceive(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as { kind: "warehouse_receive"; binId: string };
+  const binding = findBindingByUid(s, uid);
+  if (!binding)
+    return rejectScan(s, uid, "rejected_unknown_card", `UID ${uid} is not recognised.`, ctx.id);
+  if (binding.subjectType !== "garment")
+    return rejectScan(s, uid, "rejected_wrong_subject_type", "Expected a garment card.", ctx.id);
+  const g = s.garments.find((x) => x.id === binding.subjectId);
+  if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  if (g.stage !== "packing" || !g.packageId)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_stage",
+      `${g.id} is not packed and waiting for the warehouse.`,
+      ctx.id,
+    );
+  g.stage = "warehouse";
+  const pkg = s.packages.find((p) => p.id === g.packageId);
+  if (pkg) pkg.status = "sealed";
+  closeTasks(s, g.id, ["warehouse-receive"]);
+  garmentEvent(
+    s,
+    g.id,
+    `Received into finished stock via RFID scan (bin: ${payload.binId})`,
+    actor,
+  );
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: g.productName,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  audit(s, actor, "logistics", "Stock received via RFID scan", "garment", g.id, payload.binId);
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Dispatch: scan garment
+
+function handleDispatchGarment(
+  s: DemoState,
+  actor: StaffUser,
+  uid: RfidUid,
+  ctx: ActionContext,
+): ScanOutcome {
+  const payload = ctx.payload as { kind: "dispatch_garment"; shipmentId: string };
+  const binding = findBindingByUid(s, uid);
+  if (!binding)
+    return rejectScan(s, uid, "rejected_unknown_card", `UID ${uid} is not recognised.`, ctx.id);
+  if (binding.subjectType !== "garment")
+    return rejectScan(s, uid, "rejected_wrong_subject_type", "Expected a garment card.", ctx.id);
+  const g = s.garments.find((x) => x.id === binding.subjectId);
+  if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  const sh = s.shipments.find((x) => x.id === payload.shipmentId);
+  if (!sh)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `Shipment ${payload.shipmentId} not found.`,
+      ctx.id,
+    );
+  if (!sh.garmentIds.includes(g.id))
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `${g.id} is not on the manifest for ${sh.id}.`,
+      ctx.id,
+    );
+  if (!sh.allocatedGarmentIds.includes(g.id))
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `${g.id} has not been allocated to ${sh.id}.`,
+      ctx.id,
+    );
+  if (g.hold)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `${g.id} is on quality hold. Departure blocked.`,
+      ctx.id,
+    );
+  if (g.disposition !== "passed" && g.disposition !== "released")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_business_rule",
+      `${g.id} has not passed quality control.`,
+      ctx.id,
+    );
+  if (g.stage !== "allocated")
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_stage",
+      `${g.id} is at stage '${g.stage}', not 'allocated'.`,
+      ctx.id,
+    );
+  consumeContext(s, ctx);
+  const outcome: ScanOutcome = {
+    uid,
+    resolution: "accepted",
+    contextId: ctx.id,
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: g.productName,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  audit(s, actor, "logistics", "Garment dispatch scan accepted", "garment", g.id, sh.id);
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Routine station scans (Stitching/Finishing)
+
+/**
+ * Routine scan: identifies garment and advances its stage without an explicit per-shirt context.
+ * Used at Stitching and Finishing where bulk throughput is expected under an authorised session.
+ */
+export function routineScan(
+  s: DemoState,
+  actor: StaffUser,
+  uid: string,
+  stationCode: "stitching" | "finishing",
+): ScanOutcome {
+  const normUid = normalizeUid(uid);
+  const binding = findBindingByUid(s, normUid);
+  if (!binding)
+    return rejectScan(s, normUid, "rejected_unknown_card", `UID ${normUid} is not recognised.`);
+  if (binding.subjectType !== "garment")
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_wrong_subject_type",
+      "Expected a garment card at this station.",
+    );
+  const g = s.garments.find((x) => x.id === binding.subjectId);
+  if (!g) return rejectScan(s, normUid, "rejected_unknown_card", "Garment record not found.");
+
+  if (stationCode === "stitching") {
+    if (g.stage !== "stitching") {
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_wrong_stage",
+        `${g.id} is at '${g.stage}', not 'stitching'. Expected stitching scan.`,
+      );
+    }
+    // Check for duplicate
+    const recent = s.garmentEvents.filter(
+      (e) => e.garmentId === g.id && e.label === "Stitching completed",
+    );
+    if (recent.length > 0)
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_duplicate",
+        `${g.id} has already been recorded as stitched.`,
+      );
+    g.stage = "finishing";
+    garmentEvent(s, g.id, "Stitching completed", actor);
+    closeTasks(s, g.id, ["stitch"]);
+    addTask(s, {
+      kind: "finish",
+      title: `Finish ${g.id}`,
+      department: "finishing",
+      subjectType: "garment",
+      subjectId: g.id,
+      checkpoint: "S4",
+    });
+    audit(s, actor, "production", "Stitching completed via RFID scan", "garment", g.id);
+  } else {
+    if (g.stage !== "finishing") {
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_wrong_stage",
+        `${g.id} is at '${g.stage}', not 'finishing'.`,
+      );
+    }
+    const recent = s.garmentEvents.filter(
+      (e) => e.garmentId === g.id && e.label === "Finishing completed",
+    );
+    if (recent.length > 0)
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_duplicate",
+        `${g.id} has already been recorded as finished.`,
+      );
+    g.stage = "final-qc";
+    g.disposition = "awaiting-inspection";
+    garmentEvent(s, g.id, "Finishing completed", actor);
+    closeTasks(s, g.id, ["finish"]);
+    const inspId = nextId(s, "inspection", "INSP");
+    s.inspections.push({
+      id: inspId,
+      kind: "final",
+      subjectType: "garment",
+      subjectId: g.id,
+      status: "open",
+      assigneeId: "u-quality",
+      checklist: finalChecklist(),
+      notes: "",
+      createdAt: now(),
+    });
+    addTask(s, {
+      kind: "final-qc-presentation",
+      title: `Present ${g.id} for final QC`,
+      department: "quality",
+      subjectType: "garment",
+      subjectId: g.id,
+      checkpoint: "FINAL_QC",
+    });
+    audit(
+      s,
+      actor,
+      "production",
+      "Finishing completed via RFID scan",
+      "garment",
+      g.id,
+      `inspection ${inspId} opened`,
+    );
+  }
+
+  const outcome: ScanOutcome = {
+    uid: normUid,
+    resolution: "accepted",
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: g.productName,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  const rst =
+    s.rfidStationStates[actor.id] ??
+    (s.rfidStationStates[actor.id] = { stationCode, operatorId: actor.id });
+  rst.lastConfirmedSubjectId = g.id;
+  rst.lastScanOutcome = outcome;
+  return outcome;
+}
+
 // ---------------------------------------------------------------- auth
 
 export function recordSignIn(s: DemoState, actor: StaffUser) {
@@ -89,66 +1188,227 @@ export function recordSignOut(s: DemoState, actor: StaffUser) {
 
 // ---------------------------------------------------------------- materials
 
-export function receiveLot(s: DemoState, actor: StaffUser, input: { material: string; supplierRef: string; qty: number }) {
+export function receiveLot(
+  s: DemoState,
+  actor: StaffUser,
+  input: { material: string; supplierRef: string; qty: number; unit?: "m" | "kg" | "pcs" },
+) {
   ensure(can.receiveLot(actor), "forbidden", "Only receiving staff can record a lot receipt.");
-  ensure(input.material.trim() && input.qty > 0, "invalid", "Enter a material and a positive quantity.");
+  ensure(
+    input.material.trim() && input.qty > 0,
+    "invalid",
+    "Enter a material and a positive quantity.",
+  );
   const id = nextId(s, "lot", "FAB");
   const inspectionId = nextId(s, "inspection", "INSP");
   s.lots.push({
-    id, material: input.material.trim(), supplierRef: input.supplierRef.trim() || "SUP-REF (synthetic)",
-    receivedQty: input.qty, balanceQty: input.qty, unit: "m", receivedAt: now(), receivedBy: actor.id,
-    status: "awaiting-inspection", incomingInspectionId: inspectionId,
+    id,
+    material: input.material.trim(),
+    supplierRef: input.supplierRef.trim() || "SUP-REF (synthetic)",
+    receivedQty: input.qty,
+    balanceQty: input.qty,
+    unit: input.unit ?? "m",
+    receivedAt: now(),
+    receivedBy: actor.id,
+    status: "awaiting-inspection",
+    incomingInspectionId: inspectionId,
   });
-  s.inspections.push({ id: inspectionId, kind: "incoming", subjectType: "lot", subjectId: id, status: "open", assigneeId: "u-quality", checklist: incomingChecklist(), notes: "", createdAt: now() });
-  addTask(s, { kind: "incoming-qc", title: `Incoming inspection for ${id}`, department: "quality", subjectType: "lot", subjectId: id });
-  audit(s, actor, "materials", "Lot received", "lot", id, `${input.qty} m received`);
+  s.inspections.push({
+    id: inspectionId,
+    kind: "incoming",
+    subjectType: "lot",
+    subjectId: id,
+    status: "open",
+    assigneeId: "u-quality",
+    checklist: incomingChecklist(),
+    notes: "",
+    createdAt: now(),
+  });
+  addTask(s, {
+    kind: "incoming-qc",
+    title: `Incoming inspection for ${id}`,
+    department: "quality",
+    subjectType: "lot",
+    subjectId: id,
+  });
+  addTask(s, {
+    kind: "receive-lot",
+    title: `Assign RFID card to ${id} at Receiving`,
+    department: "receiving",
+    subjectType: "lot",
+    subjectId: id,
+    checkpoint: "S1",
+  });
+  audit(
+    s,
+    actor,
+    "materials",
+    "Lot received",
+    "lot",
+    id,
+    `${input.qty} ${input.unit ?? "m"} received — assign RFID card at station`,
+  );
   return id;
 }
 
-export function issueMaterial(s: DemoState, actor: StaffUser, input: { lotId: string; orderId: string; qty: number }) {
+export function issueMaterial(
+  s: DemoState,
+  actor: StaffUser,
+  input: { lotId: string; orderId: string; qty: number },
+) {
   ensure(can.issueMaterial(actor), "forbidden", "Only raw-store staff can issue material.");
   const lot = findOrThrow(s.lots, input.lotId, "Lot");
   const order = findOrThrow(s.orders, input.orderId, "Order");
   ensure(lot.status === "accepted", "conflict", `${lot.id} has not passed incoming inspection.`);
-  ensure(input.qty > 0 && input.qty <= lot.balanceQty, "invalid", `Quantity must be between 0 and ${lot.balanceQty} m.`);
+  ensure(
+    input.qty > 0 && input.qty <= lot.balanceQty,
+    "invalid",
+    `Quantity must be between 0 and ${lot.balanceQty} ${lot.unit}.`,
+  );
   const id = nextId(s, "issue", "ISS");
   s.issues.push({ id, lotId: lot.id, orderId: order.id, qty: input.qty, at: now(), by: actor.id });
-  lot.balanceQty = Math.round((lot.balanceQty - input.qty) * 100) / 100;
-  if (order.status === "planned") order.status = "in-progress";
+  lot.balanceQty = Math.round((lot.balanceQty - input.qty) * 1000) / 1000;
+  if (order.status === "planned" || order.status === "approved") order.status = "in-progress";
   closeTasks(s, order.id, ["issue-material"]);
-  audit(s, actor, "materials", "Material issued", "lot", lot.id, `${input.qty} m to ${order.id}`);
+  audit(
+    s,
+    actor,
+    "materials",
+    "Material issued (dashboard form — no scan required for dashboard flow)",
+    "lot",
+    lot.id,
+    `${input.qty} ${lot.unit} to ${order.id}`,
+  );
   return id;
 }
 
 // ---------------------------------------------------------------- production
 
-export function planOrder(s: DemoState, actor: StaffUser, input: { product: string; styleCode: string; qty: number; dueDate: string }) {
+export function planOrder(
+  s: DemoState,
+  actor: StaffUser,
+  input: { product: string; styleCode: string; qty: number; dueDate: string },
+) {
   ensure(can.planOrder(actor), "forbidden", "Only the supply-chain manager can plan orders.");
-  ensure(input.product.trim() && input.qty > 0, "invalid", "Enter a product and a positive quantity.");
+  ensure(
+    input.product.trim() && input.qty > 0,
+    "invalid",
+    "Enter a product and a positive quantity.",
+  );
   const id = nextId(s, "order", "ORDER");
-  s.orders.push({ id, product: input.product.trim(), styleCode: input.styleCode.trim() || "WT-SH-000", plannedQty: input.qty, status: "planned", dueDate: input.dueDate, plannedBy: actor.id });
-  addTask(s, { kind: "issue-material", title: `Issue fabric for ${id}`, department: "raw-store", subjectType: "order", subjectId: id });
-  addTask(s, { kind: "cut", title: `Cut panel sets for ${id}`, department: "cutting", subjectType: "order", subjectId: id, checkpoint: "S2" });
+  s.orders.push({
+    id,
+    product: input.product.trim(),
+    styleCode: input.styleCode.trim() || "WT-SH-000",
+    plannedQty: input.qty,
+    status: "planned",
+    dueDate: input.dueDate,
+    plannedBy: actor.id,
+  });
+  addTask(s, {
+    kind: "issue-material",
+    title: `Issue fabric for ${id}`,
+    department: "raw-store",
+    subjectType: "order",
+    subjectId: id,
+  });
+  addTask(s, {
+    kind: "cut",
+    title: `Cut panel sets for ${id}`,
+    department: "cutting",
+    subjectType: "order",
+    subjectId: id,
+    checkpoint: "S2",
+  });
   audit(s, actor, "production", "Order planned", "order", id, `${input.qty} × ${input.product}`);
   return id;
 }
 
-export function recordCuttingOutput(s: DemoState, actor: StaffUser, input: { orderId: string; issueId: string; fabricUsed: number; size: string }) {
-  ensure(actor.role === "P" && actor.department === "cutting" && actor.status === "active", "forbidden", "Only cutting staff can record cutting outputs.");
+export function approveOrder(s: DemoState, actor: StaffUser, orderId: string) {
+  ensure(can.approveOrder(actor), "forbidden", "Only the manager can approve orders.");
+  const order = findOrThrow(s.orders, orderId, "Order");
+  ensure(
+    order.status === "planned" || order.status === "draft",
+    "conflict",
+    `Order ${orderId} is already ${order.status}.`,
+  );
+  order.status = "approved";
+  order.approvedBy = actor.id;
+  order.approvedAt = now();
+  audit(s, actor, "production", "Order approved", "order", orderId);
+}
+
+export function recordCuttingOutput(
+  s: DemoState,
+  actor: StaffUser,
+  input: { orderId: string; issueId: string; fabricUsed: number; size: string },
+) {
+  ensure(
+    actor.role === "P" && actor.department === "cutting" && actor.status === "active",
+    "forbidden",
+    "Only cutting staff can record cutting outputs.",
+  );
   const order = findOrThrow(s.orders, input.orderId, "Order");
   const issue = findOrThrow(s.issues, input.issueId, "Material issue");
   ensure(issue.orderId === order.id, "conflict", "That material issue belongs to another order.");
-  const used = s.cuttingOutputs.filter((c) => c.issueId === issue.id).reduce((a, c) => a + c.fabricUsed, 0);
-  ensure(input.fabricUsed > 0 && used + input.fabricUsed <= issue.qty + 1e-9, "invalid", `Only ${(issue.qty - used).toFixed(2)} m of ${issue.id} is left to cut.`);
+  const used = s.cuttingOutputs
+    .filter((c) => c.issueId === issue.id)
+    .reduce((a, c) => a + c.fabricUsed, 0);
+  ensure(
+    input.fabricUsed > 0 && used + input.fabricUsed <= issue.qty + 1e-9,
+    "invalid",
+    `Only ${(issue.qty - used).toFixed(3)} of ${issue.id} is left to cut.`,
+  );
   const cutId = nextId(s, "cut", "CUT");
-  const n = s.garments.length + 1;
-  const garmentId = `SHIRT-${String(n).padStart(3, "0")}`;
+  s.counters["garment"] = (s.counters["garment"] ?? 0) + 1;
+  const garmentId = `SHIRT-${String(s.counters["garment"]).padStart(3, "0")}`;
   const label = `PS-${order.id.split("-")[1]}-${String.fromCharCode(64 + s.cuttingOutputs.filter((c) => c.orderId === order.id).length + 1)}`;
-  s.cuttingOutputs.push({ id: cutId, orderId: order.id, lotId: issue.lotId, issueId: issue.id, panelSetLabel: label, fabricUsed: input.fabricUsed, garmentId, at: now(), by: actor.id });
-  s.garments.push({ id: garmentId, orderId: order.id, publicId: `shirt-${String(n).padStart(3, "0")}-unpublished`, productName: `${order.product} — ${input.size}`, size: input.size, cuttingOutputId: cutId, stage: "stitching", disposition: "not-inspected", hold: null });
-  garmentEvent(s, garmentId, `Cut from ${issue.lotId}`, actor, `Panel set ${label}`);
-  addTask(s, { kind: "stitch", title: `Stitch ${garmentId}`, department: "stitching", subjectType: "garment", subjectId: garmentId, checkpoint: "S3" });
-  audit(s, actor, "production", "Cutting output recorded", "garment", garmentId, `${input.fabricUsed} m from ${issue.lotId}`);
+  s.cuttingOutputs.push({
+    id: cutId,
+    orderId: order.id,
+    lotId: issue.lotId,
+    issueId: issue.id,
+    panelSetLabel: label,
+    fabricUsed: input.fabricUsed,
+    garmentId,
+    at: now(),
+    by: actor.id,
+  });
+  s.garments.push({
+    id: garmentId,
+    orderId: order.id,
+    publicId: `${garmentId.toLowerCase()}-unpublished`,
+    productName: `${order.product} — ${input.size}`,
+    size: input.size,
+    cuttingOutputId: cutId,
+    stage: "stitching",
+    disposition: "not-inspected",
+    hold: null,
+  });
+  garmentEvent(
+    s,
+    garmentId,
+    `Cut from ${issue.lotId} (dashboard form — assign RFID card at Cutting station)`,
+    actor,
+    `Panel set ${label}`,
+  );
+  addTask(s, {
+    kind: "stitch",
+    title: `Stitch ${garmentId}`,
+    department: "stitching",
+    subjectType: "garment",
+    subjectId: garmentId,
+    checkpoint: "S3",
+  });
+  audit(
+    s,
+    actor,
+    "production",
+    "Cutting output recorded (dashboard — no RFID scan)",
+    "garment",
+    garmentId,
+    `${input.fabricUsed} from ${issue.lotId}`,
+  );
   return garmentId;
 }
 
@@ -156,7 +1416,11 @@ export function recordCuttingOutput(s: DemoState, actor: StaffUser, input: { ord
 
 export function claimTask(s: DemoState, actor: StaffUser, taskId: string) {
   const task = findOrThrow(s.tasks, taskId, "Task");
-  ensure(can.claimTask(actor, task), "forbidden", "You can only claim open tasks in your own department.");
+  ensure(
+    can.claimTask(actor, task),
+    "forbidden",
+    "You can only claim open tasks in your own department.",
+  );
   task.status = "claimed";
   task.assigneeId = actor.id;
   audit(s, actor, "workstation", "Task claimed", "task", task.id);
@@ -166,14 +1430,18 @@ export function assignTask(s: DemoState, actor: StaffUser, taskId: string, userI
   ensure(can.assignTask(actor), "forbidden", "Only the manager can assign tasks.");
   const task = findOrThrow(s.tasks, taskId, "Task");
   const assignee = findOrThrow(s.users, userId, "User");
-  ensure(assignee.department === task.department, "conflict", `${assignee.username} is not in the ${task.department} department.`);
+  ensure(
+    assignee.department === task.department,
+    "conflict",
+    `${assignee.username} is not in the ${task.department} department.`,
+  );
   ensure(task.status !== "done", "conflict", "This task is already done.");
   task.status = "claimed";
   task.assigneeId = assignee.id;
   audit(s, actor, "workstation", "Task assigned", "task", task.id, `to ${assignee.username}`);
 }
 
-// ---------------------------------------------------------------- workstation
+// ---------------------------------------------------------------- workstation (legacy IR path retained)
 
 function ws(s: DemoState, actor: StaffUser) {
   let w = s.workstations[actor.id];
@@ -186,7 +1454,11 @@ function ws(s: DemoState, actor: StaffUser) {
 
 export function selectWorkstationTask(s: DemoState, actor: StaffUser, taskId: string) {
   const w = ws(s, actor);
-  ensure(!w.armed && !w.needsClear, "conflict", "Clear the current checkpoint before choosing another task.");
+  ensure(
+    !w.armed && !w.needsClear,
+    "conflict",
+    "Clear the current checkpoint before choosing another task.",
+  );
   const task = findOrThrow(s.tasks, taskId, "Task");
   ensure(can.useWorkstationTask(actor, task), "forbidden", "That task is outside your department.");
   ensure(!!task.checkpoint, "conflict", "That task has no physical checkpoint.");
@@ -224,8 +1496,17 @@ export function simulateTrigger(s: DemoState, actor: StaffUser, sensor: SensorId
     }
     w.armed = false;
     w.needsClear = true;
-    if (task.subjectType === "garment") garmentEvent(s, task.subjectId, `Presented at ${sensor}`, actor, task.title);
-    audit(s, actor, "workstation", "Checkpoint presentation accepted", task.subjectType, task.subjectId, sensor);
+    if (task.subjectType === "garment")
+      garmentEvent(s, task.subjectId, `Presented at ${sensor}`, actor, task.title);
+    audit(
+      s,
+      actor,
+      "workstation",
+      "Checkpoint presentation accepted",
+      task.subjectType,
+      task.subjectId,
+      sensor,
+    );
   }
   return outcome;
 }
@@ -249,14 +1530,38 @@ export function handOverTask(s: DemoState, actor: StaffUser) {
     if (task.kind === "stitch" && g.stage === "stitching") {
       g.stage = "finishing";
       garmentEvent(s, g.id, "Stitching completed", actor);
-      addTask(s, { kind: "finish", title: `Finish ${g.id}`, department: "finishing", subjectType: "garment", subjectId: g.id, checkpoint: "S4" });
+      addTask(s, {
+        kind: "finish",
+        title: `Finish ${g.id}`,
+        department: "finishing",
+        subjectType: "garment",
+        subjectId: g.id,
+        checkpoint: "S4",
+      });
     } else if (task.kind === "finish" && g.stage === "finishing") {
       g.stage = "final-qc";
       g.disposition = "awaiting-inspection";
       garmentEvent(s, g.id, "Finishing completed", actor);
       const inspId = nextId(s, "inspection", "INSP");
-      s.inspections.push({ id: inspId, kind: "final", subjectType: "garment", subjectId: g.id, status: "open", assigneeId: "u-quality", checklist: finalChecklist(), notes: "", createdAt: now() });
-      addTask(s, { kind: "final-qc-presentation", title: `Present ${g.id} for final QC`, department: "quality", subjectType: "garment", subjectId: g.id, checkpoint: "S4" });
+      s.inspections.push({
+        id: inspId,
+        kind: "final",
+        subjectType: "garment",
+        subjectId: g.id,
+        status: "open",
+        assigneeId: "u-quality",
+        checklist: finalChecklist(),
+        notes: "",
+        createdAt: now(),
+      });
+      addTask(s, {
+        kind: "final-qc-presentation",
+        title: `Present ${g.id} for final QC`,
+        department: "quality",
+        subjectType: "garment",
+        subjectId: g.id,
+        checkpoint: "FINAL_QC",
+      });
     }
   }
   w.taskId = undefined;
@@ -270,11 +1575,26 @@ export function handOverTask(s: DemoState, actor: StaffUser) {
 export function submitInspection(
   s: DemoState,
   actor: StaffUser,
-  input: { inspectionId: string; checklist: ChecklistItem[]; notes: string; result: "pass" | "fail"; defectReason?: string | undefined },
+  input: {
+    inspectionId: string;
+    checklist: ChecklistItem[];
+    notes: string;
+    result: "pass" | "fail";
+    defectReason?: string | undefined;
+  },
 ) {
   const insp = findOrThrow(s.inspections, input.inspectionId, "Inspection");
-  ensure(can.submitInspection(actor, insp), "forbidden", "Only the quality inspector can submit results. Managers have read-only access.");
-  if (input.result === "pass") ensure(input.checklist.every((c) => c.checked), "invalid", "Complete every checklist item before passing.");
+  ensure(
+    can.submitInspection(actor, insp),
+    "forbidden",
+    "Only the quality inspector can submit results. Managers have read-only access.",
+  );
+  if (input.result === "pass")
+    ensure(
+      input.checklist.every((c) => c.checked),
+      "invalid",
+      "Complete every checklist item before passing.",
+    );
   else ensure(input.defectReason?.trim(), "invalid", "Enter a defect reason for a failed result.");
 
   insp.checklist = input.checklist;
@@ -288,7 +1608,15 @@ export function submitInspection(
     const lot = findOrThrow(s.lots, insp.subjectId, "Lot");
     lot.status = input.result === "pass" ? "accepted" : "rejected";
     closeTasks(s, lot.id, ["incoming-qc"]);
-    audit(s, actor, "quality", `Incoming inspection ${input.result === "pass" ? "passed" : "failed"}`, "lot", lot.id, insp.defectReason);
+    audit(
+      s,
+      actor,
+      "quality",
+      `Incoming inspection ${input.result === "pass" ? "passed" : "failed"}`,
+      "lot",
+      lot.id,
+      insp.defectReason,
+    );
     return;
   }
 
@@ -300,7 +1628,14 @@ export function submitInspection(
     g.disposition = "passed";
     if (!g.hold) {
       g.stage = "packing";
-      addTask(s, { kind: "pack", title: `Pack ${g.id}`, department: "packing", subjectType: "garment", subjectId: g.id, checkpoint: "S5" });
+      addTask(s, {
+        kind: "pack",
+        title: `Pack ${g.id}`,
+        department: "packing",
+        subjectType: "garment",
+        subjectId: g.id,
+        checkpoint: "S5",
+      });
       garmentEvent(s, g.id, `${kindLabel} passed`, actor, insp.id);
     } else {
       garmentEvent(s, g.id, `${kindLabel} passed — hold awaits explicit release`, actor, insp.id);
@@ -309,34 +1644,63 @@ export function submitInspection(
     return;
   }
 
-  // Fail: keep the result, place on hold, open (or reopen) a rework case.
   g.disposition = "failed";
   g.stage = "rework";
-  const existing = g.hold?.reworkCaseId ? s.rework.find((r) => r.id === g.hold!.reworkCaseId) : undefined;
+  const existing = g.hold?.reworkCaseId
+    ? s.rework.find((r) => r.id === g.hold!.reworkCaseId)
+    : undefined;
   let caseId: string;
   if (existing) {
     existing.status = "awaiting-assignment";
     existing.defectReason = insp.defectReason!;
     existing.inspectionId = insp.id;
     existing.assignedDepartment = undefined;
-    existing.history.push({ at: now(), label: `Reinspection failed: ${insp.defectReason}`, actorId: actor.id });
+    existing.history.push({
+      at: now(),
+      label: `Reinspection failed: ${insp.defectReason}`,
+      actorId: actor.id,
+    });
     caseId = existing.id;
   } else {
     caseId = nextId(s, "rework", "RW");
     s.rework.push({
-      id: caseId, garmentId: g.id, inspectionId: insp.id, defectReason: insp.defectReason!, status: "awaiting-assignment", createdAt: now(),
-      history: [{ at: now(), label: `Opened from ${insp.id}: ${insp.defectReason}`, actorId: actor.id }],
+      id: caseId,
+      garmentId: g.id,
+      inspectionId: insp.id,
+      defectReason: insp.defectReason!,
+      status: "awaiting-assignment",
+      createdAt: now(),
+      history: [
+        { at: now(), label: `Opened from ${insp.id}: ${insp.defectReason}`, actorId: actor.id },
+      ],
     });
   }
-  g.hold = { reason: insp.defectReason!, since: g.hold?.since ?? now(), inspectionId: insp.id, reworkCaseId: caseId };
+  g.hold = {
+    reason: insp.defectReason!,
+    since: g.hold?.since ?? now(),
+    inspectionId: insp.id,
+    reworkCaseId: caseId,
+  };
   garmentEvent(s, g.id, `${kindLabel} failed — garment on hold`, actor, insp.defectReason);
-  audit(s, actor, "quality", `${kindLabel} failed`, "garment", g.id, `${insp.defectReason} · ${caseId}`);
+  audit(
+    s,
+    actor,
+    "quality",
+    `${kindLabel} failed`,
+    "garment",
+    g.id,
+    `${insp.defectReason} · ${caseId}`,
+  );
 }
 
 export function releaseHold(s: DemoState, actor: StaffUser, garmentId: string) {
   const g = getGarment(s, garmentId);
   const latest = latestGarmentInspection(s, g.id);
-  ensure(can.releaseHold(actor, g, latest), "forbidden", "Only the quality inspector can release a hold, and only after a passing reinspection.");
+  ensure(
+    can.releaseHold(actor, g, latest),
+    "forbidden",
+    "Only the quality inspector can release a hold, and only after a passing reinspection.",
+  );
   const caseId = g.hold?.reworkCaseId;
   g.hold = null;
   g.disposition = "released";
@@ -344,9 +1708,20 @@ export function releaseHold(s: DemoState, actor: StaffUser, garmentId: string) {
   const rc = caseId ? s.rework.find((r) => r.id === caseId) : undefined;
   if (rc) {
     rc.status = "closed";
-    rc.history.push({ at: now(), label: "Hold released after passing reinspection", actorId: actor.id });
+    rc.history.push({
+      at: now(),
+      label: "Hold released after passing reinspection",
+      actorId: actor.id,
+    });
   }
-  addTask(s, { kind: "pack", title: `Pack ${g.id}`, department: "packing", subjectType: "garment", subjectId: g.id, checkpoint: "S5" });
+  addTask(s, {
+    kind: "pack",
+    title: `Pack ${g.id}`,
+    department: "packing",
+    subjectType: "garment",
+    subjectId: g.id,
+    checkpoint: "S5",
+  });
   garmentEvent(s, g.id, "Quality hold released", actor, latest?.id);
   audit(s, actor, "quality", "Hold released", "garment", g.id, latest?.id);
 }
@@ -355,34 +1730,76 @@ export function releaseHold(s: DemoState, actor: StaffUser, garmentId: string) {
 
 const repairDepartments: Department[] = ["cutting", "stitching", "finishing"];
 
-export function assignRework(s: DemoState, actor: StaffUser, caseId: string, department: Department) {
+export function assignRework(
+  s: DemoState,
+  actor: StaffUser,
+  caseId: string,
+  department: Department,
+) {
   const rc = findOrThrow(s.rework, caseId, "Rework case");
-  ensure(can.assignRework(actor, rc), "forbidden", "Only the manager can assign rework that is awaiting assignment.");
+  ensure(
+    can.assignRework(actor, rc),
+    "forbidden",
+    "Only the manager can assign rework that is awaiting assignment.",
+  );
   ensure(repairDepartments.includes(department), "invalid", "Choose a production department.");
   rc.status = "assigned";
   rc.assignedDepartment = department;
   rc.assignedBy = actor.id;
   rc.history.push({ at: now(), label: `Assigned to ${department}`, actorId: actor.id });
-  addTask(s, { kind: "rework", title: `Repair ${rc.garmentId} (${rc.id})`, department, subjectType: "rework", subjectId: rc.id });
+  addTask(s, {
+    kind: "rework",
+    title: `Repair ${rc.garmentId} (${rc.id})`,
+    department,
+    subjectType: "rework",
+    subjectId: rc.id,
+  });
   garmentEvent(s, rc.garmentId, `Rework assigned to ${department}`, actor, rc.id);
   audit(s, actor, "rework", "Rework assigned", "rework", rc.id, department);
 }
 
 export function completeRework(s: DemoState, actor: StaffUser, caseId: string, note: string) {
   const rc = findOrThrow(s.rework, caseId, "Rework case");
-  ensure(can.completeRework(actor, rc), "forbidden", "Only the assigned production department can record repair completion.");
+  ensure(
+    can.completeRework(actor, rc),
+    "forbidden",
+    "Only the assigned production department can record repair completion.",
+  );
+  ensure(actor.id !== rc.assignedBy, "forbidden", "The assignor cannot also complete the repair.");
   const g = getGarment(s, rc.garmentId);
   rc.status = "repaired";
   rc.repairNote = note.trim() || "Repair completed.";
   rc.repairedBy = actor.id;
   const inspId = nextId(s, "inspection", "INSP");
-  s.inspections.push({ id: inspId, kind: "reinspection", subjectType: "garment", subjectId: g.id, status: "open", assigneeId: "u-quality", checklist: finalChecklist(), notes: "", createdAt: now(), previousInspectionId: rc.inspectionId });
+  s.inspections.push({
+    id: inspId,
+    kind: "reinspection",
+    subjectType: "garment",
+    subjectId: g.id,
+    status: "open",
+    assigneeId: "u-quality",
+    checklist: finalChecklist(),
+    notes: "",
+    createdAt: now(),
+    previousInspectionId: rc.inspectionId,
+  });
   rc.reinspectionId = inspId;
-  rc.history.push({ at: now(), label: `Repair completed; fresh reinspection ${inspId} opened`, actorId: actor.id });
+  rc.history.push({
+    at: now(),
+    label: `Repair completed; fresh reinspection ${inspId} opened`,
+    actorId: actor.id,
+  });
   g.disposition = "reinspection-pending";
   g.stage = "final-qc";
   closeTasks(s, rc.id, ["rework"]);
-  addTask(s, { kind: "final-qc-presentation", title: `Present ${g.id} for reinspection`, department: "quality", subjectType: "garment", subjectId: g.id, checkpoint: "S4" });
+  addTask(s, {
+    kind: "final-qc-presentation",
+    title: `Present ${g.id} for reinspection`,
+    department: "quality",
+    subjectType: "garment",
+    subjectId: g.id,
+    checkpoint: "FINAL_QC",
+  });
   garmentEvent(s, g.id, "Repair completed — awaiting reinspection", actor, rc.id);
   audit(s, actor, "rework", "Repair completed", "rework", rc.id, inspId);
 }
@@ -394,16 +1811,32 @@ export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
   const g = getGarment(s, garmentId);
   ensure(!g.hold, "conflict", `${g.id} is on quality hold and cannot be packed.`);
   ensure(g.stage === "packing" && !g.packageId, "conflict", `${g.id} is not waiting for packing.`);
-  ensure(g.disposition === "passed" || g.disposition === "released", "conflict", `${g.id} has not passed quality control.`);
+  ensure(
+    g.disposition === "passed" || g.disposition === "released",
+    "conflict",
+    `${g.id} has not passed quality control.`,
+  );
   let pkg = s.packages.find((p) => p.status === "open");
   if (!pkg) {
-    pkg = { id: nextId(s, "package", "PKG"), garmentIds: [], status: "open", packedBy: actor.id, createdAt: now() };
+    pkg = {
+      id: nextId(s, "package", "PKG"),
+      garmentIds: [],
+      status: "open",
+      packedBy: actor.id,
+      createdAt: now(),
+    };
     s.packages.push(pkg);
   }
   pkg.garmentIds.push(g.id);
   g.packageId = pkg.id;
   closeTasks(s, g.id, ["pack"]);
-  addTask(s, { kind: "warehouse-receive", title: `Receive ${g.id} into finished stock`, department: "warehouse", subjectType: "garment", subjectId: g.id });
+  addTask(s, {
+    kind: "warehouse-receive",
+    title: `Receive ${g.id} into finished stock`,
+    department: "warehouse",
+    subjectType: "garment",
+    subjectId: g.id,
+  });
   garmentEvent(s, g.id, `Packed into ${pkg.id}`, actor);
   audit(s, actor, "logistics", "Garment packed", "garment", g.id, pkg.id);
   return pkg.id;
@@ -412,7 +1845,11 @@ export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
 export function receiveStock(s: DemoState, actor: StaffUser, garmentId: string) {
   ensure(can.receiveStock(actor), "forbidden", "Only warehouse staff can receive finished stock.");
   const g = getGarment(s, garmentId);
-  ensure(g.stage === "packing" && g.packageId, "conflict", `${g.id} is not packed and waiting for the warehouse.`);
+  ensure(
+    g.stage === "packing" && g.packageId,
+    "conflict",
+    `${g.id} is not packed and waiting for the warehouse.`,
+  );
   g.stage = "warehouse";
   const pkg = s.packages.find((p) => p.id === g.packageId);
   if (pkg) pkg.status = "sealed";
@@ -421,7 +1858,12 @@ export function receiveStock(s: DemoState, actor: StaffUser, garmentId: string) 
   audit(s, actor, "logistics", "Stock received", "garment", g.id);
 }
 
-export function allocateStock(s: DemoState, actor: StaffUser, garmentId: string, shipmentId: string) {
+export function allocateStock(
+  s: DemoState,
+  actor: StaffUser,
+  garmentId: string,
+  shipmentId: string,
+) {
   ensure(can.allocateStock(actor), "forbidden", "Only warehouse staff can allocate stock.");
   const g = getGarment(s, garmentId);
   const sh = getShipment(s, shipmentId);
@@ -432,23 +1874,54 @@ export function allocateStock(s: DemoState, actor: StaffUser, garmentId: string,
   if (!sh.allocatedGarmentIds.includes(g.id)) sh.allocatedGarmentIds.push(g.id);
   g.stage = "allocated";
   g.shipmentId = sh.id;
-  if (sh.garmentIds.every((id) => sh.allocatedGarmentIds.includes(id))) closeTasks(s, sh.id, ["allocate"]);
+  if (sh.garmentIds.every((id) => sh.allocatedGarmentIds.includes(id)))
+    closeTasks(s, sh.id, ["allocate"]);
   garmentEvent(s, g.id, `Allocated to ${sh.id}`, actor);
   audit(s, actor, "logistics", "Stock allocated", "shipment", sh.id, g.id);
 }
 
-export function planShipment(s: DemoState, actor: StaffUser, input: { destination: string; carrier: string; plannedDate: string }) {
+export function planShipment(
+  s: DemoState,
+  actor: StaffUser,
+  input: { destination: string; carrier: string; plannedDate: string },
+) {
   ensure(can.planShipment(actor), "forbidden", "Only the manager can plan shipments.");
   ensure(input.destination.trim(), "invalid", "Enter a destination.");
   const id = nextId(s, "shipment", "SHP");
-  s.shipments.push({ id, destination: input.destination.trim(), carrier: input.carrier.trim() || s.settings.business.defaultCarrier, status: "draft", garmentIds: [], allocatedGarmentIds: [], plannedBy: actor.id, plannedDate: input.plannedDate });
-  addTask(s, { kind: "allocate", title: `Allocate stock to ${id}`, department: "warehouse", subjectType: "shipment", subjectId: id });
-  addTask(s, { kind: "dispatch", title: `Dispatch ${id} at dock`, department: "dispatch", subjectType: "shipment", subjectId: id, checkpoint: "S6" });
+  s.shipments.push({
+    id,
+    destination: input.destination.trim(),
+    carrier: input.carrier.trim() || s.settings.business.defaultCarrier,
+    status: "draft",
+    garmentIds: [],
+    allocatedGarmentIds: [],
+    plannedBy: actor.id,
+    plannedDate: input.plannedDate,
+  });
+  addTask(s, {
+    kind: "allocate",
+    title: `Allocate stock to ${id}`,
+    department: "warehouse",
+    subjectType: "shipment",
+    subjectId: id,
+  });
+  addTask(s, {
+    kind: "dispatch",
+    title: `Dispatch ${id} at dock`,
+    department: "dispatch",
+    subjectType: "shipment",
+    subjectId: id,
+    checkpoint: "S6",
+  });
   audit(s, actor, "logistics", "Shipment drafted", "shipment", id);
   return id;
 }
 
-export function updateShipmentPlan(s: DemoState, actor: StaffUser, input: { shipmentId: string; garmentIds: string[]; markPlanned: boolean }) {
+export function updateShipmentPlan(
+  s: DemoState,
+  actor: StaffUser,
+  input: { shipmentId: string; garmentIds: string[]; markPlanned: boolean },
+) {
   ensure(can.planShipment(actor), "forbidden", "Only the manager can change a shipment plan.");
   const sh = getShipment(s, input.shipmentId);
   ensure(sh.status !== "departed", "conflict", "A departed shipment cannot be changed.");
@@ -457,7 +1930,15 @@ export function updateShipmentPlan(s: DemoState, actor: StaffUser, input: { ship
   sh.allocatedGarmentIds = sh.allocatedGarmentIds.filter((id) => input.garmentIds.includes(id));
   if (input.markPlanned) sh.status = "planned";
   input.garmentIds.forEach((id) => (getGarment(s, id).shipmentId = sh.id));
-  audit(s, actor, "logistics", input.markPlanned ? "Shipment planned" : "Shipment manifest updated", "shipment", sh.id, input.garmentIds.join(", "));
+  audit(
+    s,
+    actor,
+    "logistics",
+    input.markPlanned ? "Shipment planned" : "Shipment manifest updated",
+    "shipment",
+    sh.id,
+    input.garmentIds.join(", "),
+  );
 }
 
 export interface EligibilityCheck {
@@ -467,21 +1948,43 @@ export interface EligibilityCheck {
 }
 
 export function shipmentEligibility(s: DemoState, sh: Shipment): EligibilityCheck[] {
-  const garments = sh.garmentIds.map((id) => s.garments.find((g) => g.id === id)).filter(Boolean) as Garment[];
+  const garments = sh.garmentIds
+    .map((id) => s.garments.find((g) => g.id === id))
+    .filter(Boolean) as Garment[];
   const dispatchTask = s.tasks.find((t) => t.kind === "dispatch" && t.subjectId === sh.id);
   const checks: EligibilityCheck[] = [
-    { label: "Shipment is planned by the manager", ok: sh.status === "planned", detail: `Status: ${sh.status}` },
+    {
+      label: "Shipment is planned by the manager",
+      ok: sh.status === "planned",
+      detail: `Status: ${sh.status}`,
+    },
     { label: "Manifest has at least one garment", ok: garments.length > 0 },
   ];
   garments.forEach((g) => {
-    checks.push({ label: `${g.id}: no active quality hold`, ok: !g.hold, detail: g.hold ? "On hold — blocked" : undefined });
-    checks.push({ label: `${g.id}: passed or released by quality`, ok: g.disposition === "passed" || g.disposition === "released", detail: `Disposition: ${g.disposition}` });
-    checks.push({ label: `${g.id}: packed and allocated from finished stock`, ok: g.stage === "allocated" && sh.allocatedGarmentIds.includes(g.id), detail: `Stage: ${g.stage}` });
+    checks.push({
+      label: `${g.id}: no active quality hold`,
+      ok: !g.hold,
+      detail: g.hold ? "On hold — blocked" : undefined,
+    });
+    checks.push({
+      label: `${g.id}: passed or released by quality`,
+      ok: g.disposition === "passed" || g.disposition === "released",
+      detail: `Disposition: ${g.disposition}`,
+    });
+    checks.push({
+      label: `${g.id}: packed and allocated from finished stock`,
+      ok: g.stage === "allocated" && sh.allocatedGarmentIds.includes(g.id),
+      detail: `Stage: ${g.stage}`,
+    });
   });
   checks.push({
     label: "Dispatch presentation observed at S6",
     ok: !!dispatchTask?.observation,
-    detail: dispatchTask ? (dispatchTask.observation ? `Observed ${dispatchTask.observation.at}` : `Waiting on ${dispatchTask.id}`) : "No dispatch task",
+    detail: dispatchTask
+      ? dispatchTask.observation
+        ? `Observed ${dispatchTask.observation.at}`
+        : `Waiting on ${dispatchTask.id}`
+      : "No dispatch task",
   });
   return checks;
 }
@@ -491,7 +1994,11 @@ export function confirmDeparture(s: DemoState, actor: StaffUser, shipmentId: str
   const sh = getShipment(s, shipmentId);
   ensure(sh.status !== "departed", "conflict", `${sh.id} has already departed.`);
   const failed = shipmentEligibility(s, sh).filter((c) => !c.ok);
-  ensure(failed.length === 0, "conflict", `Departure blocked: ${failed.map((c) => c.label).join("; ")}`);
+  ensure(
+    failed.length === 0,
+    "conflict",
+    `Departure blocked: ${failed.map((c) => c.label).join("; ")}`,
+  );
   sh.status = "departed";
   sh.departedAt = now();
   sh.departedBy = actor.id;
@@ -499,13 +2006,23 @@ export function confirmDeparture(s: DemoState, actor: StaffUser, shipmentId: str
     const g = getGarment(s, id);
     g.stage = "dispatched";
     garmentEvent(s, g.id, `Dispatched on ${sh.id}`, actor);
-    s.ledger.unshift({ id: nextId(s, "ledger", "LC"), subjectType: "garment", subjectId: g.id, milestone: "Dispatched to authorized retail network", status: "pending", digest: "0x(demo)…pending", createdAt: now(), updatedAt: now(), attempts: 0 });
+    s.ledger.unshift({
+      id: nextId(s, "ledger", "LC"),
+      subjectType: "garment",
+      subjectId: g.id,
+      milestone: "Dispatched to authorized retail network",
+      status: "pending",
+      digest: "0x(demo)…pending",
+      createdAt: now(),
+      updatedAt: now(),
+      attempts: 0,
+    });
   });
   closeTasks(s, sh.id, ["dispatch"]);
   audit(s, actor, "logistics", "Shipment departed", "shipment", sh.id);
 }
 
-// ---------------------------------------------------------------- ledger (independent of production/QC)
+// ---------------------------------------------------------------- ledger
 
 export function retryLedger(s: DemoState, actor: StaffUser, id: string) {
   ensure(can.retryLedger(actor), "forbidden", "Only the administrator can retry commitments.");
@@ -520,27 +2037,70 @@ export function retryLedger(s: DemoState, actor: StaffUser, id: string) {
 
 // ---------------------------------------------------------------- admin
 
-export function inviteUser(s: DemoState, actor: StaffUser, input: { username: string; displayName: string; role: Role; department: Department }) {
+export function inviteUser(
+  s: DemoState,
+  actor: StaffUser,
+  input: {
+    username: string;
+    displayName: string;
+    role: import("@/domain/types").Role;
+    department: Department;
+  },
+) {
   ensure(can.manageUsers(actor), "forbidden", "Only the administrator can invite staff.");
   const username = input.username.trim().toLowerCase();
-  ensure(/^[a-z0-9.\-]{3,}$/.test(username), "invalid", "Username needs 3+ lowercase letters, digits, dots or dashes.");
-  ensure(!s.users.some((u) => u.username === username), "conflict", "That username already exists.");
+  ensure(
+    /^[a-z0-9.-]{3,}$/.test(username),
+    "invalid",
+    "Username needs 3+ lowercase letters, digits, dots or dashes.",
+  );
+  ensure(
+    !s.users.some((u) => u.username === username),
+    "conflict",
+    "That username already exists.",
+  );
   const id = `u-${username.replace(/\W/g, "-")}`;
-  s.users.push({ id, username, displayName: input.displayName.trim() || username, role: input.role, department: input.department, email: `${username}@weartrail.example`, status: "invited", scope: input.department });
+  s.users.push({
+    id,
+    username,
+    displayName: input.displayName.trim() || username,
+    role: input.role,
+    department: input.department,
+    email: `${username}@weartrail.example`,
+    status: "invited",
+    scope: input.department,
+  });
   audit(s, actor, "admin", "Staff invited (mock)", "user", username);
   return id;
 }
 
-export function updateUserScope(s: DemoState, actor: StaffUser, input: { userId: string; role: Role; department: Department }) {
+export function updateUserScope(
+  s: DemoState,
+  actor: StaffUser,
+  input: { userId: string; role: import("@/domain/types").Role; department: Department },
+) {
   ensure(can.manageUsers(actor), "forbidden", "Only the administrator can edit scopes.");
   const u = findOrThrow(s.users, input.userId, "User");
   ensure(u.id !== actor.id, "conflict", "You cannot change your own scope.");
   u.role = input.role;
   u.department = input.department;
-  audit(s, actor, "admin", "Scope edited", "user", u.username, `${input.role} · ${input.department}`);
+  audit(
+    s,
+    actor,
+    "admin",
+    "Scope edited",
+    "user",
+    u.username,
+    `${input.role} · ${input.department}`,
+  );
 }
 
-export function setUserSuspended(s: DemoState, actor: StaffUser, userId: string, suspended: boolean) {
+export function setUserSuspended(
+  s: DemoState,
+  actor: StaffUser,
+  userId: string,
+  suspended: boolean,
+) {
   ensure(can.manageUsers(actor), "forbidden", "Only the administrator can suspend staff.");
   const u = findOrThrow(s.users, userId, "User");
   ensure(u.id !== actor.id, "conflict", "You cannot suspend yourself.");
@@ -557,17 +2117,41 @@ export function issueReset(s: DemoState, actor: StaffUser, userId: string) {
 
 // ---------------------------------------------------------------- settings
 
-export function updateCheckpoint(s: DemoState, actor: StaffUser, input: { sensor: SensorId; label: string; enabled: boolean }) {
-  ensure(can.editDeviceSettings(actor), "forbidden", "Only the administrator can edit device settings.");
+export function updateCheckpoint(
+  s: DemoState,
+  actor: StaffUser,
+  input: { sensor: SensorId; label: string; enabled: boolean },
+) {
+  ensure(
+    can.editDeviceSettings(actor),
+    "forbidden",
+    "Only the administrator can edit device settings.",
+  );
   const cp = s.settings.checkpoints.find((c) => c.sensor === input.sensor);
   ensure(cp, "not-found", "Unknown checkpoint.");
   cp.label = input.label.trim() || cp.label;
   cp.enabled = input.enabled;
-  audit(s, actor, "settings", "Checkpoint updated", "checkpoint", cp.sensor, `${cp.label} · ${cp.enabled ? "enabled" : "disabled"}`);
+  audit(
+    s,
+    actor,
+    "settings",
+    "Checkpoint updated",
+    "checkpoint",
+    cp.sensor,
+    `${cp.label} · ${cp.enabled ? "enabled" : "disabled"}`,
+  );
 }
 
-export function updateBusinessSettings(s: DemoState, actor: StaffUser, input: Partial<DemoState["settings"]["business"]>) {
-  ensure(can.editBusinessSettings(actor), "forbidden", "Only the manager can edit business settings.");
+export function updateBusinessSettings(
+  s: DemoState,
+  actor: StaffUser,
+  input: Partial<DemoState["settings"]["business"]>,
+) {
+  ensure(
+    can.editBusinessSettings(actor),
+    "forbidden",
+    "Only the manager can edit business settings.",
+  );
   s.settings.business = { ...s.settings.business, ...input };
   audit(s, actor, "settings", "Business settings updated", "settings", "business");
 }

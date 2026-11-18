@@ -15,7 +15,16 @@ export const AppLink = forwardRef<HTMLAnchorElement, AppLinkProps>(function AppL
   const router = useRouter();
   const handle = (e: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(e);
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || rest.target) return;
+    if (
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey ||
+      rest.target
+    )
+      return;
     e.preventDefault();
     void router.navigate({ href });
   };
@@ -25,7 +34,8 @@ export const AppLink = forwardRef<HTMLAnchorElement, AppLinkProps>(function AppL
 export function useAppNavigate() {
   const router = useRouter();
   return useCallback(
-    (href: string, opts?: { replace?: boolean | undefined }) => router.navigate({ href, replace: opts?.replace ?? false }),
+    (href: string, opts?: { replace?: boolean | undefined }) =>
+      router.navigate({ href, replace: opts?.replace ?? false }),
     [router],
   );
 }

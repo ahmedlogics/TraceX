@@ -31,7 +31,11 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
 
   const allChecked = checklist.every((c) => c.checked);
   const submit = (result: "pass" | "fail") =>
-    run((c) => c.submitInspection({ inspectionId: i.id, checklist, notes, result, defectReason: defect }), result === "pass" ? `${i.id} passed.` : `${i.id} failed — hold placed and rework opened.`);
+    run(
+      (c) =>
+        c.submitInspection({ inspectionId: i.id, checklist, notes, result, defectReason: defect }),
+      result === "pass" ? `${i.id} passed.` : `${i.id} failed — hold placed and rework opened.`,
+    );
   const g = d.garment;
   const canRelease = g ? can.releaseHold(me, g, d.latestForSubject) : false;
 
@@ -40,11 +44,24 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
       <PageHeader
         title={<span className="wt-id text-2xl">{i.id}</span>}
         description={`${i.kind === "incoming" ? "Incoming lot-level" : i.kind === "final" ? "Final" : "Re"} inspection`}
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality", href: paths.quality }, { label: i.id }]}
-        meta={<><StatusBadge status={i.status} label="Result" />{g?.hold && <HoldBadge />}</>}
+        crumbs={[
+          { label: "Staff", href: paths.home },
+          { label: "Quality", href: paths.quality },
+          { label: i.id },
+        ]}
+        meta={
+          <>
+            <StatusBadge status={i.status} label="Result" />
+            {g?.hold && <HoldBadge />}
+          </>
+        }
         actions={
           canRelease && g ? (
-            <Button size="sm" disabled={pending} onClick={() => void run((c) => c.releaseHold(g.id), `Hold released on ${g.id}.`)}>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() => void run((c) => c.releaseHold(g.id), `Hold released on ${g.id}.`)}
+            >
               Release hold on {g.id}
             </Button>
           ) : undefined
@@ -56,13 +73,73 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
             items={[
               {
                 label: i.subjectType === "lot" ? "Fabric lot" : "Garment",
-                value: i.subjectType === "lot" ? <LinkIf user={me} routeKey="materialLot" href={paths.lot(i.subjectId)} id={i.subjectId} /> : <LinkIf user={me} routeKey="garment" href={paths.garment(i.subjectId)} id={i.subjectId} />,
+                value:
+                  i.subjectType === "lot" ? (
+                    <LinkIf
+                      user={me}
+                      routeKey="materialLot"
+                      href={paths.lot(i.subjectId)}
+                      id={i.subjectId}
+                    />
+                  ) : (
+                    <LinkIf
+                      user={me}
+                      routeKey="garment"
+                      href={paths.garment(i.subjectId)}
+                      id={i.subjectId}
+                    />
+                  ),
               },
               { label: "Inspector", value: <UserName id={i.assigneeId} /> },
               { label: "Opened", value: fmt.dateTime(i.createdAt) },
-              { label: "Submitted", value: i.submittedAt ? <>{fmt.dateTime(i.submittedAt)} · <UserName id={i.submittedBy} /></> : "Not yet" },
-              ...(i.previousInspectionId ? [{ label: "Previous inspection", value: <LinkIf user={me} routeKey="inspection" href={paths.inspection(i.previousInspectionId)} id={i.previousInspectionId} /> }] : []),
-              ...(d.reworkCase ? [{ label: "Rework case", value: <LinkIf user={me} routeKey="reworkCase" href={paths.reworkCase(d.reworkCase.id)} id={d.reworkCase.id} /> }] : []),
+              {
+                label: "Submitted",
+                value: i.submittedAt ? (
+                  <>
+                    {fmt.dateTime(i.submittedAt)} · <UserName id={i.submittedBy} />
+                  </>
+                ) : (
+                  "Not yet"
+                ),
+              },
+              ...(i.rfidScanId
+                ? [
+                    {
+                      label: "RFID scan evidence",
+                      value: <span className="wt-id font-mono text-success">{i.rfidScanId}</span>,
+                    },
+                  ]
+                : []),
+              ...(i.previousInspectionId
+                ? [
+                    {
+                      label: "Previous inspection",
+                      value: (
+                        <LinkIf
+                          user={me}
+                          routeKey="inspection"
+                          href={paths.inspection(i.previousInspectionId)}
+                          id={i.previousInspectionId}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
+              ...(d.reworkCase
+                ? [
+                    {
+                      label: "Rework case",
+                      value: (
+                        <LinkIf
+                          user={me}
+                          routeKey="reworkCase"
+                          href={paths.reworkCase(d.reworkCase.id)}
+                          id={d.reworkCase.id}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
             ]}
           />
         </Section>
@@ -73,7 +150,11 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
               <label key={c.id} className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={c.checked}
-                  onCheckedChange={(v) => setChecklist((list) => list.map((x) => (x.id === c.id ? { ...x, checked: v === true } : x)))}
+                  onCheckedChange={(v) =>
+                    setChecklist((list) =>
+                      list.map((x) => (x.id === c.id ? { ...x, checked: v === true } : x)),
+                    )
+                  }
                   disabled={!editable}
                 />
                 {c.label}
@@ -82,24 +163,57 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
           </fieldset>
           <div className="mt-4 space-y-3">
             <Field label="Notes" htmlFor="insp-notes">
-              <Textarea id="insp-notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!editable} rows={3} />
+              <Textarea
+                id="insp-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                disabled={!editable}
+                rows={3}
+              />
             </Field>
-            {i.defectReason && <p className="rounded-md bg-danger-soft px-3 py-2 text-sm text-destructive">Defect reason: {i.defectReason}</p>}
+            {i.defectReason && (
+              <p className="rounded-md bg-danger-soft px-3 py-2 text-sm text-destructive">
+                Defect reason: {i.defectReason}
+              </p>
+            )}
             {editable ? (
               <div className="space-y-3 rounded-md border p-3">
                 <Field label="Defect reason (required to fail)" htmlFor="insp-defect">
-                  <Input id="insp-defect" value={defect} onChange={(e) => setDefect(e.target.value)} placeholder="e.g. Open seam at left side seam" />
+                  <Input
+                    id="insp-defect"
+                    value={defect}
+                    onChange={(e) => setDefect(e.target.value)}
+                    placeholder="e.g. Open seam at left side seam"
+                  />
                 </Field>
                 <div className="flex flex-wrap gap-2">
-                  <Button disabled={pending || !allChecked} onClick={() => void submit("pass")}>Submit Pass</Button>
-                  <Button variant="destructive" disabled={pending || !defect.trim()} onClick={() => void submit("fail")}>Submit Fail</Button>
+                  <Button disabled={pending || !allChecked} onClick={() => void submit("pass")}>
+                    Submit Pass
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={pending || !defect.trim()}
+                    onClick={() => void submit("fail")}
+                  >
+                    Submit Fail
+                  </Button>
                 </div>
-                {!allChecked && <p className="text-xs text-muted-foreground">Tick every checklist item to pass.</p>}
+                {!allChecked && (
+                  <p className="text-xs text-muted-foreground">
+                    Tick every checklist item to pass.
+                  </p>
+                )}
               </div>
             ) : i.status === "open" ? (
-              <ScopeNote>{me.role === "M" ? "Managers have read-only access to inspections." : "Only the quality inspector can submit a result."}</ScopeNote>
+              <ScopeNote>
+                {me.role === "M"
+                  ? "Managers have read-only access to inspections."
+                  : "Only the quality inspector can submit a result."}
+              </ScopeNote>
             ) : null}
-            <p className="text-xs text-muted-foreground">A checkpoint presentation records presence only. It never records a QC result.</p>
+            <p className="text-xs text-muted-foreground">
+              A checkpoint presentation records presence only. It never records a QC result.
+            </p>
           </div>
         </Section>
       </div>

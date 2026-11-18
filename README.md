@@ -6,94 +6,125 @@ WearTrail traces individual garments through factory operations and gives shoppe
 This repository is the **frontend scaffold** built on the Lovable TanStack Start starter: 26 routes, a shared staff
 workspace, two anonymous product pages and a connected mock demo. All data is synthetic.
 
-## Commands
+---
+
+## Prototype Evolution: Nine-Reader RFID Architecture
+
+This version upgrades WearTrail from the earlier 6-IR proximity presence prototype to a **nine-reader RFID prototype**.
+Physical RFID cards identify physical fabric bundles and individual cut garments directly.
+Physical stage, quality disposition, and ledger state remain strictly separate fields. A scan supplies identity and station evidence; staff selections supply decisions, quantities, and planning information.
+
+### Station Topology & Checkpoint Mapping
+
+| Pos | Station Name | Stable Station Code | Sensor / Checkpoint ID | Department | Scope / Responsibility |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Fabric Receiving | `fabric_receiving` | `S1` | `receiving` | Binds fresh RFID card to received fabric lot (`assign_bundle_card`). |
+| 2 | Fabric Issue | `fabric_issue` | `RAW_ISSUE` | `raw-store` | Selects approved order + qty, scans bundle card to issue fabric (`confirm_issue`). |
+| 3 | Cutting & Tag Assignment | `cutting` | `S2` | `cutting` | Confirms fabric source by bundle scan, then assigns fresh cards for each cut garment (`bind_garment_tag`). |
+| 4 | Stitching | `stitching` | `S3` | `stitching` | Routine scan advances garment stage without per-shirt form (`routineScan`). |
+| 5 | Finishing | `finishing` | `S4` | `finishing` | Routine scan advances garment stage without per-shirt form (`routineScan`). |
+| 6 | Final Quality Check | `final_qc` | `FINAL_QC` | `quality` | Inspector selects Pass/Fail + checklist, then scans garment card; identity is resolved automatically (`submit_qc`). |
+| 7 | Packing | `packing` | `S5` | `packing` | Selects open package, scans garment card; verifies QC and stage before packing (`pack_garment`). |
+| 8 | Finished Goods Warehouse | `warehouse` | `WAREHOUSE` | `warehouse` | Selects storage bin, scans garment card; confirms receipt into warehouse (`warehouse_receive`). |
+| 9 | Dispatch | `dispatch` | `S6` | `dispatch` | Selects approved manifest, scans garments; departure confirmed only when all checks pass (`dispatch_garment`). |
+
+---
+
+## Action Context & RFID Scan Lifecycle
+
+For actions requiring staff input (Receiving, Issue, Cutting, QA, Logistics), WearTrail implements a strict 5-stage lifecycle:
+
+```
+[Staff Selection / Input]
+         │
+         ▼
+[Prepare Action Context] ──► status: "awaiting_ack" (UUID generated, payload immutable)
+         │
+         ▼
+[Reader Board Acknowledges] ──► status: "ready" (Reader LED armed, awaiting physical tag tap)
+         │
+         ▼
+[Physical Tag Presented / Scanned] ──► status: "processing" (Tag UID read via USB serial)
+         │
+         ▼
+[Backend Resolution & Dispatch] ──► status: "confirmed" OR "rejected" (One-use context consumed)
+```
+
+### Key Domain & Workflow Rules
+
+1. **Context Immutability & One-Use Consumption:** A context is a server/mock-adapter-generated UUID with an immutable payload and expiry. A confirmed scan consumes it once. Changing a decision cancels the old context and creates a fresh one.
+2. **QA Without Preselecting Garments:** Inspectors physically evaluate the shirt, select Pass or Fail, fill the checklist, and prepare the decision. The subsequent card scan identifies the garment automatically and attaches the pending result.
+3. **Cutting Fabric Source Retention:** The operator selects an approved order and issued fabric lot, then scans the bundle card to confirm the source. This confirmed source remains active across multiple garment tag assignments until explicitly changed or cancelled.
+4. **Routine Production (Stitching & Finishing):** Operates under an authorized reader session without requiring a per-shirt form. The card scan identifies the garment, validates expected stage, and advances the garment.
+5. **Durable Scan Feedback:** Feedback is persistently rendered in the station shell and station panels (including rejection reasons such as active hold, wrong stage, duplicate card, or over-allocation), not merely in transient toasts.
+
+---
+
+## Seed Scenario: Coherent Multi-Order Fabric Allocation
+
+The mock state initializes with version `DEMO_STATE_VERSION = 5` and a realistic multi-order fabric allocation:
+
+- **Fabric Bundle `FAB-001`:** 20 m of accepted *Cotton poplin*, assigned RFID card `04A1B2C3`.
+- **Production Order `ORDER-001` (Classic Poplin Shirt, planned qty 4):** Issued 8 m (`ISS-001`).
+- **Production Order `ORDER-002` (Cotton Trouser, planned qty 2):** Issued 6 m (`ISS-002`).
+- **Remaining Stock:** `20 m - 8 m - 6 m = 6 m` available balance.
+- **Garments:**
+  - `SHIRT-001`: Cut from `ISS-001`, assembled, QC passed, and dispatched (public demo). Card: `04A7B8C9`.
+  - `SHIRT-002`: Cut from `ISS-001`, assembled, awaiting Final QC. Card: `04DAEBFC`.
+  - `TROUSER-001`: Cut from `ISS-002`, currently in Finishing. Card: `04001122`.
+
+---
+
+## Commands & Verification
 
 ```bash
-bun install        # install dependencies
-bun run dev        # dev server on http://localhost:8080
-bun run build      # production build
-bun run test       # vitest (access rules + SHIRT-002 end-to-end path)
-bun run lint
+npm install              # install dependencies
+npm run build            # production build with Vite + Nitro (client & server)
+npm run test             # vitest (12 unit and end-to-end integration tests)
+npm run lint             # eslint validation across codebase
+npm run format           # prettier formatting
+npm run dev              # local dev server on http://localhost:8080
 ```
 
-## Demo accounts
+### Verification Checks Performed
 
-Open `/staff/login` and pick an identity from **Demo accounts** (no password). **Reset demo** on the same screen restores the seed.
+- **TypeScript (`tsc --noEmit`):** Passed with 0 errors across all feature views, domain types, client adapters, and mock engine.
+- **Unit & Workflow Tests (`vitest run`):** 12 tests passed (including access rules, SHIRT-002 lifecycle, station-by-station RFID validation, over-allocation prevention, and hold isolation).
+- **ESLint (`eslint src`):** Passed with 0 errors.
+- **Vite Production Build (`vite build`):** Client bundles and Nitro server workers built successfully.
 
-| Username | Role | Department / scope |
-| --- | --- | --- |
-| admin.demo | A — Administrator | Technical administration |
-| manager.demo | M — Supply-chain manager | Factory planning and supervision |
-| receiving.demo | O — Materials | Receiving |
-| rawstore.demo | O — Materials | Raw material issue |
-| cutting.demo | P — Production | Cutting |
-| stitching.demo | P — Production | Stitching |
-| finishing.demo | P — Production | Finishing |
-| quality.demo | Q — Quality inspector | Incoming, final and reinspection |
-| packing.demo | L — Logistics | Packing |
-| warehouse.demo | L — Logistics | Finished-goods warehouse |
-| dispatch.demo | L — Logistics | Dispatch |
+---
 
-Sample credential links: `/staff/credentials/demo-valid-token`, `demo-expired-token`, `demo-used-token`.
+## Integration Seams & Backend Architecture
 
-## Sample product URLs
+The frontend is completely decoupled from database credentials, firmware, and USB hardware:
 
-- `/p/shirt-001-demo` — completed example (dispatched, sample-confirmed evidence, advisory notice)
-- `/p/shirt-002-demo` — awaiting final QC; changes as you run the demo
-- Add `/proof` for the verification page.
+1. **Data Boundary (`WearTrailClient` in `src/lib/data/client.ts`):**
+   - All feature views interact exclusively through the typed `WearTrailClient` interface.
+   - `getRfidStationData(stationCode)`: Returns reader session, active action context, cutting source selection, and last scan outcome.
+   - `prepareActionContext(stationCode, kind, payload)`: Prepares an immutable action context.
+   - `acknowledgeContext(contextId)`: Transitions context from `awaiting_ack` to `ready`.
+   - `cancelContext(contextId)`: Safely cancels a pending context.
+   - `resolveRfidScan(uid)`: Resolves an RFID scan against the active context.
+   - `routineScan(uid, stationCode)`: Performs routine garment stage advancement.
+2. **Mock vs. Express Client:**
+   - In prototype mode, `createMockClient()` (`src/mock/mock-client.ts`) runs purely in-browser state with localStorage persistence.
+   - For backend integration, implement `WearTrailClient` using `fetch()` endpoints pointing to the Express server (`POST /rfid/contexts`, `PUT /rfid/contexts/:id/ack`, `POST /rfid/scan`, etc.).
+3. **USB Serial Hardware Bridge:**
+   - In production, the physical ESP32 reader hub connects via USB serial to the host running the Express backend.
+   - The Express server authenticates device credentials, broadcasts real-time tag tap events over Server-Sent Events (SSE), and maps measured reader indices (bench verified) to logical station codes.
+   - In the frontend mock, bridge health is explicitly displayed as **Disconnected (Simulated)** to clearly differentiate synthetic emulation from live hardware.
 
-## Demo script (SHIRT-002)
+---
 
-1. **quality.demo** → Workstation: select T-101, arm, *Simulate S4* (presence only). Quality → INSP-002 → **Submit Fail** with a defect reason. Garment goes on hold; RW case opens.
-2. **manager.demo** → Rework → assign to Stitching. Shipments → SHP-002 → Edit plan → mark planned (held garment stays blocked).
-3. **stitching.demo** → Rework → Record repair completion (opens a fresh reinspection; cannot release the hold).
-4. **quality.demo** → reinspection → **Submit Pass** → **Release hold**.
-5. **packing.demo** → Fulfilment → Add to package. **warehouse.demo** → Receive into stock → Allocate to SHP-002.
-6. **dispatch.demo** → Workstation: select T-106, arm, *Simulate S6*. Shipments → SHP-002 → **Confirm departure**.
-7. Open `/p/shirt-002-demo` — journey shows *Passed quality control* and *Dispatched to authorized retail network*.
+## Four-Member Antigravity Handoff Boundaries
 
-## Feature folders
-
-```
-src/
-  app/            routing & auth adapters (AppLink, useAppNavigate, session, guard, shell, paths)
-  routes/         thin TanStack route wrappers — one per URL, no logic
-  features/       portable views by feature: auth, dashboard, tasks, workstation, materials,
-                  production, garments, quality, rework, fulfilment, shipments, ledger, audit,
-                  reports, admin, public
-  components/ui/  starter primitives (shadcn/Radix)
-  components/wt/  shared WearTrail UI: Logo, StatusBadge, DataTable, states, PageHeader, dialogs
-  domain/         types, public projection types, labels, permission rules
-  lib/data/       WearTrailClient interface, DataProvider, query/action hooks
-  mock/           fixtures, store (localStorage), workflow engine, public projection, mock client
-```
-
-## Connecting Express
-
-All data goes through `WearTrailClient` (`src/lib/data/client.ts`); each method documents its suggested endpoint.
-To switch: implement the interface with `fetch()` calls to Express (PostgreSQL on Supabase behind it) and pass it to
-`<DataProvider client={...}>` in `src/routes/__root.tsx` (or change the default in `src/lib/data/provider.tsx`).
-Replace `src/app/session.ts` with the real session flow. The server must enforce the rules in
-`src/mock/engine.ts` and `src/domain/permissions.ts` itself and derive the actor from its own session.
-
-## Moving to React Router + Vite
-
-Views import only `src/app/navigation.tsx` (AppLink / useAppNavigate / usePathname) and `src/app/paths.ts`.
-Re-implement those with react-router, then map each file in `src/routes/` to a route element. The guard lives in
-`src/app/StaffWorkspace.tsx`; route access keys are in each route's `staticData.access`.
-
-## Known mock limits
-
-- Access control, sign-in and route guards are **UI simulation only**. No real credentials are collected or stored.
-- Demo state lives in one browser's localStorage; other browsers/devices see their own copy.
-- Staff and public pages render client-side (`ssr: false`) because the mock state is in the browser.
-- Ledger commitments, digests and proof references are samples; there is no blockchain or explorer.
-- The ESP32 sensors are simulated with buttons. Raw issue and warehouse steps are software-only.
-- New garments created from cutting have no published public record.
-
-## Suggested branch boundaries (Antigravity handoff)
-
-1. `feature/staff-foundation` — screens 01–04 and 23–24, shell, staff session, navigation and shared styles.
-2. `feature/materials-production` — screens 05–12, lots, lineage, task queue and workstation.
-3. `feature/quality-fulfilment` — screens 13–19, inspections, rework, packing, stock and dispatch.
-4. `feature/ledger-public` — screens 20–22 and 25–26, ledger, audit, reports and public pages.
+1. **Member 1: Hardware & USB Bridge:**
+   - Owns firmware reader indices on the 9-reader hub, serial protocol formatting (JSON lines over USB), and physical calibration against `src/domain/types.ts` `RfidStationMapping`.
+2. **Member 2: Express API & Server-Sent Events (SSE):**
+   - Implements REST endpoints corresponding to `WearTrailClient`, manages PostgreSQL transactions conforming to `WearTrail_Complete_Schema.sql`, and broadcasts serial reader events to connected clients.
+3. **Member 3: Frontend Feature Views & Workstation Shell (Completed):**
+   - Refactored `WorkstationView` with shared `StationShell` and dedicated feature panels (`ReceivingPanel`, `IssuePanel`, `CuttingPanel`, `RoutinePanel`, `QAPanel`, `LogisticsPanel`).
+   - Integrated RFID card metadata into Materials, Orders, Garments, Quality, and Settings views.
+4. **Member 4: Shopper Journey & Ledger Proofs:**
+   - Maintains shopper-facing projection in `src/mock/projection.ts` and `/p/:publicId` views, ensuring internal defect notes and factory secrets are strictly excluded from public display.

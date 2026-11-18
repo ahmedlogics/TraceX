@@ -13,13 +13,40 @@ const map: Record<Task["subjectType"], { key: RouteKey; href: (id: string) => st
 };
 
 /** Link to a record if the user's role can open it; plain ID otherwise. */
-export function SubjectLink({ user, type, id }: { user: StaffUser; type: Task["subjectType"]; id: string }) {
+export function SubjectLink({
+  user,
+  type,
+  id,
+}: {
+  user: StaffUser;
+  type: Task["subjectType"];
+  id: string;
+}) {
   const m = map[type];
-  return canAccessRoute(user, m.key) ? <IdLink href={m.href(id)} id={id} /> : <span className="wt-id">{id}</span>;
+  return canAccessRoute(user, m.key) ? (
+    <IdLink href={m.href(id)} id={id} />
+  ) : (
+    <span className="wt-id">{id}</span>
+  );
 }
 
-export function LinkIf({ user, routeKey, href, id }: { user: StaffUser; routeKey: RouteKey; href: string; id: string }) {
-  return canAccessRoute(user, routeKey) ? <IdLink href={href} id={id} /> : <span className="wt-id">{id}</span>;
+export function LinkIf({
+  user,
+  routeKey,
+  href,
+  id,
+}: {
+  user: StaffUser;
+  routeKey: RouteKey;
+  href: string;
+  id: string;
+}) {
+  return canAccessRoute(user, routeKey) ? (
+    <IdLink href={href} id={id} />
+  ) : (
+    <span className="wt-id">{id}</span>
+  );
 }
 
-export const subjectHref = (t: Pick<Task, "subjectType" | "subjectId">) => map[t.subjectType].href(t.subjectId);
+export const subjectHref = (t: Pick<Task, "subjectType" | "subjectId">) =>
+  map[t.subjectType].href(t.subjectId);

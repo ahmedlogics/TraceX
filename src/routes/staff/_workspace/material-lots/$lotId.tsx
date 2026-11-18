@@ -4,7 +4,8 @@ import { LotDetailView } from "@/features/materials/LotDetailView";
 
 export const Route = createFileRoute("/staff/_workspace/material-lots/$lotId")({
   staticData: { access: "materialLot" },
-  head: ({ params }) => pageHead(`${params.lotId} · Material lot`, "Receipt, inspection, balance and movements."),
+  head: ({ params }) =>
+    pageHead(`${params.lotId} · Material lot`, "Receipt, inspection, balance and movements."),
   component: LotDetailRoute,
 });
 

@@ -8,7 +8,11 @@ export function ReportsView() {
   const q = useWtQuery(["reports"], (c) => c.getReports());
   return (
     <>
-      <PageHeader title="Reports" description="Operational counts for your scope, from fixture data." crumbs={[{ label: "Staff", href: paths.home }, { label: "Reports" }]} />
+      <PageHeader
+        title="Reports"
+        description="Operational counts for your scope, from fixture data."
+        crumbs={[{ label: "Staff", href: paths.home }, { label: "Reports" }]}
+      />
       <Loadable query={q}>
         {(r) => (
           <div className="space-y-4">
@@ -19,7 +23,12 @@ export function ReportsView() {
                 rowKey={(row) => row.label}
                 columns={[
                   { header: "Measure", cell: (row) => row.label },
-                  ...r.columns.map((col) => ({ header: col, cell: (row: (typeof r.rows)[number]) => <span className="tabular-nums">{row.columns[col]}</span> })),
+                  ...r.columns.map((col) => ({
+                    header: col,
+                    cell: (row: (typeof r.rows)[number]) => (
+                      <span className="tabular-nums">{row.columns[col]}</span>
+                    ),
+                  })),
                 ]}
               />
             </Section>

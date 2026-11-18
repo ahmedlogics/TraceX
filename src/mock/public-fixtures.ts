@@ -29,4 +29,11 @@ export const publicProductRecords: PublicProductRecord[] = [
     productDescription: "White cotton poplin, size L.",
     sampleCommitmentRef: "demo-commitment-0002",
   },
+  {
+    publicId: "trouser-001-demo",
+    garmentId: "TROUSER-001",
+    productName: "Cotton trouser",
+    productDescription: "Cotton trouser, size M.",
+    sampleCommitmentRef: "demo-commitment-0003",
+  },
 ];

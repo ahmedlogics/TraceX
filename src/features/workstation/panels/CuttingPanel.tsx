@@ -1,0 +1,486 @@
+import { useState } from "react";
+import { ArrowRight, CheckCircle2, Radio, RotateCcw, ScanLine } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field, NativeSelect, ScopeNote } from "@/components/wt/forms";
+import { KeyValue, Section } from "@/components/wt/layout";
+import { StatusBadge } from "@/components/wt/StatusBadge";
+import { EmptyState, Loadable } from "@/components/wt/states";
+import type { RfidStationData } from "@/lib/data/client";
+import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { useMe } from "@/features/shared/useMe";
+
+export function CuttingPanel({ stationData }: { stationData: RfidStationData }) {
+  const me = useMe();
+  const { run, pending } = useWtAction();
+  const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
+  const qLots = useWtQuery(["lots"], (c) => c.listLots());
+
+  const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [selectedIssueId, setSelectedIssueId] = useState("");
+  const [consumedQty, setConsumedQty] = useState("2.1");
+  const [wasteQty, setWasteQty] = useState("0.1");
+  const [size, setSize] = useState("M");
+  const [scanUid, setScanUid] = useState("04B1C2D3");
+
+  const isCuttingStaff = me.role === "M" || me.department === "cutting";
+  const source = stationData.cuttingSourceSelection;
+  const activeCtx = stationData.activeContext;
+  const isCtxForThisStation = activeCtx && activeCtx.stationCode === "cutting";
+
+  return (
+    <Loadable query={qOrders}>
+      {(orders) => (
+        <Loadable query={qLots}>
+          {(lots) => {
+            const approvedOrders = orders.filter(
+              (o) =>
+                o.status === "approved" || o.status === "in-progress" || o.status === "planned",
+            );
+            const orderId = selectedOrderId || source?.orderId || approvedOrders[0]?.id || "";
+            const currentOrder = orders.find((o) => o.id === orderId);
+
+            // Fetch order details or issues for selected order
+            return (
+              <div className="space-y-6">
+                {/* Mode 1: Confirmed source banner if active */}
+                {source && source.active ? (
+                  <section className="rounded-lg border-2 border-primary/50 bg-card p-5 space-y-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="size-5 text-success" />
+                          <h3 className="font-semibold text-lg">Active Confirmed Fabric Source</h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Selection ID: <span className="wt-id">{source.id}</span> · Fabric
+                          confirmed by RFID scan
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => {
+                          if (activeCtx) {
+                            void run((c) => c.cancelContext(activeCtx.id));
+                          }
+                          // Preparing a new source cancels previous source
+                          setSelectedOrderId("");
+                        }}
+                      >
+                        <RotateCcw className="size-4" /> Change Fabric Source
+                      </Button>
+                    </div>
+
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <KeyValue
+                        items={[
+                          {
+                            label: "Production Order",
+                            value: `${source.orderId} (${currentOrder?.product ?? "Order"})`,
+                          },
+                          {
+                            label: "Material Issue",
+                            value: <span className="wt-id">{source.issueId}</span>,
+                          },
+                          {
+                            label: "Fabric Lot",
+                            value: <span className="wt-id">{source.lotId}</span>,
+                          },
+                          { label: "Consumption Per Garment", value: `${source.consumedQty} m` },
+                          { label: "Estimated Waste", value: `${source.wasteQty} m` },
+                          {
+                            label: "Status",
+                            value: <StatusBadge status="Source active" tone="success" />,
+                          },
+                        ]}
+                      />
+                    </div>
+
+                    {/* Sub-mode: Assign Next Garment Tag */}
+                    <div className="border-t pt-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium text-sm">Assign Next Garment Tag</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Scan a fresh, unassigned RFID card for each cut panel set. Creates
+                            garment and sets lineage.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Garment Size" htmlFor="cut-size">
+                          <NativeSelect
+                            id="cut-size"
+                            value={size}
+                            onChange={setSize}
+                            options={["S", "M", "L", "XL"].map((s) => ({
+                              value: s,
+                              label: `Size ${s}`,
+                            }))}
+                          />
+                        </Field>
+
+                        <div className="flex items-end">
+                          <Button
+                            className="w-full sm:w-auto"
+                            disabled={
+                              pending ||
+                              !isCuttingStaff ||
+                              (isCtxForThisStation && activeCtx.status !== "expired")
+                            }
+                            onClick={() =>
+                              void run(
+                                (c) =>
+                                  c.prepareActionContext("cutting", "bind_garment_tag", {
+                                    kind: "bind_garment_tag",
+                                    cuttingSourceSelectionId: source.id,
+                                    orderId: source.orderId,
+                                    size,
+                                  }),
+                                "Prepared context for garment tag assignment.",
+                              )
+                            }
+                          >
+                            <Radio className="size-4" /> Prepare Next Garment Card
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+                ) : (
+                  /* Mode 2: Select Fabric Source */
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <Section
+                      title="Step 1: Select Fabric Source"
+                      description="Select an approved order and issued fabric bundle, then scan the lot card to confirm source."
+                    >
+                      {approvedOrders.length === 0 ? (
+                        <EmptyState title="No approved production orders available" />
+                      ) : (
+                        <div className="space-y-4">
+                          <Field label="Production Order" htmlFor="cut-order">
+                            <NativeSelect
+                              id="cut-order"
+                              value={orderId}
+                              onChange={(v) => {
+                                setSelectedOrderId(v);
+                                setSelectedIssueId("");
+                              }}
+                              options={approvedOrders.map((o) => ({
+                                value: o.id,
+                                label: `${o.id} — ${o.product} (${o.plannedQty} planned)`,
+                              }))}
+                            />
+                          </Field>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Fabric Consumed (m)" htmlFor="cut-cons">
+                              <Input
+                                id="cut-cons"
+                                type="number"
+                                min="0.1"
+                                step="0.1"
+                                value={consumedQty}
+                                onChange={(e) => setConsumedQty(e.target.value)}
+                              />
+                            </Field>
+                            <Field label="Fabric Waste (m)" htmlFor="cut-waste">
+                              <Input
+                                id="cut-waste"
+                                type="number"
+                                min="0"
+                                step="0.05"
+                                value={wasteQty}
+                                onChange={(e) => setWasteQty(e.target.value)}
+                              />
+                            </Field>
+                          </div>
+
+                          {!isCuttingStaff && (
+                            <ScopeNote>
+                              Only cutting department staff or managers can prepare cutting sources.
+                            </ScopeNote>
+                          )}
+
+                          {isCuttingStaff && (
+                            <div className="pt-2">
+                              <Button
+                                disabled={
+                                  pending ||
+                                  !currentOrder ||
+                                  Number(consumedQty) <= 0 ||
+                                  (isCtxForThisStation && activeCtx.status !== "expired")
+                                }
+                                onClick={() =>
+                                  void run(
+                                    (c) =>
+                                      c.prepareActionContext("cutting", "select_cutting_source", {
+                                        kind: "select_cutting_source",
+                                        orderId,
+                                        issueId: selectedIssueId || "ISS-001",
+                                        consumedQty: Number(consumedQty),
+                                        wasteQty: Number(wasteQty),
+                                      }),
+                                    "Prepared cutting source confirmation.",
+                                  )
+                                }
+                              >
+                                <Radio className="size-4" /> Prepare: Select Fabric Source
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Section>
+
+                    <Section
+                      title="Reader Action & Scan Lifecycle"
+                      description="Scan the fabric bundle card to confirm source input."
+                    >
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">Lifecycle state:</span>
+                          {isCtxForThisStation ? (
+                            <StatusBadge
+                              status={activeCtx.status}
+                              tone={
+                                activeCtx.status === "ready"
+                                  ? "success"
+                                  : activeCtx.status === "awaiting_ack"
+                                    ? "warning"
+                                    : activeCtx.status === "confirmed"
+                                      ? "success"
+                                      : "neutral"
+                              }
+                            />
+                          ) : (
+                            <StatusBadge status="idle" tone="neutral" />
+                          )}
+                        </div>
+
+                        {isCtxForThisStation && activeCtx.status === "awaiting_ack" && (
+                          <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 space-y-3">
+                            <p className="text-sm font-medium text-warning-foreground">
+                              Context <span className="wt-id">{activeCtx.id}</span> created.
+                              Awaiting reader board acknowledgement.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                size="sm"
+                                disabled={pending}
+                                onClick={() =>
+                                  void run(
+                                    (c) => c.acknowledgeContext(activeCtx.id),
+                                    "Reader board acknowledged context.",
+                                  )
+                                }
+                              >
+                                Simulate Board Acknowledgment
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={pending}
+                                onClick={() =>
+                                  void run(
+                                    (c) => c.cancelContext(activeCtx.id),
+                                    "Context cancelled.",
+                                  )
+                                }
+                              >
+                                Cancel context
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {isCtxForThisStation && activeCtx.status === "ready" && (
+                          <div className="rounded-lg border border-success/40 bg-success-soft p-4 space-y-3">
+                            <p className="text-sm font-medium text-success-foreground">
+                              Ready to scan! Present the fabric bundle card at Station 3 (Cutting).
+                            </p>
+                            <div className="space-y-2">
+                              <Field label="Fabric Bundle Card UID" htmlFor="cut-src-uid">
+                                <Input
+                                  id="cut-src-uid"
+                                  value={scanUid}
+                                  onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                  className="font-mono bg-card"
+                                  placeholder="e.g. 04A1B2C3"
+                                />
+                              </Field>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <Button
+                                  disabled={pending || !scanUid.trim()}
+                                  onClick={() =>
+                                    void run(
+                                      (c) => c.resolveRfidScan(scanUid.trim()),
+                                      (outcome) =>
+                                        outcome.resolution === "accepted"
+                                          ? `Fabric source confirmed! Ready to assign garment tags.`
+                                          : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+                                    )
+                                  }
+                                >
+                                  <ScanLine className="size-4" /> Simulate Scan
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    void run(
+                                      (c) => c.cancelContext(activeCtx.id),
+                                      "Context cancelled.",
+                                    )
+                                  }
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {!isCtxForThisStation && (
+                          <p className="text-sm text-muted-foreground">
+                            No pending source selection. Select an order and click &ldquo;Prepare:
+                            Select Fabric Source&rdquo;.
+                          </p>
+                        )}
+                      </div>
+                    </Section>
+                  </div>
+                )}
+
+                {/* Reader Scan Lifecycle for Garment Tag Binding */}
+                {source && source.active && (
+                  <Section
+                    title="Station 3 Reader & Tag Assignment"
+                    description="Hardware lifecycle: prepare tag assignment → board ack → scan fresh card → garment created."
+                  >
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Lifecycle state:</span>
+                        {isCtxForThisStation ? (
+                          <StatusBadge
+                            status={activeCtx.status}
+                            tone={
+                              activeCtx.status === "ready"
+                                ? "success"
+                                : activeCtx.status === "awaiting_ack"
+                                  ? "warning"
+                                  : activeCtx.status === "confirmed"
+                                    ? "success"
+                                    : "neutral"
+                            }
+                          />
+                        ) : (
+                          <StatusBadge status="idle" tone="neutral" />
+                        )}
+                      </div>
+
+                      {isCtxForThisStation && activeCtx.status === "awaiting_ack" && (
+                        <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 space-y-3">
+                          <p className="text-sm font-medium text-warning-foreground">
+                            Context <span className="wt-id">{activeCtx.id}</span> created. Awaiting
+                            reader board acknowledgement.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                void run(
+                                  (c) => c.acknowledgeContext(activeCtx.id),
+                                  "Reader board acknowledged context.",
+                                )
+                              }
+                            >
+                              Simulate Board Acknowledgment
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                void run((c) => c.cancelContext(activeCtx.id), "Context cancelled.")
+                              }
+                            >
+                              Cancel context
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {isCtxForThisStation && activeCtx.status === "ready" && (
+                        <div className="rounded-lg border border-success/40 bg-success-soft p-4 space-y-3">
+                          <p className="text-sm font-medium text-success-foreground">
+                            Ready to scan! Present a FRESH, UNBOUND RFID card for the cut panel set.
+                          </p>
+                          <div className="space-y-2">
+                            <Field
+                              label="Fresh Garment Card UID"
+                              htmlFor="cut-tag-uid"
+                              hint="Must be an unassigned card UID."
+                            >
+                              <Input
+                                id="cut-tag-uid"
+                                value={scanUid}
+                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                className="font-mono bg-card"
+                                placeholder="e.g. 04FF1122"
+                              />
+                            </Field>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              <Button
+                                disabled={pending || !scanUid.trim()}
+                                onClick={() =>
+                                  void run(
+                                    (c) => c.resolveRfidScan(scanUid.trim()),
+                                    (outcome) =>
+                                      outcome.resolution === "accepted"
+                                        ? `Garment ${outcome.garmentCode ?? outcome.subjectId} created! Product: ${outcome.productName}`
+                                        : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+                                  )
+                                }
+                              >
+                                <ScanLine className="size-4" /> Simulate RFID Scan
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={pending}
+                                onClick={() =>
+                                  void run(
+                                    (c) => c.cancelContext(activeCtx.id),
+                                    "Context cancelled.",
+                                  )
+                                }
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {!isCtxForThisStation && (
+                        <p className="text-sm text-muted-foreground">
+                          Ready to assign tags. Click &ldquo;Prepare Next Garment Card&rdquo; above.
+                        </p>
+                      )}
+                    </div>
+                  </Section>
+                )}
+              </div>
+            );
+          }}
+        </Loadable>
+      )}
+    </Loadable>
+  );
+}

@@ -5,11 +5,7 @@
  */
 
 export type PublicMilestoneKey =
-  | "fabric-sourced"
-  | "garment-cut"
-  | "garment-assembled"
-  | "quality-passed"
-  | "dispatched";
+  "fabric-sourced" | "garment-cut" | "garment-assembled" | "quality-passed" | "dispatched";
 
 export interface PublicMilestone {
   key: PublicMilestoneKey;

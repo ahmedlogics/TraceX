@@ -32,7 +32,11 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
             <PageHeader
               title={<span className="wt-id text-2xl">{g.id}</span>}
               description={g.productName}
-              crumbs={[{ label: "Staff", href: paths.home }, { label: "Garments", href: paths.garments }, { label: g.id }]}
+              crumbs={[
+                { label: "Staff", href: paths.home },
+                { label: "Garments", href: paths.garments },
+                { label: g.id },
+              ]}
               meta={
                 <>
                   <StatusBadge status={g.stage} label="Stage" />
@@ -44,13 +48,23 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
               actions={
                 <>
                   {can.releaseHold(me, g, latest) && (
-                    <Button size="sm" disabled={pending} onClick={() => void run((c) => c.releaseHold(g.id), `Hold released on ${g.id}.`)}>
+                    <Button
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        void run((c) => c.releaseHold(g.id), `Hold released on ${g.id}.`)
+                      }
+                    >
                       Release hold
                     </Button>
                   )}
                   {published && (
                     <Button asChild variant="outline" size="sm">
-                      <AppLink href={paths.publicJourney(g.publicId)} target="_blank" rel="noreferrer">
+                      <AppLink
+                        href={paths.publicJourney(g.publicId)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         Public page <ExternalLink />
                       </AppLink>
                     </Button>
@@ -60,24 +74,91 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
             />
             <div className="grid gap-4 lg:grid-cols-3">
               {g.hold && (
-                <section className="rounded-lg border border-destructive/40 bg-danger-soft p-4 lg:col-span-3" aria-label="Quality hold">
+                <section
+                  className="rounded-lg border border-destructive/40 bg-danger-soft p-4 lg:col-span-3"
+                  aria-label="Quality hold"
+                >
                   <p className="flex items-center gap-2 font-medium text-destructive">
-                    <OctagonAlert className="size-4" aria-hidden /> On quality hold since {fmt.dateTime(g.hold.since)}
+                    <OctagonAlert className="size-4" aria-hidden /> On quality hold since{" "}
+                    {fmt.dateTime(g.hold.since)}
                   </p>
                   <p className="mt-1 text-sm">Reason: {g.hold.reason}</p>
                   <p className="mt-1 flex flex-wrap gap-3 text-sm">
-                    <span>Inspection: <LinkIf user={me} routeKey="inspection" href={paths.inspection(g.hold.inspectionId)} id={g.hold.inspectionId} /></span>
-                    {g.hold.reworkCaseId && <span>Rework: <LinkIf user={me} routeKey="reworkCase" href={paths.reworkCase(g.hold.reworkCaseId)} id={g.hold.reworkCaseId} /></span>}
+                    <span>
+                      Inspection:{" "}
+                      <LinkIf
+                        user={me}
+                        routeKey="inspection"
+                        href={paths.inspection(g.hold.inspectionId)}
+                        id={g.hold.inspectionId}
+                      />
+                    </span>
+                    {g.hold.reworkCaseId && (
+                      <span>
+                        Rework:{" "}
+                        <LinkIf
+                          user={me}
+                          routeKey="reworkCase"
+                          href={paths.reworkCase(g.hold.reworkCaseId)}
+                          id={g.hold.reworkCaseId}
+                        />
+                      </span>
+                    )}
                   </p>
-                  <p className="mt-2 text-xs text-muted-foreground">Packing and departure stay blocked until the inspector releases the hold after a passing reinspection.</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Packing and departure stay blocked until the inspector releases the hold after a
+                    passing reinspection.
+                  </p>
                 </section>
               )}
-              <Section title="Source">
+              <Section title="Identity & Lineage">
                 <KeyValue
                   items={[
-                    { label: "Order", value: d.order ? <LinkIf user={me} routeKey="productionOrder" href={paths.order(d.order.id)} id={d.order.id} /> : "—" },
-                    { label: "Fabric lot", value: d.lot ? <LinkIf user={me} routeKey="materialLot" href={paths.lot(d.lot.id)} id={d.lot.id} /> : "—" },
-                    { label: "Cutting output", value: d.cuttingOutput ? <span className="wt-id">{d.cuttingOutput.id} · {d.cuttingOutput.panelSetLabel}</span> : "—" },
+                    {
+                      label: "Active RFID card",
+                      value: g.rfidUid ? (
+                        <span className="wt-id font-bold text-success">{g.rfidUid}</span>
+                      ) : (
+                        <span className="text-muted-foreground italic">None assigned</span>
+                      ),
+                    },
+                    {
+                      label: "Order",
+                      value: d.order ? (
+                        <LinkIf
+                          user={me}
+                          routeKey="productionOrder"
+                          href={paths.order(d.order.id)}
+                          id={d.order.id}
+                        />
+                      ) : (
+                        "—"
+                      ),
+                    },
+                    {
+                      label: "Fabric lot",
+                      value: d.lot ? (
+                        <LinkIf
+                          user={me}
+                          routeKey="materialLot"
+                          href={paths.lot(d.lot.id)}
+                          id={d.lot.id}
+                        />
+                      ) : (
+                        "—"
+                      ),
+                    },
+                    {
+                      label: "Cutting output",
+                      value: d.cuttingOutput ? (
+                        <span className="wt-id">
+                          {d.cuttingOutput.id} · {d.cuttingOutput.panelSetLabel}
+                        </span>
+                      ) : (
+                        "—"
+                      ),
+                    },
+                    { label: "Size", value: g.size ?? "—" },
                     { label: "Public ID", value: <span className="wt-id">{g.publicId}</span> },
                   ]}
                 />
@@ -87,9 +168,17 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                   items={d.events.map((e) => ({
                     key: e.id,
                     title: e.label,
-                    meta: <>{fmt.dateTime(e.at)} · <UserName id={e.actorId} /></>,
+                    meta: (
+                      <>
+                        {fmt.dateTime(e.at)} · <UserName id={e.actorId} />
+                      </>
+                    ),
                     body: e.detail,
-                    tone: /fail|hold —/i.test(e.label) ? "danger" : /passed|released|dispatched/i.test(e.label) ? "success" : "default",
+                    tone: /fail|hold —/i.test(e.label)
+                      ? "danger"
+                      : /passed|released|dispatched/i.test(e.label)
+                        ? "success"
+                        : "default",
                   }))}
                 />
               </Section>
@@ -100,7 +189,17 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                     rowKey={(i) => i.id}
                     empty="No inspections yet."
                     columns={[
-                      { header: "Inspection", cell: (i) => <LinkIf user={me} routeKey="inspection" href={paths.inspection(i.id)} id={i.id} /> },
+                      {
+                        header: "Inspection",
+                        cell: (i) => (
+                          <LinkIf
+                            user={me}
+                            routeKey="inspection"
+                            href={paths.inspection(i.id)}
+                            id={i.id}
+                          />
+                        ),
+                      },
                       { header: "Kind", cell: (i) => i.kind },
                       { header: "Result", cell: (i) => <StatusBadge status={i.status} /> },
                       { header: "Submitted", cell: (i) => fmt.dateTime(i.submittedAt) },
@@ -116,7 +215,12 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                   <ul className="space-y-2 text-sm">
                     {d.rework.map((r) => (
                       <li key={r.id} className="flex items-center justify-between gap-2">
-                        <LinkIf user={me} routeKey="reworkCase" href={paths.reworkCase(r.id)} id={r.id} />
+                        <LinkIf
+                          user={me}
+                          routeKey="reworkCase"
+                          href={paths.reworkCase(r.id)}
+                          id={r.id}
+                        />
                         <StatusBadge status={r.status} />
                       </li>
                     ))}
@@ -127,10 +231,37 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                 <Section title="Logistics" className="lg:col-span-2">
                   <KeyValue
                     items={[
-                      { label: "Package", value: d.pkg ? <span className="wt-id">{d.pkg.id} ({d.pkg.status})</span> : "Not packed" },
-                      { label: "Shipment", value: d.shipment ? <LinkIf user={me} routeKey="shipment" href={paths.shipment(d.shipment.id)} id={d.shipment.id} /> : "Not on a shipment" },
-                      { label: "Shipment status", value: d.shipment ? <StatusBadge status={d.shipment.status} /> : "—" },
-                      { label: "Allocated", value: d.shipment?.allocatedGarmentIds.includes(g.id) ? "Yes" : "No" },
+                      {
+                        label: "Package",
+                        value: d.pkg ? (
+                          <span className="wt-id">
+                            {d.pkg.id} ({d.pkg.status})
+                          </span>
+                        ) : (
+                          "Not packed"
+                        ),
+                      },
+                      {
+                        label: "Shipment",
+                        value: d.shipment ? (
+                          <LinkIf
+                            user={me}
+                            routeKey="shipment"
+                            href={paths.shipment(d.shipment.id)}
+                            id={d.shipment.id}
+                          />
+                        ) : (
+                          "Not on a shipment"
+                        ),
+                      },
+                      {
+                        label: "Shipment status",
+                        value: d.shipment ? <StatusBadge status={d.shipment.status} /> : "—",
+                      },
+                      {
+                        label: "Allocated",
+                        value: d.shipment?.allocatedGarmentIds.includes(g.id) ? "Yes" : "No",
+                      },
                     ]}
                   />
                 </Section>
@@ -138,12 +269,16 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
               {sec.proof ? (
                 <Section title="Proof state">
                   {d.ledger.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No commitments queued for this garment.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No commitments queued for this garment.
+                    </p>
                   ) : (
                     <ul className="space-y-2 text-sm">
                       {d.ledger.map((l) => (
                         <li key={l.id} className="flex items-center justify-between gap-2">
-                          <span><span className="wt-id">{l.id}</span> · {l.milestone}</span>
+                          <span>
+                            <span className="wt-id">{l.id}</span> · {l.milestone}
+                          </span>
                           <StatusBadge status={l.status} />
                         </li>
                       ))}
@@ -153,7 +288,9 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
               ) : null}
               {!sec.logistics && !sec.proof && (
                 <div className="lg:col-span-3">
-                  <ScopeNote>Logistics and proof details are limited to managers and logistics staff.</ScopeNote>
+                  <ScopeNote>
+                    Logistics and proof details are limited to managers and logistics staff.
+                  </ScopeNote>
                 </div>
               )}
             </div>

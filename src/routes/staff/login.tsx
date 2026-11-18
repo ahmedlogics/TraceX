@@ -5,7 +5,8 @@ import { LoginView } from "@/features/auth/LoginView";
 export const Route = createFileRoute("/staff/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
     typeof search["redirect"] === "string" ? { redirect: search["redirect"] } : {},
-  head: () => pageHead("Staff sign-in", "Sign in to the WearTrail staff workspace or pick a demo account."),
+  head: () =>
+    pageHead("Staff sign-in", "Sign in to the WearTrail staff workspace or pick a demo account."),
   component: LoginRoute,
 });
 

@@ -5,12 +5,26 @@
  * Later: implement this interface with fetch() calls to the Express API
  * (which talks to PostgreSQL on Supabase). Each method notes the suggested endpoint.
  * The server must derive the actor from its own session/token, never from the client.
+ *
+ * RFID integration seam:
+ *   - prepareActionContext / acknowledgeContext / cancelContext / resolveRfidScan
+ *     correspond to POST /rfid/contexts, PUT /rfid/contexts/:id/ack,
+ *     DELETE /rfid/contexts/:id, POST /rfid/scan.
+ *   - routineScan corresponds to POST /rfid/routine-scan.
+ *   - The Express bridge receives JSON lines from the USB serial port, authenticates
+ *     the device credential, and broadcasts scan results as Server-Sent Events.
+ *     React subscribes through RfidTransport (src/mock/rfid-transport.ts in mock mode).
+ *   - getStationState returns current scan feedback for persistent panel display.
  */
 import type { PublicJourney, PublicProof } from "@/domain/public-types";
 import type {
+  ActionContext,
+  ActionContextKind,
+  ActionContextPayload,
   AuditEvent,
   ChecklistItem,
   CuttingOutput,
+  CuttingSourceSelection,
   Department,
   Garment,
   GarmentEvent,
@@ -20,8 +34,12 @@ import type {
   MaterialLot,
   Package,
   ProductionOrder,
+  RfidStationCode,
+  RfidStationState,
+  RfidTagBinding,
   ReworkCase,
   Role,
+  ScanOutcome,
   SensorId,
   Settings,
   Shipment,
@@ -49,6 +67,7 @@ export interface LotDetail {
   issues: MaterialIssue[];
   cuttingOutputs: CuttingOutput[];
   orders: ProductionOrder[];
+  rfidBinding?: RfidTagBinding | undefined;
 }
 
 export interface OrderDetail {
@@ -69,6 +88,7 @@ export interface GarmentDetail {
   pkg?: Package | undefined;
   shipment?: Shipment | undefined;
   ledger: LedgerCommitment[];
+  rfidBinding?: RfidTagBinding | undefined;
 }
 
 export interface InspectionDetail {
@@ -115,6 +135,22 @@ export interface ReportsData {
   columns: string[];
 }
 
+/** Current state of a staff member's RFID station session. */
+export interface RfidStationData {
+  stationCode: RfidStationCode;
+  stationName: string;
+  operatorId: string;
+  bridgeConnected: boolean;
+  /** Active context, if any. */
+  activeContext?: ActionContext | undefined;
+  /** Last scan result for persistent panel feedback. */
+  lastScanOutcome?: ScanOutcome | undefined;
+  /** Cutting: confirmed source selection still active. */
+  cuttingSourceSelection?: CuttingSourceSelection | undefined;
+  /** Last confirmed subject (garment/lot id shown in panel). */
+  lastConfirmedSubjectId?: string | undefined;
+}
+
 export interface WearTrailClient {
   // Session & directory — GET /staff (directory), GET /me
   listDemoAccounts(): Promise<StaffUser[]>;
@@ -133,7 +169,7 @@ export interface WearTrailClient {
   claimTask(taskId: string): Promise<void>;
   assignTask(taskId: string, userId: string): Promise<void>;
 
-  // Workstation — GET /workstation, POST /workstation/{select,arm,trigger,clear,handover}
+  // Workstation (legacy IR path) — GET /workstation, POST /workstation/{select,arm,trigger,clear,handover}
   getWorkstation(): Promise<WorkstationData>;
   selectWorkstationTask(taskId: string): Promise<void>;
   armCheckpoint(): Promise<void>;
@@ -141,17 +177,51 @@ export interface WearTrailClient {
   clearCheckpoint(): Promise<void>;
   handOverTask(): Promise<void>;
 
+  // RFID Station — GET /rfid/station, POST /rfid/contexts, PUT /rfid/contexts/:id/ack,
+  //                DELETE /rfid/contexts/:id, POST /rfid/scan, POST /rfid/routine-scan
+  getRfidStationData(stationCode: RfidStationCode): Promise<RfidStationData>;
+  prepareActionContext(
+    stationCode: RfidStationCode,
+    kind: ActionContextKind,
+    payload: ActionContextPayload,
+  ): Promise<string>;
+  acknowledgeContext(contextId: string): Promise<void>;
+  cancelContext(contextId: string): Promise<void>;
+  /** Resolve a tag UID scan: returns the outcome (accepted or rejected with reason). */
+  resolveRfidScan(uid: string): Promise<ScanOutcome>;
+  /** Routine scan at Stitching or Finishing: identifies garment and advances stage. */
+  routineScan(uid: string, stationCode: "stitching" | "finishing"): Promise<ScanOutcome>;
+  /** Staff-only: simulate a scan event (mock only). */
+  simulateRfidScan(uid: string): Promise<ScanOutcome>;
+
   // Materials — GET /material-lots, GET /material-lots/:id, POST /material-lots, POST /material-lots/:id/issues
   listLots(): Promise<MaterialLot[]>;
   getLot(id: string): Promise<LotDetail | null>;
-  receiveLot(input: { material: string; supplierRef: string; qty: number }): Promise<string>;
+  receiveLot(input: {
+    material: string;
+    supplierRef: string;
+    qty: number;
+    unit?: "m" | "kg" | "pcs";
+  }): Promise<string>;
   issueMaterial(input: { lotId: string; orderId: string; qty: number }): Promise<string>;
 
-  // Production — GET /production-orders(/:id), POST /production-orders, POST /production-orders/:id/cutting-outputs
+  // Production — GET /production-orders(/:id), POST /production-orders, POST /production-orders/:id/approve,
+  //              POST /production-orders/:id/cutting-outputs
   listOrders(): Promise<ProductionOrder[]>;
   getOrder(id: string): Promise<OrderDetail | null>;
-  planOrder(input: { product: string; styleCode: string; qty: number; dueDate: string }): Promise<string>;
-  recordCuttingOutput(input: { orderId: string; issueId: string; fabricUsed: number; size: string }): Promise<string>;
+  planOrder(input: {
+    product: string;
+    styleCode: string;
+    qty: number;
+    dueDate: string;
+  }): Promise<string>;
+  approveOrder(orderId: string): Promise<void>;
+  recordCuttingOutput(input: {
+    orderId: string;
+    issueId: string;
+    fabricUsed: number;
+    size: string;
+  }): Promise<string>;
 
   // Garments — GET /garments(/:id)
   listGarments(): Promise<Garment[]>;
@@ -160,7 +230,13 @@ export interface WearTrailClient {
   // Quality — GET /inspections(/:id), POST /inspections/:id/result, POST /garments/:id/release-hold
   listInspections(): Promise<Inspection[]>;
   getInspection(id: string): Promise<InspectionDetail | null>;
-  submitInspection(input: { inspectionId: string; checklist: ChecklistItem[]; notes: string; result: "pass" | "fail"; defectReason?: string | undefined }): Promise<void>;
+  submitInspection(input: {
+    inspectionId: string;
+    checklist: ChecklistItem[];
+    notes: string;
+    result: "pass" | "fail";
+    defectReason?: string | undefined;
+  }): Promise<void>;
   releaseHold(garmentId: string): Promise<void>;
 
   // Rework — GET /rework(/:id), POST /rework/:id/assign, POST /rework/:id/complete
@@ -176,8 +252,16 @@ export interface WearTrailClient {
   allocateStock(garmentId: string, shipmentId: string): Promise<void>;
   listShipments(): Promise<Shipment[]>;
   getShipment(id: string): Promise<ShipmentDetail | null>;
-  planShipment(input: { destination: string; carrier: string; plannedDate: string }): Promise<string>;
-  updateShipmentPlan(input: { shipmentId: string; garmentIds: string[]; markPlanned: boolean }): Promise<void>;
+  planShipment(input: {
+    destination: string;
+    carrier: string;
+    plannedDate: string;
+  }): Promise<string>;
+  updateShipmentPlan(input: {
+    shipmentId: string;
+    garmentIds: string[];
+    markPlanned: boolean;
+  }): Promise<void>;
   confirmDeparture(shipmentId: string): Promise<void>;
 
   // Ledger, audit, reports
@@ -188,7 +272,12 @@ export interface WearTrailClient {
 
   // Admin & settings
   listStaff(): Promise<StaffUser[]>;
-  inviteUser(input: { username: string; displayName: string; role: Role; department: Department }): Promise<string>;
+  inviteUser(input: {
+    username: string;
+    displayName: string;
+    role: Role;
+    department: Department;
+  }): Promise<string>;
   updateUserScope(input: { userId: string; role: Role; department: Department }): Promise<void>;
   setUserSuspended(userId: string, suspended: boolean): Promise<void>;
   issueReset(userId: string): Promise<string>;

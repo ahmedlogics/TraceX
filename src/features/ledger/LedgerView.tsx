@@ -24,7 +24,11 @@ export function LedgerView() {
         description="Mock record commitments. Independent of production and QC; no real chain is used."
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Ledger" }]}
       />
-      {!can.retryLedger(me) && <div className="mb-4"><ScopeNote>Read-only. Only the administrator can retry failed commitments.</ScopeNote></div>}
+      {!can.retryLedger(me) && (
+        <div className="mb-4">
+          <ScopeNote>Read-only. Only the administrator can retry failed commitments.</ScopeNote>
+        </div>
+      )}
       <Loadable query={q}>
         {(rows) => (
           <Tabs defaultValue="failed">
@@ -43,17 +47,43 @@ export function LedgerView() {
                   empty={`No ${s} commitments.`}
                   columns={[
                     { header: "Commitment", cell: (r) => <span className="wt-id">{r.id}</span> },
-                    { header: "Subject", cell: (r) => <span className="wt-id">{r.subjectType}: {r.subjectId}</span> },
+                    {
+                      header: "Subject",
+                      cell: (r) => (
+                        <span className="wt-id">
+                          {r.subjectType}: {r.subjectId}
+                        </span>
+                      ),
+                    },
                     { header: "Milestone", cell: (r) => r.milestone },
-                    { header: "Status", cell: (r) => <div><StatusBadge status={r.status} />{r.lastError && <p className="mt-1 text-xs text-destructive">{r.lastError}</p>}</div> },
+                    {
+                      header: "Status",
+                      cell: (r) => (
+                        <div>
+                          <StatusBadge status={r.status} />
+                          {r.lastError && (
+                            <p className="mt-1 text-xs text-destructive">{r.lastError}</p>
+                          )}
+                        </div>
+                      ),
+                    },
                     { header: "Attempts", cell: (r) => r.attempts },
-                    { header: "Digest (sample)", cell: (r) => <span className="wt-id text-muted-foreground">{r.digest}</span> },
+                    {
+                      header: "Digest (sample)",
+                      cell: (r) => <span className="wt-id text-muted-foreground">{r.digest}</span>,
+                    },
                     { header: "Updated", cell: (r) => fmt.dateTime(r.updatedAt) },
                     {
                       header: "Action",
                       cell: (r) =>
                         can.retryLedger(me) && r.status === "failed" ? (
-                          <Button size="sm" disabled={pending} onClick={() => void run((c) => c.retryLedger(r.id), `${r.id} resubmitted (mock).`)}>
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() =>
+                              void run((c) => c.retryLedger(r.id), `${r.id} resubmitted (mock).`)
+                            }
+                          >
                             Retry (mock)
                           </Button>
                         ) : null,

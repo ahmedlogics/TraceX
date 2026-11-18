@@ -12,7 +12,11 @@ import { SubjectLink } from "@/features/shared/subject";
 import { useMe } from "@/features/shared/useMe";
 
 const toneIcon = { danger: OctagonAlert, warning: AlertTriangle, info: Info } as const;
-const toneClass = { danger: "bg-danger-soft text-destructive", warning: "bg-warning-soft text-warning", info: "bg-info-soft text-accent-foreground" } as const;
+const toneClass = {
+  danger: "bg-danger-soft text-destructive",
+  warning: "bg-warning-soft text-warning",
+  info: "bg-info-soft text-accent-foreground",
+} as const;
 
 export function DashboardView() {
   const me = useMe();
@@ -50,11 +54,15 @@ export function DashboardView() {
                 ) : (
                   <ul className="divide-y">
                     {d.assigned.map((t) => (
-                      <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                      <li
+                        key={t.id}
+                        className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+                      >
                         <div className="min-w-0">
                           <p className="text-sm font-medium">{t.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            <span className="wt-id">{t.id}</span> · <SubjectLink user={me} type={t.subjectType} id={t.subjectId} />
+                            <span className="wt-id">{t.id}</span> ·{" "}
+                            <SubjectLink user={me} type={t.subjectType} id={t.subjectId} />
                             {t.checkpoint && <> · checkpoint {t.checkpoint}</>}
                           </p>
                         </div>
@@ -72,7 +80,10 @@ export function DashboardView() {
                     {d.alerts.map((a, i) => {
                       const Icon = toneIcon[a.tone];
                       return (
-                        <li key={i} className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm ${toneClass[a.tone]}`}>
+                        <li
+                          key={i}
+                          className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm ${toneClass[a.tone]}`}
+                        >
                           <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
                           {a.href ? (
                             <AppLink href={a.href} className="underline-offset-2 hover:underline">

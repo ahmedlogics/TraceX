@@ -16,7 +16,9 @@ export function errorMessage(e: unknown) {
 }
 
 export function errorCode(e: unknown): string | undefined {
-  return e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : undefined;
+  return e && typeof e === "object" && "code" in e
+    ? String((e as { code: unknown }).code)
+    : undefined;
 }
 
 /** Run a mutation, refresh every WearTrail query, and toast the outcome. Resolves undefined on failure. */
@@ -27,7 +29,10 @@ export function useWtAction() {
     mutationFn: (fn: (c: WearTrailClient) => Promise<unknown>) => fn(client),
     onSettled: () => qc.invalidateQueries({ queryKey: ["wt"] }),
   });
-  async function run<T>(fn: (c: WearTrailClient) => Promise<T>, success?: string | ((r: T) => string)): Promise<T | undefined> {
+  async function run<T>(
+    fn: (c: WearTrailClient) => Promise<T>,
+    success?: string | ((r: T) => string),
+  ): Promise<T | undefined> {
     try {
       const r = (await m.mutateAsync(fn)) as T;
       if (success) toast.success(typeof success === "function" ? success(r) : success);

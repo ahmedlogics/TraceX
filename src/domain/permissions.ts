@@ -2,7 +2,16 @@
  * Mock access rules (UI simulation only — the Express API must enforce its own).
  * Route access is by role; actions are checked by role AND department.
  */
-import type { Department, Garment, Inspection, ReworkCase, Role, StaffUser, Task } from "./types";
+import type {
+  Department,
+  Garment,
+  Inspection,
+  RfidStationCode,
+  ReworkCase,
+  Role,
+  StaffUser,
+  Task,
+} from "./types";
 
 export type RouteKey =
   | "account"
@@ -67,11 +76,45 @@ export const can = {
   receiveLot: (u: StaffUser) => is(u, "O", "receiving"),
   issueMaterial: (u: StaffUser) => is(u, "O", "raw-store"),
   planOrder: (u: StaffUser) => is(u, "M"),
-  claimTask: (u: StaffUser, t: Task) => u.role !== "M" && u.department === t.department && t.status === "open",
+  approveOrder: (u: StaffUser) => is(u, "M"),
+  claimTask: (u: StaffUser, t: Task) =>
+    u.role !== "M" && u.department === t.department && t.status === "open",
   assignTask: (u: StaffUser) => is(u, "M"),
-  useWorkstationTask: (u: StaffUser, t: Task) => u.department === t.department && t.status !== "done",
+  useWorkstationTask: (u: StaffUser, t: Task) =>
+    u.department === t.department && t.status !== "done",
+
+  // RFID station access: operator must be in the station's department (or manager reads)
+  operateStation: (u: StaffUser, stationCode: RfidStationCode): boolean => {
+    const stationDepts: Record<RfidStationCode, Department[]> = {
+      fabric_receiving: ["receiving"],
+      fabric_issue: ["raw-store"],
+      cutting: ["cutting"],
+      stitching: ["stitching"],
+      finishing: ["finishing"],
+      final_qc: ["quality"],
+      packing: ["packing"],
+      warehouse: ["warehouse"],
+      dispatch: ["dispatch"],
+    };
+    if (u.role === "M") return true; // manager can read any station
+    const allowed = stationDepts[stationCode];
+    return u.status === "active" && allowed.includes(u.department);
+  },
+
+  // RFID scan actions
+  assignBundleCard: (u: StaffUser) => is(u, "O", "receiving"),
+  confirmIssue: (u: StaffUser) => is(u, "O", "raw-store"),
+  operateCutting: (u: StaffUser) =>
+    u.status === "active" && u.role === "P" && u.department === "cutting",
+  operateStitching: (u: StaffUser) =>
+    u.status === "active" && u.role === "P" && u.department === "stitching",
+  operateFinishing: (u: StaffUser) =>
+    u.status === "active" && u.role === "P" && u.department === "finishing",
+
   /** Inspector only. Managers have read-only inspection access. */
   submitInspection: (u: StaffUser, i: Inspection) => is(u, "Q") && i.status === "open",
+  /** Inspector: prepare QC context (choose Pass/Fail before scanning). */
+  prepareQcContext: (u: StaffUser) => is(u, "Q"),
   /** Inspector only, and only after a passing reinspection. Repair operators can never release. */
   releaseHold: (u: StaffUser, g: Garment, latest?: Inspection) =>
     is(u, "Q") && !!g.hold && latest?.kind === "reinspection" && latest.status === "passed",
@@ -98,5 +141,6 @@ export function garmentSections(u: StaffUser) {
     logistics: ["M", "L"].includes(u.role),
     proof: u.role === "M",
     holds: true,
+    rfidCard: ["M", "A"].includes(u.role),
   };
 }

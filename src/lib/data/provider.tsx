@@ -6,7 +6,13 @@ import type { WearTrailClient } from "./client";
 const ClientContext = createContext<WearTrailClient | null>(null);
 
 /** Swap createMockClient for an Express-backed client here. */
-export function DataProvider({ children, client }: { children: ReactNode; client?: WearTrailClient }) {
+export function DataProvider({
+  children,
+  client,
+}: {
+  children: ReactNode;
+  client?: WearTrailClient;
+}) {
   const [value] = useState(() => client ?? createMockClient(getSessionUserId));
   return <ClientContext.Provider value={value}>{children}</ClientContext.Provider>;
 }

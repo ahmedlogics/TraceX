@@ -6,7 +6,8 @@ import "@/app/route-static";
 // Mock guard: anonymous visits to protected staff URLs go to staff sign-in.
 export const Route = createFileRoute("/staff/_workspace")({
   beforeLoad: ({ location }) => {
-    if (!getSessionUserId()) throw redirect({ to: "/staff/login", search: { redirect: location.pathname } });
+    if (!getSessionUserId())
+      throw redirect({ to: "/staff/login", search: { redirect: location.pathname } });
   },
   component: WorkspaceLayout,
 });

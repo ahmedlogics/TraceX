@@ -14,7 +14,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /** Labelled field wrapper. */
-export function Field({ label, children, hint, htmlFor }: { label: string; children: ReactNode; hint?: string | undefined; htmlFor?: string | undefined }) {
+export function Field({
+  label,
+  children,
+  hint,
+  htmlFor,
+}: {
+  label: string;
+  children: ReactNode;
+  hint?: string | undefined;
+  htmlFor?: string | undefined;
+}) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
@@ -25,7 +35,19 @@ export function Field({ label, children, hint, htmlFor }: { label: string; child
 }
 
 /** Native select styled to match inputs (accessible and mobile-friendly). */
-export function NativeSelect({ id, value, onChange, options, ariaLabel }: { id?: string | undefined; value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; ariaLabel?: string | undefined }) {
+export function NativeSelect({
+  id,
+  value,
+  onChange,
+  options,
+  ariaLabel,
+}: {
+  id?: string | undefined;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel?: string | undefined;
+}) {
   return (
     <select
       id={id}
@@ -106,24 +128,51 @@ export function FormDialog({
   );
 }
 
-export function SearchInput({ value, onChange, placeholder = "Search…", label = "Search" }: { value: string; onChange: (v: string) => void; placeholder?: string | undefined; label?: string | undefined }) {
+export function SearchInput({
+  value,
+  onChange,
+  placeholder = "Search…",
+  label = "Search",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string | undefined;
+  label?: string | undefined;
+}) {
   const id = useId();
   return (
     <div className="relative w-full sm:max-w-xs">
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" aria-hidden />
-      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="bg-card pl-8" />
+      <Search
+        className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground"
+        aria-hidden
+      />
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="bg-card pl-8"
+      />
     </div>
   );
 }
 
 export function FilterBar({ children }: { children: ReactNode }) {
-  return <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">{children}</div>;
+  return (
+    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      {children}
+    </div>
+  );
 }
 
 /** Inline note explaining why an action is unavailable to this role. */
 export function ScopeNote({ children }: { children: ReactNode }) {
-  return <p className="rounded-md border border-dashed bg-muted px-3 py-2 text-xs text-muted-foreground">{children}</p>;
+  return (
+    <p className="rounded-md border border-dashed bg-muted px-3 py-2 text-xs text-muted-foreground">
+      {children}
+    </p>
+  );
 }

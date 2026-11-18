@@ -15,7 +15,11 @@ export function ReworkListView() {
     <>
       <PageHeader
         title="Rework"
-        description={me.role === "P" ? `Cases assigned to ${departmentLabels[me.department]}.` : "All rework cases."}
+        description={
+          me.role === "P"
+            ? `Cases assigned to ${departmentLabels[me.department]}.`
+            : "All rework cases."
+        }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Rework" }]}
       />
       <Loadable query={q}>
@@ -23,12 +27,29 @@ export function ReworkListView() {
           <DataTable
             rows={cases}
             rowKey={(r) => r.id}
-            empty={me.role === "P" ? "No rework assigned to your department." : "No rework cases. A failed final inspection opens one."}
+            empty={
+              me.role === "P"
+                ? "No rework assigned to your department."
+                : "No rework cases. A failed final inspection opens one."
+            }
             columns={[
               { header: "Case", cell: (r) => <IdLink href={paths.reworkCase(r.id)} id={r.id} /> },
-              { header: "Garment", cell: (r) => <LinkIf user={me} routeKey="garment" href={paths.garment(r.garmentId)} id={r.garmentId} /> },
+              {
+                header: "Garment",
+                cell: (r) => (
+                  <LinkIf
+                    user={me}
+                    routeKey="garment"
+                    href={paths.garment(r.garmentId)}
+                    id={r.garmentId}
+                  />
+                ),
+              },
               { header: "Defect", cell: (r) => r.defectReason },
-              { header: "Assigned to", cell: (r) => (r.assignedDepartment ? departmentLabels[r.assignedDepartment] : "—") },
+              {
+                header: "Assigned to",
+                cell: (r) => (r.assignedDepartment ? departmentLabels[r.assignedDepartment] : "—"),
+              },
               { header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
               { header: "Opened", cell: (r) => fmt.date(r.createdAt) },
             ]}

@@ -22,7 +22,10 @@ import { paths } from "./paths";
 
 function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === paths.home ? pathname === href || pathname === `${href}/` : pathname === href || pathname.startsWith(`${href}/`));
+  const isActive = (href: string) =>
+    href === paths.home
+      ? pathname === href || pathname === `${href}/`
+      : pathname === href || pathname.startsWith(`${href}/`);
   return (
     <nav aria-label="Staff navigation" className="space-y-5">
       {navGroups.map((g) => {
@@ -88,7 +91,12 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-3 backdrop-blur sm:px-5">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                aria-label="Open navigation"
+              >
                 <Menu />
               </Button>
             </SheetTrigger>
@@ -125,8 +133,12 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
                   </p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => navigate(paths.account)}>My account</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void signOut()}>Switch demo account</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => navigate(paths.account)}>
+                  My account
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void signOut()}>
+                  Switch demo account
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => void signOut()}>
                   <LogOut /> Sign out

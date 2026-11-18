@@ -17,7 +17,10 @@ export function AccountView() {
   const [next, setNext] = useState("");
   return (
     <>
-      <PageHeader title="My account" crumbs={[{ label: "Staff", href: paths.home }, { label: "Account" }]} />
+      <PageHeader
+        title="My account"
+        crumbs={[{ label: "Staff", href: paths.home }, { label: "Account" }]}
+      />
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Profile">
           <KeyValue
@@ -29,7 +32,10 @@ export function AccountView() {
             ]}
           />
         </Section>
-        <Section title="Role and department" description="Read-only. Ask an administrator to change your scope.">
+        <Section
+          title="Role and department"
+          description="Read-only. Ask an administrator to change your scope."
+        >
           <KeyValue
             items={[
               { label: "Role", value: `${me.role} · ${roleLabels[me.role]}` },
@@ -54,13 +60,29 @@ export function AccountView() {
               }}
             >
               <Field label="Current password" htmlFor="acc-cur">
-                <Input id="acc-cur" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="off" />
+                <Input
+                  id="acc-cur"
+                  type="password"
+                  value={current}
+                  onChange={(e) => setCurrent(e.target.value)}
+                  autoComplete="off"
+                />
               </Field>
               <Field label="New password" htmlFor="acc-new">
-                <Input id="acc-new" type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="off" />
+                <Input
+                  id="acc-new"
+                  type="password"
+                  value={next}
+                  onChange={(e) => setNext(e.target.value)}
+                  autoComplete="off"
+                />
               </Field>
             </FormDialog>
-            <Button variant="outline" size="sm" onClick={() => toast.info("Demo: other sessions would be signed out.")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => toast.info("Demo: other sessions would be signed out.")}
+            >
               Sign out other devices
             </Button>
             <Button size="sm" onClick={() => void signOut()}>

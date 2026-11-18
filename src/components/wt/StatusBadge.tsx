@@ -1,18 +1,21 @@
 import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-const tone = cva("inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium", {
-  variants: {
-    tone: {
-      neutral: "border-border bg-muted text-muted-foreground",
-      info: "border-transparent bg-info-soft text-accent-foreground",
-      success: "border-transparent bg-success-soft text-success",
-      warning: "border-transparent bg-warning-soft text-warning",
-      danger: "border-transparent bg-danger-soft text-destructive",
+const tone = cva(
+  "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium",
+  {
+    variants: {
+      tone: {
+        neutral: "border-border bg-muted text-muted-foreground",
+        info: "border-transparent bg-info-soft text-accent-foreground",
+        success: "border-transparent bg-success-soft text-success",
+        warning: "border-transparent bg-warning-soft text-warning",
+        danger: "border-transparent bg-danger-soft text-destructive",
+      },
     },
+    defaultVariants: { tone: "neutral" },
   },
-  defaultVariants: { tone: "neutral" },
-});
+);
 
 export type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -58,10 +61,21 @@ const toneFor: Record<string, Tone> = {
   hold: "danger",
 };
 
-const pretty = (s: string) => (/\s/.test(s) ? s : s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()));
+const pretty = (s: string) =>
+  /\s/.test(s) ? s : s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 /** Text-labelled status badge. Pass `label` to prefix a field name (e.g. "Stage"). */
-export function StatusBadge({ status, label, tone: forced, className }: { status: string; label?: string | undefined; tone?: Tone | undefined; className?: string | undefined }) {
+export function StatusBadge({
+  status,
+  label,
+  tone: forced,
+  className,
+}: {
+  status: string;
+  label?: string | undefined;
+  tone?: Tone | undefined;
+  className?: string | undefined;
+}) {
   return (
     <span className={cn(tone({ tone: forced ?? toneFor[status] ?? "neutral" }), className)}>
       {label && <span className="opacity-70">{label}:</span>}

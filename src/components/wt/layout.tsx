@@ -102,7 +102,11 @@ export function KeyValue({ items }: { items: { label: string; value: ReactNode }
   );
 }
 
-export function MetricGrid({ metrics }: { metrics: { label: string; value: ReactNode; hint?: string | undefined }[] }) {
+export function MetricGrid({
+  metrics,
+}: {
+  metrics: { label: string; value: ReactNode; hint?: string | undefined }[];
+}) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {metrics.map((m) => (
@@ -124,7 +128,17 @@ export function IdLink({ href, id }: { href: string; id: string }) {
   );
 }
 
-export function Timeline({ items }: { items: { key: string; title: ReactNode; meta?: ReactNode | undefined; body?: ReactNode | undefined; tone?: "default" | "danger" | "success" | undefined }[] }) {
+export function Timeline({
+  items,
+}: {
+  items: {
+    key: string;
+    title: ReactNode;
+    meta?: ReactNode | undefined;
+    body?: ReactNode | undefined;
+    tone?: "default" | "danger" | "success" | undefined;
+  }[];
+}) {
   return (
     <ol className="relative space-y-5 border-l pl-6">
       {items.map((i) => (
@@ -133,7 +147,11 @@ export function Timeline({ items }: { items: { key: string; title: ReactNode; me
             aria-hidden
             className={cn(
               "absolute -left-[1.92rem] top-1 size-3 rounded-full border-2 border-card ring-1 ring-border",
-              i.tone === "danger" ? "bg-destructive" : i.tone === "success" ? "bg-success" : "bg-primary",
+              i.tone === "danger"
+                ? "bg-destructive"
+                : i.tone === "success"
+                  ? "bg-success"
+                  : "bg-primary",
             )}
           />
           <p className="text-sm font-medium">{i.title}</p>
@@ -147,6 +165,21 @@ export function Timeline({ items }: { items: { key: string; title: ReactNode; me
 
 export const fmt = {
   dateTime: (iso?: string) =>
-    iso ? new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—",
-  date: (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"),
+    iso
+      ? new Date(iso).toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "—",
+  date: (iso?: string) =>
+    iso
+      ? new Date(iso).toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+      : "—",
 };

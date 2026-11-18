@@ -24,14 +24,30 @@ function ReceiveLotDialog() {
       description="A lot is received once. It then waits for a lot-level incoming inspection."
       submitLabel="Record receipt"
       onSubmit={async () => {
-        const id = await run((c) => c.receiveLot({ material, supplierRef, qty: Number(qty) }), (r) => `${r} received.`);
+        const id = await run(
+          (c) => c.receiveLot({ material, supplierRef, qty: Number(qty) }),
+          (r) => `${r} received.`,
+        );
         if (id) void navigate(paths.lot(id));
         return !!id;
       }}
     >
-      <Field label="Material" htmlFor="rl-mat"><Input id="rl-mat" value={material} onChange={(e) => setMaterial(e.target.value)} /></Field>
-      <Field label="Supplier reference" htmlFor="rl-sup"><Input id="rl-sup" value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} /></Field>
-      <Field label="Quantity (m)" htmlFor="rl-qty"><Input id="rl-qty" type="number" min="0" step="0.1" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
+      <Field label="Material" htmlFor="rl-mat">
+        <Input id="rl-mat" value={material} onChange={(e) => setMaterial(e.target.value)} />
+      </Field>
+      <Field label="Supplier reference" htmlFor="rl-sup">
+        <Input id="rl-sup" value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} />
+      </Field>
+      <Field label="Quantity (m)" htmlFor="rl-qty">
+        <Input
+          id="rl-qty"
+          type="number"
+          min="0"
+          step="0.1"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+        />
+      </Field>
     </FormDialog>
   );
 }
@@ -50,21 +66,56 @@ export function LotsView() {
         actions={can.receiveLot(me) ? <ReceiveLotDialog /> : undefined}
       />
       <FilterBar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search lot or material" label="Search lots" />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search lot or material"
+          label="Search lots"
+        />
         <div className="w-full sm:w-48">
-          <NativeSelect ariaLabel="Filter by status" value={status} onChange={setStatus} options={[{ value: "all", label: "All statuses" }, { value: "awaiting-inspection", label: "Awaiting inspection" }, { value: "accepted", label: "Accepted" }, { value: "rejected", label: "Rejected" }]} />
+          <NativeSelect
+            ariaLabel="Filter by status"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "all", label: "All statuses" },
+              { value: "awaiting-inspection", label: "Awaiting inspection" },
+              { value: "accepted", label: "Accepted" },
+              { value: "rejected", label: "Rejected" },
+            ]}
+          />
         </div>
       </FilterBar>
       <Loadable query={q}>
         {(lots) => (
           <DataTable
-            rows={lots.filter((l) => (status === "all" || l.status === status) && `${l.id} ${l.material}`.toLowerCase().includes(search.toLowerCase()))}
+            rows={lots.filter(
+              (l) =>
+                (status === "all" || l.status === status) &&
+                `${l.id} ${l.material}`.toLowerCase().includes(search.toLowerCase()),
+            )}
             rowKey={(l) => l.id}
             columns={[
               { header: "Lot", cell: (l) => <IdLink href={paths.lot(l.id)} id={l.id} /> },
               { header: "Material", cell: (l) => l.material },
               { header: "Received", cell: (l) => fmt.date(l.receivedAt) },
-              { header: "Balance", cell: (l) => <span className="tabular-nums">{l.balanceQty} / {l.receivedQty} m</span> },
+              {
+                header: "Balance",
+                cell: (l) => (
+                  <span className="tabular-nums">
+                    {l.balanceQty} / {l.receivedQty} {l.unit ?? "m"}
+                  </span>
+                ),
+              },
+              {
+                header: "RFID Card",
+                cell: (l) =>
+                  l.rfidUid ? (
+                    <span className="wt-id font-mono text-xs">{l.rfidUid}</span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs italic">Unassigned</span>
+                  ),
+              },
               { header: "Incoming QC", cell: (l) => <StatusBadge status={l.status} /> },
             ]}
           />

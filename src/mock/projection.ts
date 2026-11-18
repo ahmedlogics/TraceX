@@ -32,15 +32,26 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
       label: "Fabric sourced",
       date: day(lot.receivedAt),
       lotLevel: true,
-      description: "The fabric lot this garment was cut from was received and accepted. This is a lot-level record shared by every garment cut from that lot.",
+      description:
+        "The fabric lot this garment was cut from was received and accepted. This is a lot-level record shared by every garment cut from that lot.",
     });
   }
   if (cut) {
-    milestones.push({ key: "garment-cut", label: "Cut from that fabric", date: day(cut.at), description: "Garment panels were cut from fabric issued from the lot above." });
+    milestones.push({
+      key: "garment-cut",
+      label: "Cut from that fabric",
+      date: day(cut.at),
+      description: "Garment panels were cut from fabric issued from the lot above.",
+    });
   }
   const assembled = events.find((e) => e.label === "Finishing completed");
   if (assembled) {
-    milestones.push({ key: "garment-assembled", label: "Garment assembled", date: day(assembled.at), description: "The garment was sewn and finished." });
+    milestones.push({
+      key: "garment-assembled",
+      label: "Garment assembled",
+      date: day(assembled.at),
+      description: "The garment was sewn and finished.",
+    });
   }
   const passedOk = !g.hold && (g.disposition === "passed" || g.disposition === "released");
   if (passedOk) {
@@ -49,11 +60,23 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
       .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))[0];
     const released = [...events].reverse().find((e) => e.label === "Quality hold released");
     const when = released?.at ?? passed?.submittedAt;
-    if (when) milestones.push({ key: "quality-passed", label: "Passed quality control", date: day(when), description: "The garment passed final quality inspection." });
+    if (when)
+      milestones.push({
+        key: "quality-passed",
+        label: "Passed quality control",
+        date: day(when),
+        description: "The garment passed final quality inspection.",
+      });
   }
   if (g.stage === "dispatched") {
     const sh = s.shipments.find((x) => x.id === g.shipmentId);
-    if (sh?.departedAt) milestones.push({ key: "dispatched", label: "Dispatched to authorized retail network", date: day(sh.departedAt), description: "The garment left the factory for an authorized retail partner." });
+    if (sh?.departedAt)
+      milestones.push({
+        key: "dispatched",
+        label: "Dispatched to authorized retail network",
+        date: day(sh.departedAt),
+        description: "The garment left the factory for an authorized retail partner.",
+      });
   }
 
   let status: PublicStatus = "In production";
@@ -68,7 +91,12 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
     status,
     milestones,
     notice: g.hold
-      ? { kind: "hold", title: "Quality review in progress", message: "This garment is temporarily held while a quality review is completed. Its journey will update when the review is finished." }
+      ? {
+          kind: "hold",
+          title: "Quality review in progress",
+          message:
+            "This garment is temporarily held while a quality review is completed. Its journey will update when the review is finished.",
+        }
       : undefined,
     advisory: record.advisory,
     evidence: evidenceFor(s, g.id),
@@ -90,7 +118,17 @@ export function projectProof(s: DemoState, publicId: string): PublicProof | null
     publicId: j.publicId,
     productName: j.productName,
     status: j.status,
-    milestones: j.milestones.map((m) => ({ key: m.key, date: m.date, ...(m.lotLevel ? { lotLevel: true } : {}) })),
+    milestones: j.milestones.map((m) => ({
+      key: m.key,
+      date: m.date,
+      ...(m.lotLevel ? { lotLevel: true } : {}),
+    })),
   };
-  return { publicId: j.publicId, productName: j.productName, evidence: j.evidence, sampleCommitmentRef: record.sampleCommitmentRef, payload };
+  return {
+    publicId: j.publicId,
+    productName: j.productName,
+    evidence: j.evidence,
+    sampleCommitmentRef: record.sampleCommitmentRef,
+    payload,
+  };
 }

@@ -27,10 +27,17 @@ function AssignDialog({ task }: { task: Task }) {
       title={`Assign ${task.id}`}
       description={task.title}
       submitLabel="Assign"
-      onSubmit={async () => !!(await run((c) => c.assignTask(task.id, userId).then(() => true), "Task assigned."))}
+      onSubmit={async () =>
+        !!(await run((c) => c.assignTask(task.id, userId).then(() => true), "Task assigned."))
+      }
     >
       <Field label={`Staff in ${departmentLabels[task.department]}`} htmlFor={`assign-${task.id}`}>
-        <NativeSelect id={`assign-${task.id}`} value={userId} onChange={setUserId} options={options.map((u) => ({ value: u.id, label: `${u.username} — ${u.displayName}` }))} />
+        <NativeSelect
+          id={`assign-${task.id}`}
+          value={userId}
+          onChange={setUserId}
+          options={options.map((u) => ({ value: u.id, label: `${u.username} — ${u.displayName}` }))}
+        />
       </Field>
     </FormDialog>
   );
@@ -46,11 +53,20 @@ export function TasksView() {
     <>
       <PageHeader
         title="Tasks"
-        description={me.role === "M" ? "All departments. Assign work to the right operator." : `Work queue for ${departmentLabels[me.department]}.`}
+        description={
+          me.role === "M"
+            ? "All departments. Assign work to the right operator."
+            : `Work queue for ${departmentLabels[me.department]}.`
+        }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Tasks" }]}
       />
       <FilterBar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search tasks or IDs" label="Search tasks" />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search tasks or IDs"
+          label="Search tasks"
+        />
         <div className="w-full sm:w-44">
           <NativeSelect
             ariaLabel="Filter by status"
@@ -70,7 +86,8 @@ export function TasksView() {
         {(tasks) => {
           const rows = tasks.filter(
             (t) =>
-              (status === "all" || (status === "active" ? t.status !== "done" : t.status === status)) &&
+              (status === "all" ||
+                (status === "active" ? t.status !== "done" : t.status === status)) &&
               `${t.id} ${t.title} ${t.subjectId}`.toLowerCase().includes(search.toLowerCase()),
           );
           return (
@@ -79,10 +96,31 @@ export function TasksView() {
               rowKey={(t) => t.id}
               empty="No tasks match."
               columns={[
-                { header: "Task", cell: (t) => <div><p className="font-medium">{t.title}</p><p className="wt-id text-muted-foreground">{t.id} · {fmt.date(t.createdAt)}</p></div> },
-                { header: "Subject", cell: (t) => <SubjectLink user={me} type={t.subjectType} id={t.subjectId} /> },
+                {
+                  header: "Task",
+                  cell: (t) => (
+                    <div>
+                      <p className="font-medium">{t.title}</p>
+                      <p className="wt-id text-muted-foreground">
+                        {t.id} · {fmt.date(t.createdAt)}
+                      </p>
+                    </div>
+                  ),
+                },
+                {
+                  header: "Subject",
+                  cell: (t) => <SubjectLink user={me} type={t.subjectType} id={t.subjectId} />,
+                },
                 { header: "Department", cell: (t) => departmentLabels[t.department] },
-                { header: "Checkpoint", cell: (t) => (t.checkpoint ? <span className="wt-id">{t.checkpoint}</span> : <span className="text-muted-foreground">Software</span>) },
+                {
+                  header: "Checkpoint",
+                  cell: (t) =>
+                    t.checkpoint ? (
+                      <span className="wt-id">{t.checkpoint}</span>
+                    ) : (
+                      <span className="text-muted-foreground">Software</span>
+                    ),
+                },
                 { header: "Status", cell: (t) => <StatusBadge status={t.status} /> },
                 { header: "Assignee", cell: (t) => <UserName id={t.assigneeId} /> },
                 {
@@ -90,7 +128,11 @@ export function TasksView() {
                   cell: (t) => (
                     <div className="flex gap-2">
                       {can.claimTask(me, t) && (
-                        <Button size="sm" disabled={pending} onClick={() => void run((c) => c.claimTask(t.id), `${t.id} claimed.`)}>
+                        <Button
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => void run((c) => c.claimTask(t.id), `${t.id} claimed.`)}
+                        >
                           Claim
                         </Button>
                       )}

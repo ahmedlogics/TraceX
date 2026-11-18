@@ -12,14 +12,18 @@ import { evidenceLabel } from "./evidence";
 
 async function sha256(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function ProofBody({ p }: { p: PublicProof }) {
   const json = useMemo(() => JSON.stringify(p.payload, null, 2), [p.payload]);
   const [digest, setDigest] = useState<string | null>(null);
   useEffect(() => {
-    void sha256(json).then(setDigest).catch(() => setDigest(null));
+    void sha256(json)
+      .then(setDigest)
+      .catch(() => setDigest(null));
   }, [json]);
 
   const copy = async () => {
@@ -42,7 +46,10 @@ function ProofBody({ p }: { p: PublicProof }) {
 
   return (
     <article className="space-y-5">
-      <AppLink href={paths.publicJourney(p.publicId)} className="inline-flex items-center gap-1 text-sm text-primary">
+      <AppLink
+        href={paths.publicJourney(p.publicId)}
+        className="inline-flex items-center gap-1 text-sm text-primary"
+      >
         <ArrowLeft className="size-4" aria-hidden /> Back to journey
       </AppLink>
       <div className="flex items-center gap-2 rounded-lg border-2 border-dashed border-warning bg-warning-soft px-4 py-3 text-warning">
@@ -58,9 +65,17 @@ function ProofBody({ p }: { p: PublicProof }) {
       </div>
       <section className="space-y-2 rounded-lg border bg-card p-5 text-sm">
         <p>{ev.text}</p>
-        <p>A commitment can help check that the published journey record has not changed since it was committed. It verifies <strong>record integrity</strong>, not the garment itself.</p>
-        <p className="text-muted-foreground">Physical authenticity cannot be determined from this URL. Anyone can open or copy a product link.</p>
-        <p className="text-muted-foreground">This is sample data. There is no live chain or explorer link in this demo.</p>
+        <p>
+          A commitment can help check that the published journey record has not changed since it was
+          committed. It verifies <strong>record integrity</strong>, not the garment itself.
+        </p>
+        <p className="text-muted-foreground">
+          Physical authenticity cannot be determined from this URL. Anyone can open or copy a
+          product link.
+        </p>
+        <p className="text-muted-foreground">
+          This is sample data. There is no live chain or explorer link in this demo.
+        </p>
       </section>
       <section className="space-y-3 rounded-lg border bg-card p-5">
         <dl className="space-y-2 text-sm">
@@ -78,8 +93,12 @@ function ProofBody({ p }: { p: PublicProof }) {
           <pre className="wt-id max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs">{json}</pre>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void copy()}><Copy /> Copy JSON</Button>
-          <Button variant="outline" onClick={download}><Download /> Download JSON</Button>
+          <Button variant="outline" onClick={() => void copy()}>
+            <Copy /> Copy JSON
+          </Button>
+          <Button variant="outline" onClick={download}>
+            <Download /> Download JSON
+          </Button>
         </div>
       </section>
     </article>
@@ -88,5 +107,9 @@ function ProofBody({ p }: { p: PublicProof }) {
 
 export function PublicProofView({ publicId }: { publicId: string }) {
   const q = useWtQuery(["public-proof", publicId], (c) => c.getPublicProof(publicId));
-  return <Loadable query={q} what="product">{(p) => <ProofBody p={p} />}</Loadable>;
+  return (
+    <Loadable query={q} what="product">
+      {(p) => <ProofBody p={p} />}
+    </Loadable>
+  );
 }

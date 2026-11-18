@@ -32,7 +32,209 @@ export interface StaffUser {
   scope: string;
 }
 
-export type SensorId = "S1" | "S2" | "S3" | "S4" | "S5" | "S6";
+// ---------------------------------------------------------------- RFID station / reader types
+
+/** Nine logical RFID station codes matching the WearTrail database. */
+export type RfidStationCode =
+  | "fabric_receiving"
+  | "fabric_issue"
+  | "cutting"
+  | "stitching"
+  | "finishing"
+  | "final_qc"
+  | "packing"
+  | "warehouse"
+  | "dispatch";
+
+/** Checkpoint / sensor ID.  Nine RFID readers + legacy IR codes kept for compatibility. */
+export type SensorId =
+  "S1" | "RAW_ISSUE" | "S2" | "S3" | "S4" | "FINAL_QC" | "S5" | "WAREHOUSE" | "S6";
+
+/** RFID UID as normalised uppercase hex (4, 7 or 10 bytes). */
+export type RfidUid = string;
+
+/** Lifecycle of a mock-adapter action context. */
+export type ActionContextStatus =
+  "awaiting_ack" | "ready" | "processing" | "confirmed" | "expired" | "cancelled";
+
+/** Station kind determines which panel is active. */
+export type StationKind = "receiving" | "issue" | "cutting" | "routine" | "qa" | "fulfilment";
+
+/** Typed DTO for a single reader session owned by one operator. */
+export interface ReaderSession {
+  /** Server-generated UUID for this session instance. */
+  id: string;
+  stationCode: RfidStationCode;
+  operatorId: string;
+  /** Whether the USB bridge reports this reader as connected. */
+  connected: boolean;
+  /** Whether the session is live (not expired/closed). */
+  active: boolean;
+  openedAt: string;
+  expiresAt: string;
+}
+
+/** DTO for the current state of a station's reader. */
+export interface StationReaderState {
+  stationCode: RfidStationCode;
+  checkpoint: SensorId;
+  stationName: string;
+  readerSession: ReaderSession | null;
+  bridgeConnected: boolean;
+  /** Most recent tag scan at this station (UID + timestamp). */
+  lastScan: { uid: RfidUid; at: string } | null;
+}
+
+/** Immutable one-use action context — created server-side, consumed by one scan. */
+export interface ActionContext {
+  id: string; // server-generated UUID
+  stationCode: RfidStationCode;
+  operatorId: string;
+  kind: ActionContextKind;
+  /** Frozen payload at creation time — cannot be edited. */
+  payload: ActionContextPayload;
+  status: ActionContextStatus;
+  createdAt: string;
+  expiresAt: string;
+  acknowledgedAt?: string | undefined;
+  closedAt?: string | undefined;
+}
+
+export type ActionContextKind =
+  | "assign_bundle_card" // Receiving: bind a fresh card to a lot
+  | "confirm_issue" // Fabric Issue: scan bundle to confirm issue
+  | "select_cutting_source" // Cutting: scan bundle to confirm source
+  | "bind_garment_tag" // Cutting: scan fresh card to create a garment
+  | "submit_qc" // QA: carry Pass/Fail + defect reason; no garment ID yet
+  | "pack_garment" // Packing: scan garment into selected package
+  | "warehouse_receive" // Warehouse: scan garment into selected bin
+  | "dispatch_garment"; // Dispatch: scan garment against selected shipment
+
+export type ActionContextPayload =
+  | AssignBundleCardPayload
+  | ConfirmIssuePayload
+  | SelectCuttingSourcePayload
+  | BindGarmentTagPayload
+  | SubmitQcPayload
+  | PackGarmentPayload
+  | WarehouseReceivePayload
+  | DispatchGarmentPayload;
+
+export interface AssignBundleCardPayload {
+  kind: "assign_bundle_card";
+  lotId: string;
+}
+
+export interface ConfirmIssuePayload {
+  kind: "confirm_issue";
+  lotId: string;
+  orderId: string;
+  qty: number;
+}
+
+export interface SelectCuttingSourcePayload {
+  kind: "select_cutting_source";
+  orderId: string;
+  issueId: string;
+  consumedQty: number;
+  wasteQty: number;
+}
+
+export interface BindGarmentTagPayload {
+  kind: "bind_garment_tag";
+  cuttingSourceSelectionId: string; // references confirmed source selection
+  orderId: string;
+  size: string;
+}
+
+export interface SubmitQcPayload {
+  kind: "submit_qc";
+  result: "pass" | "fail";
+  defectReason?: string | undefined;
+  checklist: ChecklistItem[];
+  notes: string;
+}
+
+export interface PackGarmentPayload {
+  kind: "pack_garment";
+  packageId: string; // pre-selected open package
+}
+
+export interface WarehouseReceivePayload {
+  kind: "warehouse_receive";
+  binId: string;
+}
+
+export interface DispatchGarmentPayload {
+  kind: "dispatch_garment";
+  shipmentId: string;
+}
+
+/** Outcome of resolving an RFID scan against an action context. */
+export type ScanResolution =
+  | "accepted"
+  | "rejected_unknown_card"
+  | "rejected_wrong_subject_type"
+  | "rejected_wrong_stage"
+  | "rejected_duplicate"
+  | "rejected_no_context"
+  | "rejected_expired_context"
+  | "rejected_business_rule"
+  | "rejected_active_card";
+
+export interface ScanOutcome {
+  uid: RfidUid;
+  resolution: ScanResolution;
+  contextId?: string | undefined;
+  /** Resolved garment/lot ID if identified. */
+  subjectId?: string | undefined;
+  /** Garment code shown after successful identification. */
+  garmentCode?: string | undefined;
+  /** Product name shown after successful identification. */
+  productName?: string | undefined;
+  /** Human-readable rejection reason. */
+  rejectReason?: string | undefined;
+  at: string;
+}
+
+/** Tag binding: maps a UID to a lot or garment. */
+export interface RfidTagBinding {
+  id: string;
+  uid: RfidUid;
+  subjectType: "lot" | "garment";
+  subjectId: string;
+  boundAt: string;
+  boundBy: string;
+  active: boolean;
+  unboundAt?: string | undefined;
+}
+
+/** A confirmed source selection at Cutting. */
+export interface CuttingSourceSelection {
+  id: string;
+  orderId: string;
+  issueId: string;
+  lotId: string;
+  consumedQty: number;
+  wasteQty: number;
+  confirmedAt: string;
+  confirmedBy: string;
+  /** True while this source is selected for garment assignments. */
+  active: boolean;
+}
+
+/** Mapping of one RFID reader position to its station. */
+export interface RfidStationMapping {
+  stationCode: RfidStationCode;
+  stationName: string;
+  checkpoint: SensorId;
+  /** Board reader index as measured in bench verification (null = not yet verified). */
+  measuredReaderIndex: number | null;
+  verified: boolean;
+  active: boolean;
+}
+
+// ---------------------------------------------------------------- existing types
 
 export type LotStatus = "awaiting-inspection" | "accepted" | "rejected";
 
@@ -42,11 +244,13 @@ export interface MaterialLot {
   supplierRef: string;
   receivedQty: number;
   balanceQty: number;
-  unit: "m";
+  unit: "m" | "kg" | "pcs";
   receivedAt: string;
   receivedBy: string;
   status: LotStatus;
   incomingInspectionId?: string | undefined;
+  /** Active RFID card UID, if bound. */
+  rfidUid?: RfidUid | undefined;
 }
 
 export interface MaterialIssue {
@@ -58,7 +262,7 @@ export interface MaterialIssue {
   by: string;
 }
 
-export type OrderStatus = "planned" | "in-progress" | "completed";
+export type OrderStatus = "draft" | "planned" | "approved" | "in-progress" | "completed";
 
 export interface ProductionOrder {
   id: string;
@@ -68,6 +272,8 @@ export interface ProductionOrder {
   status: OrderStatus;
   dueDate: string;
   plannedBy: string;
+  approvedBy?: string | undefined;
+  approvedAt?: string | undefined;
 }
 
 /** A labelled panel set cut from actual issued fabric; links lot -> order -> garment. */
@@ -123,6 +329,8 @@ export interface Garment {
   hold: GarmentHold | null;
   packageId?: string | undefined;
   shipmentId?: string | undefined;
+  /** Active RFID card UID, if bound. */
+  rfidUid?: RfidUid | undefined;
 }
 
 export interface GarmentEvent {
@@ -158,6 +366,8 @@ export interface Inspection {
   submittedBy?: string | undefined;
   createdAt: string;
   previousInspectionId?: string | undefined;
+  /** Set when scan-confirmed (RFID flow). */
+  rfidScanId?: string | undefined;
 }
 
 export type ReworkStatus = "awaiting-assignment" | "assigned" | "repaired" | "closed";
@@ -256,7 +466,8 @@ export type AuditCategory =
   | "logistics"
   | "workstation"
   | "ledger"
-  | "settings";
+  | "settings"
+  | "rfid";
 
 export interface AuditEvent {
   id: string;
@@ -273,11 +484,21 @@ export interface CheckpointSetting {
   sensor: SensorId;
   label: string;
   department: Department;
+  stationCode: RfidStationCode;
+  stationName: string;
   enabled: boolean;
+  verified: boolean;
+  measuredReaderIndex: number | null;
 }
 
 export interface Settings {
-  device: { boardId: string; firmware: string; status: "online" | "offline" };
+  device: {
+    boardId: string;
+    firmware: string;
+    status: "online" | "offline" | "disconnected";
+    mappingVersion: number;
+    bridgeSessionId?: string | undefined;
+  };
   checkpoints: CheckpointSetting[];
   business: {
     defaultCarrier: string;
@@ -287,17 +508,29 @@ export interface Settings {
   };
 }
 
+/** IR-compatible trigger outcome (kept for legacy workstation view). */
 export type TriggerOutcome =
-  | "accepted"
-  | "ignored-unarmed"
-  | "rejected-wrong-checkpoint"
-  | "ignored-duplicate";
+  "accepted" | "ignored-unarmed" | "rejected-wrong-checkpoint" | "ignored-duplicate";
 
 export interface WorkstationSession {
   taskId?: string | undefined;
   armed: boolean;
   needsClear: boolean;
   log: { at: string; sensor: SensorId; outcome: TriggerOutcome; taskId?: string | undefined }[];
+}
+
+/** Active RFID station state for a staff session. */
+export interface RfidStationState {
+  stationCode: RfidStationCode;
+  operatorId: string;
+  /** Currently active action context, if any. */
+  activeContextId?: string | undefined;
+  /** Most recent scan outcome for persistent feedback. */
+  lastScanOutcome?: ScanOutcome | undefined;
+  /** For Cutting: the confirmed source selection. */
+  cuttingSourceSelectionId?: string | undefined;
+  /** For Cutting/Issue/Packing etc: last confirmed garment/lot ID. */
+  lastConfirmedSubjectId?: string | undefined;
 }
 
 export interface DemoState {
@@ -319,4 +552,10 @@ export interface DemoState {
   settings: Settings;
   workstations: Record<string, WorkstationSession>;
   counters: Record<string, number>;
+  // RFID additions
+  rfidTagBindings: RfidTagBinding[];
+  actionContexts: ActionContext[];
+  cuttingSourceSelections: CuttingSourceSelection[];
+  rfidStationStates: Record<string, RfidStationState>; // keyed by operatorId
+  rfidScanLog: ScanOutcome[]; // most recent first, capped at 50
 }
