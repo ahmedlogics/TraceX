@@ -72,7 +72,15 @@ export function GarmentsView() {
                     <span className="text-muted-foreground text-xs italic">Unbound</span>
                   ),
               },
-              { header: "RFID Card", cell: (g) => g.rfidUid ? <span className="wt-id font-mono text-xs">{g.rfidUid}</span> : <span className="text-muted-foreground text-xs italic">Unbound</span> },
+              {
+                header: "RFID Card",
+                cell: (g) =>
+                  g.rfidUid ? (
+                    <span className="wt-id font-mono text-xs">{g.rfidUid}</span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs italic">Unbound</span>
+                  ),
+              },
               { header: "Product", cell: (g) => g.productName },
               { header: "Stage", cell: (g) => <StatusBadge status={g.stage} /> },
               {

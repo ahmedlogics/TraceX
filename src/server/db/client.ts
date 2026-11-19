@@ -9,7 +9,6 @@ import type { PrismaTransactionClient } from "./types";
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 declare global {
-  // eslint-disable-next-line no-var
   var __wt_prisma: PrismaClient | undefined;
 }
 
@@ -50,7 +49,7 @@ export const prisma = new Proxy({} as PrismaClient, {
     const client = getPrismaClient();
     const value = (client as unknown as Record<string | symbol, unknown>)[prop];
     if (typeof value === "function") {
-      return (value as Function).bind(client);
+      return (value as (...args: unknown[]) => unknown).bind(client);
     }
     return value;
   },

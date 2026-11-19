@@ -19,6 +19,7 @@ import type {
   RfidTagBinding,
   StaffUser,
 } from "@/domain/types";
+import { DEMO_DEFAULT_PASSWORD, hashPassword } from "@/domain/crypto-auth";
 
 export const DEMO_STATE_VERSION = 5;
 
@@ -143,63 +144,65 @@ export function createSeed(): DemoState {
     },
   ];
 
+  const seedUsers: StaffUser[] = [
+    user(
+      "u-admin",
+      "admin.demo",
+      "Avery Admin",
+      "A",
+      "technical-admin",
+      "Technical administration",
+    ),
+    user(
+      "u-manager",
+      "manager.demo",
+      "Morgan Manager",
+      "M",
+      "planning",
+      "Factory planning and supervision",
+    ),
+    user("u-receiving", "receiving.demo", "Riley Receiving", "O", "receiving", "Receiving"),
+    user("u-rawstore", "rawstore.demo", "Rowan Rawstore", "O", "raw-store", "Raw material issue"),
+    user("u-cutting", "cutting.demo", "Casey Cutting", "P", "cutting", "Cutting department"),
+    user(
+      "u-stitching",
+      "stitching.demo",
+      "Sam Stitching",
+      "P",
+      "stitching",
+      "Stitching department",
+    ),
+    user(
+      "u-finishing",
+      "finishing.demo",
+      "Frankie Finishing",
+      "P",
+      "finishing",
+      "Finishing department",
+    ),
+    user(
+      "u-quality",
+      "quality.demo",
+      "Quinn Quality",
+      "Q",
+      "quality",
+      "Incoming inspection, final inspection and reinspection",
+    ),
+    user("u-packing", "packing.demo", "Parker Packing", "L", "packing", "Packing department"),
+    user(
+      "u-warehouse",
+      "warehouse.demo",
+      "Wren Warehouse",
+      "L",
+      "warehouse",
+      "Finished-goods warehouse",
+    ),
+    user("u-dispatch", "dispatch.demo", "Drew Dispatch", "L", "dispatch", "Dispatch department"),
+  ];
+
   return {
     version: DEMO_STATE_VERSION,
-    users: [
-      user(
-        "u-admin",
-        "admin.demo",
-        "Avery Admin",
-        "A",
-        "technical-admin",
-        "Technical administration",
-      ),
-      user(
-        "u-manager",
-        "manager.demo",
-        "Morgan Manager",
-        "M",
-        "planning",
-        "Factory planning and supervision",
-      ),
-      user("u-receiving", "receiving.demo", "Riley Receiving", "O", "receiving", "Receiving"),
-      user("u-rawstore", "rawstore.demo", "Rowan Rawstore", "O", "raw-store", "Raw material issue"),
-      user("u-cutting", "cutting.demo", "Casey Cutting", "P", "cutting", "Cutting department"),
-      user(
-        "u-stitching",
-        "stitching.demo",
-        "Sam Stitching",
-        "P",
-        "stitching",
-        "Stitching department",
-      ),
-      user(
-        "u-finishing",
-        "finishing.demo",
-        "Frankie Finishing",
-        "P",
-        "finishing",
-        "Finishing department",
-      ),
-      user(
-        "u-quality",
-        "quality.demo",
-        "Quinn Quality",
-        "Q",
-        "quality",
-        "Incoming inspection, final inspection and reinspection",
-      ),
-      user("u-packing", "packing.demo", "Parker Packing", "L", "packing", "Packing department"),
-      user(
-        "u-warehouse",
-        "warehouse.demo",
-        "Wren Warehouse",
-        "L",
-        "warehouse",
-        "Finished-goods warehouse",
-      ),
-      user("u-dispatch", "dispatch.demo", "Drew Dispatch", "L", "dispatch", "Dispatch department"),
-    ],
+    users: seedUsers,
     lots: [
       {
         id: "FAB-001",
@@ -1026,5 +1029,39 @@ export function createSeed(): DemoState {
     cuttingSourceSelections,
     rfidStationStates: {},
     rfidScanLog: [],
+    credentials: Object.fromEntries(
+      seedUsers.map((u) => [u.id, hashPassword(DEMO_DEFAULT_PASSWORD)]),
+    ),
+    sessions: [],
+    credentialTokens: [
+      {
+        id: "tok-001",
+        token: "demo-valid-token",
+        userId: "u-admin",
+        kind: "reset",
+        status: "valid",
+        createdAt: "2026-11-19T00:00:00Z",
+        expiresAt: "2026-11-26T00:00:00Z",
+      },
+      {
+        id: "tok-002",
+        token: "demo-expired-token",
+        userId: "u-manager",
+        kind: "reset",
+        status: "expired",
+        createdAt: "2026-11-10T00:00:00Z",
+        expiresAt: "2026-11-17T00:00:00Z",
+      },
+      {
+        id: "tok-003",
+        token: "demo-used-token",
+        userId: "u-stitching",
+        kind: "invite",
+        status: "used",
+        createdAt: "2026-11-15T00:00:00Z",
+        expiresAt: "2026-11-22T00:00:00Z",
+        usedAt: "2026-11-16T12:00:00Z",
+      },
+    ],
   };
 }

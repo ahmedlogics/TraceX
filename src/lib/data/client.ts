@@ -152,12 +152,23 @@ export interface RfidStationData {
 }
 
 export interface WearTrailClient {
-  // Session & directory — GET /staff (directory), GET /me
+  // Session & directory — GET /staff (directory), GET /me, POST /auth/login
   listDemoAccounts(): Promise<StaffUser[]>;
   getUser(id: string): Promise<StaffUser | null>;
   /** Names/roles for display (all signed-in staff). */
   listDirectory(): Promise<StaffUser[]>;
-  checkCredentialToken(token: string): Promise<"valid" | "expired" | "used" | "unknown">;
+  checkCredentialToken(
+    token: string,
+  ): Promise<"valid" | "expired" | "used" | "revoked" | "unknown">;
+  getCredentialTokenDetails(token: string): Promise<{
+    status: "valid" | "expired" | "used" | "revoked" | "unknown";
+    username?: string | undefined;
+    kind?: "invite" | "reset" | undefined;
+  }>;
+  consumeCredentialToken(token: string, newPassword: string): Promise<void>;
+  authenticate(username: string, password: string): Promise<StaffUser>;
+  changePassword(currentPassword: string, newPassword: string): Promise<void>;
+  signOutOtherSessions(): Promise<void>;
   recordSignIn(userId: string): Promise<void>;
   recordSignOut(): Promise<void>;
 

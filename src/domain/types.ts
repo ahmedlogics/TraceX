@@ -32,6 +32,30 @@ export interface StaffUser {
   scope: string;
 }
 
+export type CredentialTokenStatus = "valid" | "expired" | "used" | "revoked";
+
+export interface StaffCredentialToken {
+  id: string;
+  token: string;
+  userId: string;
+  kind: "invite" | "reset";
+  status: CredentialTokenStatus;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string | undefined;
+}
+
+export interface StaffSession {
+  id: string;
+  userId: string;
+  token: string;
+  status: "active" | "revoked";
+  createdAt: string;
+  expiresAt: string;
+  lastActiveAt: string;
+  revokedAt?: string | undefined;
+}
+
 // ---------------------------------------------------------------- RFID station / reader types
 
 /** Nine logical RFID station codes matching the WearTrail database. */
@@ -552,6 +576,10 @@ export interface DemoState {
   settings: Settings;
   workstations: Record<string, WorkstationSession>;
   counters: Record<string, number>;
+  // Member 4: Real credentials, sessions, and tokens
+  credentials?: Record<string, string>; // userId -> passwordHash
+  sessions?: StaffSession[];
+  credentialTokens?: StaffCredentialToken[];
   // RFID additions
   rfidTagBindings: RfidTagBinding[];
   actionContexts: ActionContext[];

@@ -63,16 +63,38 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
     listDemoAccounts: () => ok(getState().users.filter((u) => u.username.endsWith(".demo"))),
     getUser: (id) => ok(getState().users.find((u) => u.id === id) ?? null),
     listDirectory: () => read((s) => s.users),
-    checkCredentialToken: (token) =>
-      Promise.resolve(
-        token === "demo-valid-token"
-          ? "valid"
-          : token === "demo-expired-token"
-            ? "expired"
-            : token === "demo-used-token"
-              ? "used"
-              : "unknown",
-      ),
+    checkCredentialToken: (token) => Promise.resolve(E.checkCredentialToken(getState(), token)),
+    getCredentialTokenDetails: (token) => {
+      const s = getState();
+      const status = E.checkCredentialToken(s, token);
+      const tok = s.credentialTokens?.find((t) => t.token === token);
+      const user = tok ? s.users.find((u) => u.id === tok.userId) : undefined;
+      return Promise.resolve({
+        status,
+        username: user?.username ?? (token.startsWith("demo-") ? "demo.user" : undefined),
+        kind: tok?.kind ?? "reset",
+      });
+    },
+    consumeCredentialToken: (token, newPassword) => {
+      mutate((s) => E.consumeCredentialToken(s, token, newPassword));
+      return Promise.resolve();
+    },
+    authenticate: (username, password) => {
+      let authedUser: StaffUser;
+      mutate((s) => {
+        const res = E.authenticateStaff(s, username, password);
+        authedUser = res.user;
+      });
+      return Promise.resolve(authedUser!);
+    },
+    changePassword: (currentPassword, newPassword) => {
+      mutate((s) => E.changeStaffPassword(s, actor(s), currentPassword, newPassword));
+      return Promise.resolve();
+    },
+    signOutOtherSessions: () => {
+      mutate((s) => E.signOutOtherSessions(s, actor(s)));
+      return Promise.resolve();
+    },
     recordSignIn: (userId) => {
       mutate((s) => {
         const u = s.users.find((x) => x.id === userId);

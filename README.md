@@ -16,17 +16,17 @@ Physical stage, quality disposition, and ledger state remain strictly separate f
 
 ### Station Topology & Checkpoint Mapping
 
-| Pos | Station Name | Stable Station Code | Sensor / Checkpoint ID | Department | Scope / Responsibility |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Fabric Receiving | `fabric_receiving` | `S1` | `receiving` | Binds fresh RFID card to received fabric lot (`assign_bundle_card`). |
-| 2 | Fabric Issue | `fabric_issue` | `RAW_ISSUE` | `raw-store` | Selects approved order + qty, scans bundle card to issue fabric (`confirm_issue`). |
-| 3 | Cutting & Tag Assignment | `cutting` | `S2` | `cutting` | Confirms fabric source by bundle scan, then assigns fresh cards for each cut garment (`bind_garment_tag`). |
-| 4 | Stitching | `stitching` | `S3` | `stitching` | Routine scan advances garment stage without per-shirt form (`routineScan`). |
-| 5 | Finishing | `finishing` | `S4` | `finishing` | Routine scan advances garment stage without per-shirt form (`routineScan`). |
-| 6 | Final Quality Check | `final_qc` | `FINAL_QC` | `quality` | Inspector selects Pass/Fail + checklist, then scans garment card; identity is resolved automatically (`submit_qc`). |
-| 7 | Packing | `packing` | `S5` | `packing` | Selects open package, scans garment card; verifies QC and stage before packing (`pack_garment`). |
-| 8 | Finished Goods Warehouse | `warehouse` | `WAREHOUSE` | `warehouse` | Selects storage bin, scans garment card; confirms receipt into warehouse (`warehouse_receive`). |
-| 9 | Dispatch | `dispatch` | `S6` | `dispatch` | Selects approved manifest, scans garments; departure confirmed only when all checks pass (`dispatch_garment`). |
+| Pos | Station Name             | Stable Station Code | Sensor / Checkpoint ID | Department  | Scope / Responsibility                                                                                              |
+| --- | ------------------------ | ------------------- | ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------- |
+| 1   | Fabric Receiving         | `fabric_receiving`  | `S1`                   | `receiving` | Binds fresh RFID card to received fabric lot (`assign_bundle_card`).                                                |
+| 2   | Fabric Issue             | `fabric_issue`      | `RAW_ISSUE`            | `raw-store` | Selects approved order + qty, scans bundle card to issue fabric (`confirm_issue`).                                  |
+| 3   | Cutting & Tag Assignment | `cutting`           | `S2`                   | `cutting`   | Confirms fabric source by bundle scan, then assigns fresh cards for each cut garment (`bind_garment_tag`).          |
+| 4   | Stitching                | `stitching`         | `S3`                   | `stitching` | Routine scan advances garment stage without per-shirt form (`routineScan`).                                         |
+| 5   | Finishing                | `finishing`         | `S4`                   | `finishing` | Routine scan advances garment stage without per-shirt form (`routineScan`).                                         |
+| 6   | Final Quality Check      | `final_qc`          | `FINAL_QC`             | `quality`   | Inspector selects Pass/Fail + checklist, then scans garment card; identity is resolved automatically (`submit_qc`). |
+| 7   | Packing                  | `packing`           | `S5`                   | `packing`   | Selects open package, scans garment card; verifies QC and stage before packing (`pack_garment`).                    |
+| 8   | Finished Goods Warehouse | `warehouse`         | `WAREHOUSE`            | `warehouse` | Selects storage bin, scans garment card; confirms receipt into warehouse (`warehouse_receive`).                     |
+| 9   | Dispatch                 | `dispatch`          | `S6`                   | `dispatch`  | Selects approved manifest, scans garments; departure confirmed only when all checks pass (`dispatch_garment`).      |
 
 ---
 
@@ -64,7 +64,7 @@ For actions requiring staff input (Receiving, Issue, Cutting, QA, Logistics), We
 
 The mock state initializes with version `DEMO_STATE_VERSION = 5` and a realistic multi-order fabric allocation:
 
-- **Fabric Bundle `FAB-001`:** 20 m of accepted *Cotton poplin*, assigned RFID card `04A1B2C3`.
+- **Fabric Bundle `FAB-001`:** 20 m of accepted _Cotton poplin_, assigned RFID card `04A1B2C3`.
 - **Production Order `ORDER-001` (Classic Poplin Shirt, planned qty 4):** Issued 8 m (`ISS-001`).
 - **Production Order `ORDER-002` (Cotton Trouser, planned qty 2):** Issued 6 m (`ISS-002`).
 - **Remaining Stock:** `20 m - 8 m - 6 m = 6 m` available balance.
@@ -122,6 +122,7 @@ WearTrail uses **Prisma 7 (`7.10.1`)** with `@prisma/adapter-pg` driver adapter,
 ### Provisioning the Restricted Runtime Role (`weartrail_api`)
 
 If the restricted `weartrail_api` role has not yet been provisioned in your Supabase project:
+
 1. Open your Supabase project $\rightarrow$ **SQL Editor**.
 2. Run the role creation and permission grants:
    ```sql
@@ -142,9 +143,11 @@ If the restricted `weartrail_api` role has not yet been provisioned in your Supa
 ### Testing Connectivity
 
 Run the non-destructive server-side connectivity check:
+
 ```bash
 npm run db:check
 ```
+
 This queries session metadata and counts tables in `supplyease` without reading business records or printing connection credentials.
 
 ---
