@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { AlertCircle, CheckCircle2, Info, Lock, RotateCcw, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, RotateCcw, User } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthenticate, useCurrentUser, useSignIn, useSignOut } from "@/app/auth";
@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Logo, TAGLINE } from "@/components/wt/Logo";
+import { Logo } from "@/components/wt/Logo";
 import { Field } from "@/components/wt/forms";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { LoadingState } from "@/components/wt/states";
@@ -38,6 +38,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -62,8 +63,8 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
 
     setIsSubmitting(true);
     try {
-      await authenticate(cleanUsername, password);
-      toast.success(`Welcome back, ${cleanUsername}!`);
+      const user = await authenticate(cleanUsername, password);
+      toast.success(`Signed in as ${user.displayName || user.username}`);
       await navigate(target, { replace: true });
     } catch (err) {
       const msg = errorMessage(err);
@@ -77,7 +78,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
   const pickDemoAccount = async (id: string, name: string) => {
     try {
       await signIn(id);
-      toast.success(`Switched to demo account: ${name}`);
+      toast.success(`Switched to: ${name}`);
       await navigate(target, { replace: true });
     } catch (e) {
       toast.error(errorMessage(e));
@@ -87,231 +88,222 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
   const reset = async () => {
     await client.resetDemo();
     qc.clear();
-    toast.success("Demo data reset to the starting state.");
+    toast.success("Demo environment reset to starting state.");
   };
 
   return (
-    <div className="min-h-screen bg-background px-4 py-10">
-      <div className="mx-auto max-w-3xl space-y-8">
-        <header className="space-y-2 text-center">
-          <div className="mx-auto inline-block rounded-xl border bg-card px-6 py-4 shadow-sm">
-            <Logo height={42} />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground">{TAGLINE}</p>
-        </header>
+    <div className="flex min-h-screen flex-col justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-md space-y-6">
+        {/* Brand Header */}
+        <div className="text-center">
+          <AppLink href={paths.home} className="inline-block" aria-label="WearTrail home">
+            <Logo height={36} />
+          </AppLink>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">Staff Sign In</h1>
+        </div>
 
+        {/* Active Session Notification (if already signed in) */}
         {me.data && (
-          <div className="flex flex-col items-center justify-between gap-3 rounded-lg border border-primary/20 bg-accent/30 p-4 sm:flex-row">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-accent/40 p-3.5 text-xs">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="size-4 text-primary" aria-hidden />
-              <p className="text-sm">
-                Currently signed in as{" "}
-                <span className="wt-id font-semibold">{me.data.username}</span> (
+              <CheckCircle2 className="size-4 shrink-0 text-primary" aria-hidden />
+              <span>
+                Signed in as <strong className="font-semibold">{me.data.username}</strong> (
                 {roleLabels[me.data.role]})
-              </p>
+              </span>
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" asChild>
-                <AppLink href={target}>Enter workspace</AppLink>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="default" asChild className="h-7 text-xs">
+                <AppLink href={target}>Workspace</AppLink>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => void signOut()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void signOut()}
+                className="h-7 text-xs"
+              >
                 Sign out
               </Button>
             </div>
           </div>
         )}
 
-        {/* Real Staff Authentication Form */}
-        <section className="rounded-xl border bg-card p-6 shadow-sm">
-          <div className="mb-5 space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">Staff authentication</h1>
-            <p className="text-sm text-muted-foreground">
-              Sign in with your verified factory credentials. Shoppers never need a login.
-            </p>
-          </div>
-
+        {/* Primary Staff Sign In Card */}
+        <section className="rounded-xl border bg-card p-7 shadow-sm">
           <form onSubmit={onFormSubmit} className="space-y-4" autoComplete="off">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Username" htmlFor="login-username" hint="e.g. admin.demo, quality.demo">
-                <div className="relative">
-                  <User
-                    className="absolute left-3 top-2.5 size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <Input
-                    id="login-username"
-                    value={username}
-                    onChange={(e) => {
-                      setUsername(e.target.value);
-                      if (errorMsg) setErrorMsg(null);
-                    }}
-                    placeholder="name.surname"
-                    className="pl-9"
-                    autoComplete="username"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </Field>
+            <Field label="Username" htmlFor="login-username">
+              <div className="relative">
+                <User
+                  className="absolute left-3 top-2.5 size-4 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  id="login-username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="e.g. admin.demo"
+                  className="pl-9"
+                  autoComplete="username"
+                  disabled={isSubmitting}
+                />
+              </div>
+            </Field>
 
-              <Field label="Password" htmlFor="login-password" hint="At least 10 characters">
-                <div className="relative">
-                  <Lock
-                    className="absolute left-3 top-2.5 size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <Input
-                    id="login-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (errorMsg) setErrorMsg(null);
-                    }}
-                    placeholder="••••••••••••"
-                    className="pl-9"
-                    autoComplete="current-password"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </Field>
-            </div>
+            <Field label="Password" htmlFor="login-password">
+              <div className="relative">
+                <Lock
+                  className="absolute left-3 top-2.5 size-4 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="••••••••••••"
+                  className="pl-9 pr-10"
+                  autoComplete="current-password"
+                  disabled={isSubmitting}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </Field>
 
             {errorMsg && (
               <div
                 role="alert"
-                className="flex items-center gap-2 rounded-md border border-destructive/30 bg-danger-soft px-3 py-2 text-sm text-destructive"
+                className="flex items-center gap-2 rounded-md border border-destructive/30 bg-danger-soft px-3.5 py-2.5 text-sm text-destructive"
               >
                 <AlertCircle className="size-4 shrink-0" aria-hidden />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <p className="text-xs text-muted-foreground">
-                Default prototype password for demo accounts:{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 wt-id font-bold">
-                  weartrail123!
-                </code>
-              </p>
-              <Button type="submit" disabled={isSubmitting} className="min-w-28">
-                {isSubmitting ? "Signing in…" : "Sign in"}
-              </Button>
-            </div>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full mt-2 font-medium"
+              size="default"
+            >
+              {isSubmitting ? "Signing in…" : "Sign In"}
+            </Button>
           </form>
-
-          <div className="mt-5 border-t pt-4">
-            <p className="text-xs text-muted-foreground">
-              Credential setup or password recovery links:{" "}
-              <AppLink
-                className="text-primary underline font-medium hover:text-primary/80"
-                href={paths.credentials("demo-valid-token")}
-              >
-                Valid link
-              </AppLink>
-              {" · "}
-              <AppLink
-                className="text-primary underline font-medium hover:text-primary/80"
-                href={paths.credentials("demo-expired-token")}
-              >
-                Expired link
-              </AppLink>
-              {" · "}
-              <AppLink
-                className="text-primary underline font-medium hover:text-primary/80"
-                href={paths.credentials("demo-used-token")}
-              >
-                Used link
-              </AppLink>
-            </p>
-          </div>
         </section>
 
-        {/* Development & Demo Account Picker (Explicitly Scoped) */}
-        <section className="rounded-xl border-2 border-dashed border-primary/30 bg-card p-6">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold">Development demo accounts</h2>
-                <span className="rounded bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
-                  Quick Switch
-                </span>
+        {/* Isolated Developer Testing Utilities (available only for local testing, collapsed by default) */}
+        {import.meta.env.DEV && (
+          <details className="group rounded-xl border border-dashed border-border bg-muted/30 p-4 text-xs text-muted-foreground">
+            <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground flex items-center justify-between select-none">
+              <span>Developer Test Environment</span>
+              <span className="text-[11px] font-mono text-muted-foreground group-open:hidden">
+                (Click to expand quick switch)
+              </span>
+            </summary>
+
+            <div className="mt-4 space-y-4 pt-3 border-t">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-muted-foreground">
+                  Quick-switch staff profiles for local testing:
+                </p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                      <RotateCcw className="size-3" /> Reset demo
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reset simulated data?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Restores in-memory state (lots, orders, rework cases, shipments,
+                        credentials) to baseline seeds.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => void reset()}>Reset</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
-              <p className="text-xs text-muted-foreground">
-                One-click switch for development testing across different operational scopes and
-                roles.
-              </p>
-            </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <RotateCcw className="size-3.5" /> Reset demo
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Reset demo state?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    All prototype modifications (inspections, cutting assignments, rework cases,
-                    shipments, and audit logs) will be restored to the initial seed state.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void reset()}>Reset state</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
 
-          {accounts.isPending ? (
-            <LoadingState label="Loading demo accounts…" />
-          ) : (
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              {(accounts.data ?? []).map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => void pickDemoAccount(u.id, u.username)}
-                  disabled={u.status !== "active"}
-                  className="flex w-full items-start gap-3 rounded-lg border bg-background p-3 text-left transition-colors hover:border-primary hover:bg-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="wt-id mt-0.5 shrink-0 rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground font-semibold">
-                    {u.role}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="wt-id font-semibold text-foreground truncate">
-                        {u.username}
+              {accounts.isPending ? (
+                <LoadingState label="Loading accounts…" />
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(accounts.data ?? []).map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => void pickDemoAccount(u.id, u.username)}
+                      disabled={u.status !== "active"}
+                      className="flex items-start gap-2.5 rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-primary hover:bg-accent/40 disabled:opacity-50 cursor-pointer"
+                    >
+                      <span className="wt-id mt-0.5 rounded bg-muted px-1.5 py-0.5 font-bold text-foreground">
+                        {u.role}
                       </span>
-                      {u.status !== "active" && <StatusBadge status={u.status} />}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {roleLabels[u.role]} · {departmentLabels[u.department]}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground/80 truncate">{u.scope}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="wt-id font-semibold text-foreground truncate">
+                            {u.username}
+                          </span>
+                          {u.status !== "active" && <StatusBadge status={u.status} />}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {roleLabels[u.role]} · {departmentLabels[u.department]}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-        <footer className="text-center text-xs text-muted-foreground">
-          Public garment journeys (anonymous access):{" "}
-          <AppLink
-            className="text-primary underline hover:text-primary/80"
-            href={paths.publicJourney("shirt-001-demo")}
-          >
-            shirt-001-demo
-          </AppLink>{" "}
-          ·{" "}
-          <AppLink
-            className="text-primary underline hover:text-primary/80"
-            href={paths.publicJourney("shirt-002-demo")}
-          >
-            shirt-002-demo
-          </AppLink>
-        </footer>
+              <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-1">
+                <p>
+                  Default prototype password for demo accounts:{" "}
+                  <code className="font-mono font-semibold text-foreground">weartrail123!</code>
+                </p>
+                <p>
+                  Test activation/reset tokens:{" "}
+                  <AppLink
+                    className="underline hover:text-foreground"
+                    href={paths.credentials("demo-valid-token")}
+                  >
+                    valid
+                  </AppLink>
+                  {" · "}
+                  <AppLink
+                    className="underline hover:text-foreground"
+                    href={paths.credentials("demo-expired-token")}
+                  >
+                    expired
+                  </AppLink>
+                  {" · "}
+                  <AppLink
+                    className="underline hover:text-foreground"
+                    href={paths.credentials("demo-used-token")}
+                  >
+                    used
+                  </AppLink>
+                </p>
+              </div>
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );
