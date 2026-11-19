@@ -4,6 +4,7 @@ import { requestIdMiddleware } from "./middleware/requestId";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandlerMiddleware, notFoundMiddleware } from "./middleware/errorHandler";
 import { healthRouter } from "./routes/health";
+import { rfidRouter } from "./routes/rfid";
 
 /**
  * Creates and configures the WearTrail Express application.
@@ -26,10 +27,13 @@ export function createExpressApp(): Express {
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
-  // 5. Catch unmapped routes
+  // 5. Authenticated RFID Ingestion routes
+  app.use("/api/rfid", rfidRouter);
+
+  // 6. Catch unmapped routes
   app.use(notFoundMiddleware);
 
-  // 6. Central error handler
+  // 7. Central error handler
   app.use(errorHandlerMiddleware);
 
   return app;

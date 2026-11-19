@@ -1,4 +1,5 @@
 import type { PrismaTransactionClient } from "../db/types";
+import type { ActorContext } from "./actor";
 
 /**
  * The nine logical RFID stations matching the WearTrail database schema.
@@ -87,12 +88,14 @@ export interface CloseReaderSessionInput {
 }
 
 /**
- * Status lifecycle of an action context.
+ * Status lifecycle of an action context matching PostgreSQL supplyease.rfid_context_status enum.
  */
 export type ActionContextStatus =
   | "awaiting_ack"
+  | "armed"
   | "ready"
   | "processing"
+  | "consumed"
   | "confirmed"
   | "expired"
   | "cancelled";
@@ -137,13 +140,13 @@ export interface ScanOutcomeResult {
   readonly scanId: string;
   readonly outcome: ScanOutcome;
   readonly outcomeCode: string;
-  readonly outcomeMessage?: string;
+  readonly outcomeMessage?: string | undefined;
   readonly stationCode: RfidStationCode;
-  readonly subjectKind?: "material_lot" | "garment";
-  readonly subjectId?: string;
-  readonly subjectCode?: string;
+  readonly subjectKind?: ("material_lot" | "garment") | undefined;
+  readonly subjectId?: string | undefined;
+  readonly subjectCode?: string | undefined;
   readonly processedAt: string;
-  readonly nextExpectedStation?: RfidStationCode;
+  readonly nextExpectedStation?: RfidStationCode | undefined;
 }
 
 /**
@@ -160,8 +163,20 @@ export interface PreparedScanSubject {
   readonly isNewEnrollment: boolean;
   /** Tag UID bound to this subject */
   readonly tagUid: NormalizedTagUid;
+  /** Optional active rfid_tag_bindings UUID in PostgreSQL */
+  readonly tagBindingId?: string;
   /** Optional metadata passed to Phase 2 */
   readonly metadata?: Record<string, unknown>;
+}
+
+/**
+ * Context provided to domain scan handlers during execution.
+ * Supplies authenticated operator identity, active reader session, and any claimed action context.
+ */
+export interface DomainScanContext {
+  readonly session: ReaderSessionContract;
+  readonly actionContext?: ActionContextContract | null;
+  readonly actor: ActorContext;
 }
 
 /**
@@ -183,6 +198,7 @@ export interface DomainScanHandler<TResult = ScanOutcomeResult> {
   prepare(
     envelope: VersionedScanEnvelope,
     tx: PrismaTransactionClient,
+    context?: DomainScanContext,
   ): Promise<PreparedScanSubject>;
 
   /**
@@ -193,6 +209,7 @@ export interface DomainScanHandler<TResult = ScanOutcomeResult> {
     envelope: VersionedScanEnvelope,
     subject: PreparedScanSubject,
     tx: PrismaTransactionClient,
+    context?: DomainScanContext,
   ): Promise<TResult>;
 }
 
@@ -206,5 +223,6 @@ export interface IScanRoutingService {
   routeScan(
     envelope: VersionedScanEnvelope,
     tx: PrismaTransactionClient,
+    context?: DomainScanContext,
   ): Promise<ScanOutcomeResult>;
 }

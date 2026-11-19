@@ -61,7 +61,7 @@ Status Definitions:
 | **Packing & Fulfilment Gate** | Member 3 | Garment must have zero active holds and passing inspection; packed into open packages; warehouse binning; shipment gate. | **`[VERIFIED MOCK]`** | [src/features/fulfilment/](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/fulfilment/), [src/server/fulfilment/fulfilment-service.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/fulfilment/fulfilment-service.ts) | Service validates eligibility in memory; database mutations are pending. |
 | **Public Customer Journey** | Member 4 | Anonymous garment story by public ID; strictly allowlisted fields; no internal defects, staff IDs, or secrets exposed. | **`[VERIFIED MOCK]`** | [src/routes/p.$publicId.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/routes/p.$publicId.tsx), [src/features/public/PublicJourneyView.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/public/PublicJourneyView.tsx) | Fetches from mock projection rather than live PostgreSQL query. |
 | **Public Cryptographic Proof** | Member 4 | View exact canonical UTF-8 payload bytes, SHA-256 hash, and verify on-chain commitment status with copy buttons. | **`[VERIFIED MOCK]`** | [src/routes/p.$publicId.proof.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/routes/p.$publicId.proof.tsx), [src/features/public/PublicProofView.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/public/PublicProofView.tsx) | Displays mock commitment state rather than querying live smart contract / database. |
-| **RFID Scan Envelope & Routing** | Member 1 | Normalized tag UID, authenticated device ID, bootId/sequence, readerIndex mapping, transaction orchestration. | **`[IMPLEMENTED UNVERIFIED]`** | [src/server/contracts/rfid.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/contracts/rfid.ts), [src/server/contracts/pending.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/contracts/pending.ts#L79) | `pendingScanRoutingService` throws 501 `PendingImplementationError`. Real router is missing. |
+| **RFID Scan Envelope & Routing** | Member 1 | Normalized tag UID, authenticated device ID, bootId/sequence, readerIndex mapping, transaction orchestration. | **`[VERIFIED REAL / HARNESS]`** | [src/server/contracts/rfid.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/contracts/rfid.ts), [src/server/rfid/scan-router.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/rfid/scan-router.ts), [src/server/routes/rfid.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/routes/rfid.ts) | Real endpoint `POST /api/rfid/scan` mounted; 25 automated isolated tests passing in `src/test/scan-ingestion.test.ts`. |
 | **Ledger Outbox Worker Daemon**| Member 1 | Asynchronous process leasing pending rows from `supplyease.ledger_outbox`, submitting to Ethereum, reconciling receipts. | **`[MISSING]`** | Contract tests pass, schema exists in DB, but outbox worker script/service is not written. | Needs `scripts/ledger-worker.ts` or `src/server/ledger/outbox-worker.ts`. |
 | **USB Serial Bridge** | Member 1 | Node.js serial port listener (`serialport`) connecting to ESP32 USB COM port, reading JSON lines, forwarding to Express. | **`[MISSING]`** | Hardware contracts defined; actual Node serial forwarder script not created. | Needs `packages/bridge/` or `scripts/usb-serial-bridge.ts`. |
 | **HTTP WearTrailClient** | Member 1 | Browser client implementing `WearTrailClient` via `fetch()` against Express REST endpoints. | **`[MISSING]`** | [src/lib/data/client.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/lib/data/client.ts), [src/lib/data/provider.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/lib/data/provider.tsx) | App currently uses `createMockClient` exclusively. Needs `src/lib/data/http-client.ts`. |
@@ -274,12 +274,13 @@ Testing Prisma Client ORM query on 'supplyease' schema...
 ## 9. Member-by-Member Remaining Work
 
 ### Member 1: Platform & Integration Lead
-1. **Implement Core Scan Orchestrator (`src/server/rfid/scan-routing.ts`):**
-   - Replace `pendingScanRoutingService` with real transaction-scoped scan processing.
-   - Deduplicate incoming `VersionedScanEnvelope` by `scanId` and `(bootId, sequence)`.
-   - Dispatch to Cutting enrollment handler or Final QA handler under `runInTransaction`.
-2. **Mount Express Domain Routers in `src/server/app.ts`:**
-   - Mount routes for `/api/auth`, `/api/materials`, `/api/production`, `/api/quality`, `/api/fulfilment`, `/api/rfid`, and `/api/public`.
+1. **Implement Core Scan Orchestrator (`src/server/rfid/scan-router.ts`) [COMPLETED ON `backend/live`]:**
+   - Implemented real transaction-scoped scan processing with `POST /api/rfid/scan`.
+   - Deduplicates incoming `VersionedScanEnvelope` by `scanId` and `(bootId, sequence)` against database.
+   - Dispatches to Cutting enrollment handler or Final QA handler under interactive transaction.
+   - 25 automated tests passing in `src/test/scan-ingestion.test.ts`. Hand-off guide in `docs/SCAN_PIPELINE_HANDOFF.md`.
+2. **Mount Remaining Express Domain Routers in `src/server/app.ts`:**
+   - Mount routes for `/api/auth`, `/api/materials`, `/api/production`, `/api/quality`, `/api/fulfilment`, and `/api/public`.
 3. **Build HTTP Data Client (`src/lib/data/http-client.ts`):**
    - Implement `WearTrailClient` using `fetch()` against Express API, enabling browser toggle between mock and live backend.
 4. **Build USB Serial Bridge Forwarder (`scripts/usb-serial-bridge.ts`):**
