@@ -24,6 +24,7 @@ import type {
   Department,
   Garment,
   Inspection,
+  ProductSpecification,
   RfidStationCode,
   RfidTagBinding,
   RfidUid,
@@ -597,16 +598,16 @@ function handleBindGarmentTag(
   const order = findOrThrow(s.orders, payload.orderId, "Order");
   const issue = findOrThrow(s.issues, sel.issueId, "Issue");
   // Check remaining fabric in this issue
-  const usedInIssue = s.cuttingOutputs
-    .filter((c) => c.issueId === sel.issueId)
-    .reduce((a, c) => a + c.fabricUsed, 0);
-  const orderGarments = s.garments.filter((g) => g.orderId === payload.orderId).length;
-  const remainingInOrder = Math.max(1, order.plannedQty - orderGarments);
-  const perGarment = +(sel.consumedQty / remainingInOrder).toFixed(3);
+  const usedInIssue = Math.round(
+    s.cuttingOutputs
+      .filter((c) => c.issueId === sel.issueId)
+      .reduce((a, c) => a + c.fabricUsed, 0) * 1000,
+  ) / 1000;
+  const perGarment = Math.round((sel.consumedQty / Math.max(1, order.plannedQty)) * 1000) / 1000;
   ensure(
     usedInIssue + perGarment <= issue.qty + 1e-9,
     "invalid",
-    `No fabric remaining in material issue ${issue.id}.`,
+    `No fabric remaining in material issue ${issue.id}. (${usedInIssue} m already cut, ${perGarment} m requested, ${issue.qty} m issued).`,
   );
   // Create garment
   s.counters["garment"] = (s.counters["garment"] ?? 0) + 1;
@@ -1410,6 +1411,134 @@ export function recordCuttingOutput(
     `${input.fabricUsed} from ${issue.lotId}`,
   );
   return garmentId;
+}
+
+export function replaceGarmentCard(
+  s: DemoState,
+  actor: StaffUser,
+  garmentId: string,
+  newUid: string,
+): ScanOutcome {
+  ensure(
+    actor.status === "active" && (actor.role === "A" || actor.role === "M" || actor.role === "P"),
+    "forbidden",
+    "Only production staff, managers or administrators can replace a garment RFID card.",
+  );
+  const garment = findOrThrow(s.garments, garmentId, "Garment");
+  const normUid = normalizeUid(newUid);
+  ensure(normUid.length >= 4, "invalid", "RFID UID must be a valid hex string.");
+
+  if (isCardAlreadyBound(s, normUid)) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_active_card",
+      `UID ${normUid} is already assigned to another subject. Use a fresh unbound card.`,
+    );
+  }
+
+  // Deactivate any existing active card bindings for this garment
+  const oldBinding = s.rfidTagBindings.find(
+    (b) => b.subjectType === "garment" && b.subjectId === garment.id && b.active,
+  );
+  if (oldBinding) {
+    oldBinding.active = false;
+    oldBinding.unboundAt = now();
+  }
+
+  // Bind new card
+  bindCard(s, actor, normUid, "garment", garment.id);
+  garment.rfidUid = normUid;
+
+  garmentEvent(
+    s,
+    garment.id,
+    `RFID card replaced: ${oldBinding?.uid ?? "unbound"} → ${normUid}`,
+    actor,
+    `Card replaced by ${actor.displayName}`,
+  );
+  audit(
+    s,
+    actor,
+    "rfid",
+    "Garment card replaced",
+    "garment",
+    garment.id,
+    `Old: ${oldBinding?.uid ?? "none"} · New: ${normUid}`,
+  );
+
+  const outcome: ScanOutcome = {
+    uid: normUid,
+    resolution: "accepted",
+    subjectId: garment.id,
+    garmentCode: garment.id,
+    productName: garment.productName,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  return outcome;
+}
+
+export function applyIncomingQCQuantity(
+  s: DemoState,
+  lotId: string,
+  acceptedQty: number,
+  rejectedQty: number = 0,
+  heldQty: number = 0,
+) {
+  const lot = findOrThrow(s.lots, lotId, "Lot");
+  ensure(
+    acceptedQty >= 0 && rejectedQty >= 0 && heldQty >= 0,
+    "invalid",
+    "Quantities must be non-negative.",
+  );
+  const total = Math.round((acceptedQty + rejectedQty + heldQty) * 1000) / 1000;
+  ensure(
+    Math.abs(total - lot.receivedQty) < 1e-3,
+    "invalid",
+    `Accepted (${acceptedQty}) + Rejected (${rejectedQty}) + Held (${heldQty}) must equal total received (${lot.receivedQty} ${lot.unit}).`,
+  );
+  lot.balanceQty = Math.round(acceptedQty * 1000) / 1000;
+  lot.status = acceptedQty > 0 ? "accepted" : "rejected";
+}
+
+export function listProductSpecs(s: DemoState): ProductSpecification[] {
+  return s.productSpecs ?? [];
+}
+
+export function saveProductSpec(
+  s: DemoState,
+  actor: StaffUser,
+  spec: Omit<ProductSpecification, "version">,
+): string {
+  ensure(
+    actor.status === "active" && (actor.role === "A" || actor.role === "M"),
+    "forbidden",
+    "Only managers or administrators can configure product specifications.",
+  );
+  if (!s.productSpecs) s.productSpecs = [];
+  const existing = spec.id ? s.productSpecs.find((p) => p.id === spec.id) : undefined;
+  if (existing) {
+    existing.name = spec.name;
+    existing.styleCode = spec.styleCode;
+    existing.category = spec.category;
+    existing.standardConsumptionMeters = spec.standardConsumptionMeters;
+    existing.sizeVariants = spec.sizeVariants;
+    existing.active = spec.active;
+    existing.description = spec.description;
+    existing.version = (existing.version ?? 1) + 1;
+    audit(s, actor, "settings", "Updated product specification", "productSpec", existing.id);
+    return existing.id;
+  }
+  const id = spec.id && spec.id.trim() ? spec.id : nextId(s, "productSpec", "SPEC");
+  const newSpec: ProductSpecification = {
+    ...spec,
+    id,
+    version: 1,
+  };
+  s.productSpecs.push(newSpec);
+  audit(s, actor, "settings", "Created product specification", "productSpec", id);
+  return id;
 }
 
 // ---------------------------------------------------------------- tasks

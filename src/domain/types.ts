@@ -32,6 +32,20 @@ export interface StaffUser {
   scope: string;
 }
 
+// ---------------------------------------------------------------- Product Specifications
+
+export interface ProductSpecification {
+  id: string;
+  name: string;
+  styleCode: string;
+  category: "shirt" | "trouser" | "jacket" | "other";
+  standardConsumptionMeters: number;
+  sizeVariants: string[];
+  active: boolean;
+  version: number;
+  description?: string | undefined;
+}
+
 // ---------------------------------------------------------------- RFID station / reader types
 
 /** Nine logical RFID station codes matching the WearTrail database. */
@@ -558,4 +572,5 @@ export interface DemoState {
   cuttingSourceSelections: CuttingSourceSelection[];
   rfidStationStates: Record<string, RfidStationState>; // keyed by operatorId
   rfidScanLog: ScanOutcome[]; // most recent first, capped at 50
+  productSpecs?: ProductSpecification[] | undefined;
 }

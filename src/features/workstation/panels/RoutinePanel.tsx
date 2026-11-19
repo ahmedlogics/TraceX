@@ -22,8 +22,8 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
   const qTasks = useWtQuery(["tasks"], (c) => c.listTasks());
 
   const isStitching = stationCode === "stitching";
-  const expectedStage = isStitching ? "cutting" : "stitching";
-  const nextStage = isStitching ? "stitching" : "finishing";
+  const expectedStage = isStitching ? "stitching" : "finishing";
+  const nextStage = isStitching ? "finishing" : "final-qc";
 
   const isAuthorized =
     me.role === "M" ||

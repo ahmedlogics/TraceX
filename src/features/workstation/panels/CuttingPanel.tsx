@@ -18,7 +18,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
 
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedIssueId, setSelectedIssueId] = useState("");
-  const [consumedQty, setConsumedQty] = useState("2.1");
+  const [consumedQty, setConsumedQty] = useState("2.0");
   const [wasteQty, setWasteQty] = useState("0.1");
   const [size, setSize] = useState("M");
   const [scanUid, setScanUid] = useState("04B1C2D3");
@@ -27,6 +27,11 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
   const source = stationData.cuttingSourceSelection;
   const activeCtx = stationData.activeContext;
   const isCtxForThisStation = activeCtx && activeCtx.stationCode === "cutting";
+
+  const orderId = selectedOrderId || source?.orderId || "";
+  const qOrderDetail = useWtQuery(["order", orderId], (c) =>
+    orderId ? c.getOrder(orderId) : Promise.resolve(null),
+  );
 
   return (
     <Loadable query={qOrders}>
@@ -176,62 +181,100 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                             />
                           </Field>
 
-                          <div className="grid grid-cols-2 gap-3">
-                            <Field label="Fabric Consumed (m)" htmlFor="cut-cons">
-                              <Input
-                                id="cut-cons"
-                                type="number"
-                                min="0.1"
-                                step="0.1"
-                                value={consumedQty}
-                                onChange={(e) => setConsumedQty(e.target.value)}
-                              />
-                            </Field>
-                            <Field label="Fabric Waste (m)" htmlFor="cut-waste">
-                              <Input
-                                id="cut-waste"
-                                type="number"
-                                min="0"
-                                step="0.05"
-                                value={wasteQty}
-                                onChange={(e) => setWasteQty(e.target.value)}
-                              />
-                            </Field>
-                          </div>
+                          {(() => {
+                            const availableIssues = qOrderDetail.data?.issues ?? [];
+                            const activeIssueId = selectedIssueId || availableIssues[0]?.id || "";
+                            const activeIssue = availableIssues.find((i) => i.id === activeIssueId);
 
-                          {!isCuttingStaff && (
-                            <ScopeNote>
-                              Only cutting department staff or managers can prepare cutting sources.
-                            </ScopeNote>
-                          )}
+                            return (
+                              <>
+                                <Field
+                                  label="Material Input (Issued Fabric)"
+                                  htmlFor="cut-issue"
+                                  hint={
+                                    activeIssue
+                                      ? `Allocated from Lot ${activeIssue.lotId} · ${activeIssue.qty} m issued`
+                                      : undefined
+                                  }
+                                >
+                                  {availableIssues.length === 0 ? (
+                                    <div className="rounded-md border border-warning/40 bg-warning-soft p-2.5 text-xs text-warning-foreground">
+                                      No material has been issued to {orderId} yet. Allocate fabric at Station 2 (Fabric Issue) first.
+                                    </div>
+                                  ) : (
+                                    <NativeSelect
+                                      id="cut-issue"
+                                      value={activeIssueId}
+                                      onChange={(v) => setSelectedIssueId(v)}
+                                      options={availableIssues.map((i) => ({
+                                        value: i.id,
+                                        label: `${i.id} — ${i.qty} m from Lot ${i.lotId}`,
+                                      }))}
+                                    />
+                                  )}
+                                </Field>
 
-                          {isCuttingStaff && (
-                            <div className="pt-2">
-                              <Button
-                                disabled={
-                                  pending ||
-                                  !currentOrder ||
-                                  Number(consumedQty) <= 0 ||
-                                  (isCtxForThisStation && activeCtx.status !== "expired")
-                                }
-                                onClick={() =>
-                                  void run(
-                                    (c) =>
-                                      c.prepareActionContext("cutting", "select_cutting_source", {
-                                        kind: "select_cutting_source",
-                                        orderId,
-                                        issueId: selectedIssueId || "ISS-001",
-                                        consumedQty: Number(consumedQty),
-                                        wasteQty: Number(wasteQty),
-                                      }),
-                                    "Prepared cutting source confirmation.",
-                                  )
-                                }
-                              >
-                                <Radio className="size-4" /> Prepare: Select Fabric Source
-                              </Button>
-                            </div>
-                          )}
+                                <div className="grid grid-cols-2 gap-3">
+                                  <Field label="Fabric Consumed (m)" htmlFor="cut-cons">
+                                    <Input
+                                      id="cut-cons"
+                                      type="number"
+                                      min="0.1"
+                                      step="0.1"
+                                      value={consumedQty}
+                                      onChange={(e) => setConsumedQty(e.target.value)}
+                                    />
+                                  </Field>
+                                  <Field label="Fabric Waste (m)" htmlFor="cut-waste">
+                                    <Input
+                                      id="cut-waste"
+                                      type="number"
+                                      min="0"
+                                      step="0.05"
+                                      value={wasteQty}
+                                      onChange={(e) => setWasteQty(e.target.value)}
+                                    />
+                                  </Field>
+                                </div>
+
+                                {!isCuttingStaff && (
+                                  <ScopeNote>
+                                    Only cutting department staff or managers can prepare cutting sources.
+                                  </ScopeNote>
+                                )}
+
+                                {isCuttingStaff && (
+                                  <div className="pt-2">
+                                    <Button
+                                      disabled={
+                                        pending ||
+                                        !currentOrder ||
+                                        availableIssues.length === 0 ||
+                                        !activeIssueId ||
+                                        Number(consumedQty) <= 0 ||
+                                        (isCtxForThisStation && activeCtx.status !== "expired")
+                                      }
+                                      onClick={() =>
+                                        void run(
+                                          (c) =>
+                                            c.prepareActionContext("cutting", "select_cutting_source", {
+                                              kind: "select_cutting_source",
+                                              orderId,
+                                              issueId: activeIssueId,
+                                              consumedQty: Number(consumedQty),
+                                              wasteQty: Number(wasteQty),
+                                            }),
+                                          "Prepared cutting source confirmation.",
+                                        )
+                                      }
+                                    >
+                                      <Radio className="size-4" /> Prepare: Select Fabric Source
+                                    </Button>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                     </Section>

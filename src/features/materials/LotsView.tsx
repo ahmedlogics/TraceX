@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { ArrowRight, CheckCircle2, Layers, PackagePlus, Radio, Tag } from "lucide-react";
+import { AppLink, useAppNavigate } from "@/app/navigation";
 import { paths } from "@/app/paths";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
 import { Field, FilterBar, FormDialog, NativeSelect, SearchInput } from "@/components/wt/forms";
@@ -9,45 +12,63 @@ import { Loadable } from "@/components/wt/states";
 import { can } from "@/domain/permissions";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
-import { useAppNavigate } from "@/app/navigation";
 
 function ReceiveLotDialog() {
   const { run } = useWtAction();
   const navigate = useAppNavigate();
-  const [material, setMaterial] = useState("Cotton twill, navy, 150 cm");
-  const [supplierRef, setSupplierRef] = useState("SUP-REF-031 (synthetic)");
-  const [qty, setQty] = useState("60");
+  const [material, setMaterial] = useState("Cotton poplin, natural white, 140 cm");
+  const [supplierRef, setSupplierRef] = useState("SUP-REF-042");
+  const [qty, setQty] = useState("25");
+  const [unit, setUnit] = useState<"m" | "kg" | "pcs">("m");
+
   return (
     <FormDialog
-      trigger="Receive lot"
-      title="Receive a fabric lot"
-      description="A lot is received once. It then waits for a lot-level incoming inspection."
+      trigger="Receive fabric lot"
+      title="Record Fabric Bundle Receipt"
+      description="Enter incoming fabric roll details. Raw fabric bundles are labelled by material name, never finished garment type."
       submitLabel="Record receipt"
       onSubmit={async () => {
         const id = await run(
-          (c) => c.receiveLot({ material, supplierRef, qty: Number(qty) }),
-          (r) => `${r} received.`,
+          (c) => c.receiveLot({ material, supplierRef, qty: Number(qty), unit }),
+          (r) => `${r} recorded in inventory.`,
         );
         if (id) void navigate(paths.lot(id));
         return !!id;
       }}
     >
-      <Field label="Material" htmlFor="rl-mat">
+      <Field label="Fabric material description" htmlFor="rl-mat" hint="e.g. 100% Cotton Poplin, 140cm width">
         <Input id="rl-mat" value={material} onChange={(e) => setMaterial(e.target.value)} />
       </Field>
-      <Field label="Supplier reference" htmlFor="rl-sup">
+      <Field label="Supplier reference / packing slip" htmlFor="rl-sup">
         <Input id="rl-sup" value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} />
       </Field>
-      <Field label="Quantity (m)" htmlFor="rl-qty">
-        <Input
-          id="rl-qty"
-          type="number"
-          min="0"
-          step="0.1"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-        />
-      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Received quantity" htmlFor="rl-qty">
+          <Input
+            id="rl-qty"
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+          />
+        </Field>
+        <Field label="Unit of measure" htmlFor="rl-unit">
+          <NativeSelect
+            id="rl-unit"
+            value={unit}
+            onChange={(v) => setUnit(v as "m" | "kg" | "pcs")}
+            options={[
+              { value: "m", label: "Meters (m)" },
+              { value: "kg", label: "Kilograms (kg)" },
+              { value: "pcs", label: "Pieces (pcs)" },
+            ]}
+          />
+        </Field>
+      </div>
+      <p className="text-xs text-muted-foreground pt-1">
+        After recording receipt, present a fresh, unassigned RFID card at Station 1 (Fabric Receiving) to bind the bundle card.
+      </p>
     </FormDialog>
   );
 }
@@ -57,69 +78,167 @@ export function LotsView() {
   const q = useWtQuery(["lots"], (c) => c.listLots());
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+
   return (
     <>
       <PageHeader
-        title="Material lots"
-        description="Fabric register. Incoming QC is a lot-level decision."
+        title="Material Lots & Fabric Register"
+        description="Physical raw material inventory. Fabric lots are received with bundle cards, verified by incoming QC, and issued to approved orders."
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Material lots" }]}
         actions={can.receiveLot(me) ? <ReceiveLotDialog /> : undefined}
       />
-      <FilterBar>
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search lot or material"
-          label="Search lots"
-        />
-        <div className="w-full sm:w-48">
-          <NativeSelect
-            ariaLabel="Filter by status"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "all", label: "All statuses" },
-              { value: "awaiting-inspection", label: "Awaiting inspection" },
-              { value: "accepted", label: "Accepted" },
-              { value: "rejected", label: "Rejected" },
-            ]}
-          />
-        </div>
-      </FilterBar>
+
       <Loadable query={q}>
-        {(lots) => (
-          <DataTable
-            rows={lots.filter(
-              (l) =>
-                (status === "all" || l.status === status) &&
-                `${l.id} ${l.material}`.toLowerCase().includes(search.toLowerCase()),
-            )}
-            rowKey={(l) => l.id}
-            columns={[
-              { header: "Lot", cell: (l) => <IdLink href={paths.lot(l.id)} id={l.id} /> },
-              { header: "Material", cell: (l) => l.material },
-              { header: "Received", cell: (l) => fmt.date(l.receivedAt) },
-              {
-                header: "Balance",
-                cell: (l) => (
-                  <span className="tabular-nums">
-                    {l.balanceQty} / {l.receivedQty} {l.unit ?? "m"}
-                  </span>
-                ),
-              },
-              {
-                header: "RFID Card",
-                cell: (l) =>
-                  l.rfidUid ? (
-                    <span className="wt-id font-mono text-xs">{l.rfidUid}</span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs italic">Unassigned</span>
-                  ),
-              },
-              { header: "Incoming QC", cell: (l) => <StatusBadge status={l.status} /> },
-            ]}
-          />
-        )}
+        {(lots) => {
+          const totalReceived = lots.reduce((acc, l) => acc + l.receivedQty, 0);
+          const totalBalance = lots.filter((l) => l.status === "accepted").reduce((acc, l) => acc + l.balanceQty, 0);
+          const awaitingQc = lots.filter((l) => l.status === "awaiting-inspection").length;
+          const assignedCards = lots.filter((l) => !!l.rfidUid).length;
+
+          const rows = lots.filter(
+            (l) =>
+              (status === "all" || l.status === status) &&
+              `${l.id} ${l.material} ${l.supplierRef} ${l.rfidUid ?? ""}`
+                .toLowerCase()
+                .includes(search.toLowerCase()),
+          );
+
+          return (
+            <div className="space-y-6">
+              {/* Metric Overview Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border bg-card p-3 shadow-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Layers className="size-4 text-primary" />
+                    <span className="text-xs font-medium">Fabric Lots</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold">{lots.length}</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3 shadow-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <CheckCircle2 className="size-4 text-success" />
+                    <span className="text-xs font-medium">Accepted Balance</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold text-success">{totalBalance.toFixed(1)} m</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3 shadow-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <PackagePlus className="size-4 text-warning" />
+                    <span className="text-xs font-medium">Awaiting QC</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold text-warning">{awaitingQc}</p>
+                </div>
+                <div className="rounded-lg border bg-card p-3 shadow-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Tag className="size-4 text-accent-foreground" />
+                    <span className="text-xs font-medium">RFID Tagged</span>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold">{assignedCards} / {lots.length}</p>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <FilterBar>
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Search lot ID, fabric material, supplier ref, or RFID UID"
+                  label="Search lots"
+                />
+                <div className="w-full sm:w-48">
+                  <NativeSelect
+                    ariaLabel="Filter by status"
+                    value={status}
+                    onChange={setStatus}
+                    options={[
+                      { value: "all", label: "All QC Statuses" },
+                      { value: "awaiting-inspection", label: "Awaiting Inspection" },
+                      { value: "accepted", label: "Accepted (Stock Eligible)" },
+                      { value: "rejected", label: "Rejected" },
+                    ]}
+                  />
+                </div>
+              </FilterBar>
+
+              <DataTable
+                rows={rows}
+                rowKey={(l) => l.id}
+                empty="No fabric lots match the filter criteria."
+                columns={[
+                  {
+                    header: "Lot Code",
+                    cell: (l) => (
+                      <div>
+                        <IdLink href={paths.lot(l.id)} id={l.id} />
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{fmt.date(l.receivedAt)}</p>
+                      </div>
+                    ),
+                  },
+                  {
+                    header: "Fabric Material",
+                    cell: (l) => (
+                      <div>
+                        <p className="font-medium text-foreground text-xs sm:text-sm">{l.material}</p>
+                        <p className="text-[11px] text-muted-foreground">Ref: {l.supplierRef}</p>
+                      </div>
+                    ),
+                  },
+                  {
+                    header: "Stock Balance",
+                    cell: (l) => {
+                      const pct = Math.max(0, Math.min(100, Math.round((l.balanceQty / l.receivedQty) * 100)));
+                      return (
+                        <div className="space-y-1 min-w-[120px]">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold tabular-nums">{l.balanceQty} {l.unit ?? "m"}</span>
+                            <span className="text-muted-foreground text-[11px]">of {l.receivedQty} {l.unit ?? "m"}</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                l.balanceQty > 0 ? "bg-primary" : "bg-muted-foreground"
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    },
+                  },
+                  {
+                    header: "Active Bundle RFID",
+                    cell: (l) =>
+                      l.rfidUid ? (
+                        <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
+                          <Radio className="size-3" /> {l.rfidUid}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
+                          Unassigned
+                        </span>
+                      ),
+                  },
+                  {
+                    header: "Incoming QC",
+                    cell: (l) => <StatusBadge status={l.status} label={l.status === "accepted" ? "Accepted" : undefined} />,
+                  },
+                  {
+                    header: "Actions",
+                    cell: (l) => (
+                      <div className="flex items-center gap-1.5">
+                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                          <AppLink href={paths.lot(l.id)}>
+                            View <ArrowRight className="size-3 ml-1" />
+                          </AppLink>
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          );
+        }}
       </Loadable>
     </>
   );
