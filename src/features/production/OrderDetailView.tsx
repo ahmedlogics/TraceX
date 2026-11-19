@@ -127,26 +127,46 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
 
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Planned Output</p>
-                <p className="mt-1 text-2xl font-bold tabular-nums">{order.plannedQty} pcs</p>
-                <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Planned Output</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                    <Package className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{order.plannedQty} pcs</p>
+                <div className="mt-2.5 h-1.5 w-full rounded-full bg-muted/80 overflow-hidden shadow-inner">
+                  <div className="h-full bg-gradient-to-r from-primary to-primary/80 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
                 </div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Garments Cut</p>
-                <p className="mt-1 text-2xl font-bold text-primary tabular-nums">{garments.length} pcs</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Garments Cut</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-accent/30 text-accent-foreground group-hover:scale-105 transition-transform">
+                    <Scissors className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-primary tabular-nums">{garments.length} pcs</p>
                 <p className="text-[11px] text-muted-foreground mt-1">{progressPct}% of target completed</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Fabric Issued</p>
-                <p className="mt-1 text-2xl font-bold tabular-nums">{totalIssuedMeters.toFixed(2)} m</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-accent-foreground/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Fabric Issued</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:scale-105 transition-transform">
+                    <Layers className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{totalIssuedMeters.toFixed(2)} m</p>
                 <p className="text-[11px] text-muted-foreground mt-1">From {issues.length} issue movement(s)</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Remaining Free in Issues</p>
-                <p className="mt-1 text-2xl font-bold text-success tabular-nums">{freeInIssues.toFixed(2)} m</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Free in Issues</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
+                    <CheckCircle2 className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-success tabular-nums">{freeInIssues.toFixed(2)} m</p>
                 <p className="text-[11px] text-muted-foreground mt-1">{totalConsumedMeters.toFixed(2)} m consumed</p>
               </div>
             </div>

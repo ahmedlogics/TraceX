@@ -53,8 +53,11 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                     <div className="space-y-4">
                       <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="size-4 text-primary" />
-                          <p className="text-sm font-medium">Continuous Routine Reader Active</p>
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                          </span>
+                          <p className="text-sm font-semibold text-foreground">Continuous Routine Reader Active</p>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           No per-shirt form required. Simply present any assembled garment card at
@@ -209,7 +212,7 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-xs font-medium"
+                                className="h-7 text-xs font-semibold border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-2xs"
                                 disabled={pending || !isAuthorized}
                                 onClick={() =>
                                   void run(

@@ -111,21 +111,41 @@ export function LotDetailView({ lotId }: { lotId: string }) {
 
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Received Stock</p>
-                <p className="mt-1 text-2xl font-bold">{lot.receivedQty} {lot.unit ?? "m"}</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Received Stock</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                    <Layers className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight">{lot.receivedQty} {lot.unit ?? "m"}</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Free Balance</p>
-                <p className="mt-1 text-2xl font-bold text-success tabular-nums">{lot.balanceQty} {lot.unit ?? "m"}</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Free Balance</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
+                    <CheckCircle2 className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-success tabular-nums">{lot.balanceQty} {lot.unit ?? "m"}</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Issued to Orders</p>
-                <p className="mt-1 text-2xl font-bold text-primary tabular-nums">{totalIssued.toFixed(1)} {lot.unit ?? "m"}</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Issued to Orders</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-accent/30 text-accent-foreground group-hover:scale-105 transition-transform">
+                    <Package className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-primary tabular-nums">{totalIssued.toFixed(1)} {lot.unit ?? "m"}</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-xs">
-                <p className="text-xs text-muted-foreground font-medium">Cut Garments</p>
-                <p className="mt-1 text-2xl font-bold tabular-nums">{cuttingOutputs.length} pcs</p>
+              <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-accent-foreground/40 hover:shadow-sm transition-all duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Cut Garments</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:scale-105 transition-transform">
+                    <Scissors className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{cuttingOutputs.length} pcs</p>
               </div>
             </div>
 

@@ -123,14 +123,21 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
 
             <div className="grid gap-6 lg:grid-cols-3">
               {/* Unbroken Material Lineage Chain Banner */}
-              <section className="rounded-lg border bg-card p-4 shadow-xs lg:col-span-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                  Unbroken Raw-to-Garment Lineage
-                </h3>
+              <section className="rounded-xl border border-border/80 bg-card p-4 shadow-xs lg:col-span-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Unbroken Raw-to-Garment Lineage
+                  </h3>
+                  <span className="text-[11px] font-medium text-success bg-success/10 px-2 py-0.5 rounded-full">
+                    Audited Chain
+                  </span>
+                </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   {d.lot ? (
-                    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-                      <Layers className="size-4 text-primary shrink-0" />
+                    <div className="flex items-center gap-2.5 rounded-lg border border-border/70 bg-muted/40 px-3.5 py-2.5 hover:border-primary/40 transition-colors">
+                      <div className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
+                        <Layers className="size-3.5" />
+                      </div>
                       <div>
                         <LinkIf
                           user={me}
@@ -145,31 +152,35 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                     <span className="text-muted-foreground">No lot record</span>
                   )}
 
-                  <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+                  <ArrowRight className="size-4 text-muted-foreground/60 shrink-0" />
 
                   {d.cuttingOutput ? (
-                    <div className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-3 py-2">
+                    <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-3.5 py-2.5 hover:border-primary/40 transition-colors">
                       <span className="text-muted-foreground font-semibold">Issue:</span>
-                      <span className="wt-id font-mono">{d.cuttingOutput.issueId}</span>
+                      <span className="wt-id font-mono font-bold text-foreground">{d.cuttingOutput.issueId}</span>
                     </div>
                   ) : null}
 
-                  <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+                  <ArrowRight className="size-4 text-muted-foreground/60 shrink-0" />
 
                   {d.cuttingOutput ? (
-                    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-                      <Scissors className="size-4 text-accent-foreground shrink-0" />
+                    <div className="flex items-center gap-2.5 rounded-lg border border-border/70 bg-muted/40 px-3.5 py-2.5 hover:border-primary/40 transition-colors">
+                      <div className="flex size-7 items-center justify-center rounded-md bg-accent/30 text-accent-foreground shrink-0">
+                        <Scissors className="size-3.5" />
+                      </div>
                       <div>
-                        <p className="font-semibold font-mono">{d.cuttingOutput.panelSetLabel}</p>
+                        <p className="font-semibold font-mono text-foreground">{d.cuttingOutput.panelSetLabel}</p>
                         <p className="text-[11px] text-muted-foreground">{d.cuttingOutput.fabricUsed} m attributed</p>
                       </div>
                     </div>
                   ) : null}
 
-                  <ArrowRight className="size-4 text-muted-foreground shrink-0" />
+                  <ArrowRight className="size-4 text-muted-foreground/60 shrink-0" />
 
-                  <div className="flex items-center gap-2 rounded-md border-2 border-primary/50 bg-primary/5 px-3 py-2">
-                    <Tag className="size-4 text-primary shrink-0" />
+                  <div className="flex items-center gap-2.5 rounded-lg border-2 border-primary bg-primary/5 px-3.5 py-2.5 shadow-2xs">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground shrink-0">
+                      <Tag className="size-3.5" />
+                    </div>
                     <div>
                       <p className="font-bold text-primary">{g.id}</p>
                       <p className="text-[11px] text-muted-foreground">{g.size ? `Size ${g.size}` : "One Size"}</p>
