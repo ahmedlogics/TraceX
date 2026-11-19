@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
 import pg from "pg";
+import { parse as parseConnectionString } from "pg-connection-string";
 import type { DatabasePoolOptions } from "./types";
 
 // Explicitly load .env from the application root
@@ -30,12 +31,14 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
     const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
     const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
 
+    const parsedConfig = parseConnectionString(connectionString);
+
     globalThis.__wt_pg_pool = new pg.Pool({
-      connectionString,
+      ...parsedConfig,
       max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
       connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 10000,
-      ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
+      ssl: ca ? { ca, rejectUnauthorized: true } : (parsedConfig.ssl ? { rejectUnauthorized: false } : undefined),
     });
 
     globalThis.__wt_pg_pool.on("error", (err) => {

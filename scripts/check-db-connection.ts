@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import dotenv from "dotenv";
 import pg from "pg";
+import { parse as parseConnectionString } from "pg-connection-string";
 
 // Ensure backend .env is loaded
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -38,10 +39,11 @@ async function runCheck() {
   const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
   const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
 
+  const parsedConfig = parseConnectionString(databaseUrl);
   const pool = new pg.Pool({
-    connectionString: databaseUrl,
+    ...parsedConfig,
     connectionTimeoutMillis: 10000,
-    ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
+    ssl: ca ? { ca, rejectUnauthorized: true } : (parsedConfig.ssl ? { rejectUnauthorized: false } : undefined),
   });
 
   try {
