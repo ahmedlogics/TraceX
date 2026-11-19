@@ -4,6 +4,8 @@ import { requestIdMiddleware } from "./middleware/requestId";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandlerMiddleware, notFoundMiddleware } from "./middleware/errorHandler";
 import { healthRouter } from "./routes/health";
+import { qualityRouter } from "./routes/quality";
+import { fulfilmentRouter } from "./routes/fulfilment";
 
 /**
  * Creates and configures the WearTrail Express application.
@@ -26,10 +28,14 @@ export function createExpressApp(): Express {
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
-  // 5. Catch unmapped routes
+  // 5. Domain API routers
+  app.use("/api/quality", qualityRouter);
+  app.use("/api/fulfilment", fulfilmentRouter);
+
+  // 6. Catch unmapped routes
   app.use(notFoundMiddleware);
 
-  // 6. Central error handler
+  // 7. Central error handler
   app.use(errorHandlerMiddleware);
 
   return app;
