@@ -188,33 +188,41 @@ export function TasksView() {
                         <div className="space-y-6">
                           {/* Metric Overview Cards */}
                           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                            <div className="rounded-lg border bg-card p-3 shadow-xs">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <Clock className="size-4 text-warning" />
-                                <span className="text-xs font-medium">Open Tasks</span>
+                            <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-warning/40 hover:shadow-sm transition-all duration-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">Open Tasks</span>
+                                <div className="flex size-7 items-center justify-center rounded-lg bg-warning/10 text-warning group-hover:scale-105 transition-transform">
+                                  <Clock className="size-3.5" />
+                                </div>
                               </div>
-                              <p className="mt-1 text-2xl font-bold">{openCount}</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight text-warning">{openCount}</p>
                             </div>
-                            <div className="rounded-lg border bg-card p-3 shadow-xs">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <UserCheck className="size-4 text-primary" />
-                                <span className="text-xs font-medium">Claimed / In Work</span>
+                            <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">Claimed / In Work</span>
+                                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                                  <UserCheck className="size-3.5" />
+                                </div>
                               </div>
-                              <p className="mt-1 text-2xl font-bold">{claimedCount}</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight text-primary">{claimedCount}</p>
                             </div>
-                            <div className="rounded-lg border bg-card p-3 shadow-xs">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <Radio className="size-4 text-accent-foreground" />
-                                <span className="text-xs font-medium">My Dept Queue</span>
+                            <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-accent-foreground/40 hover:shadow-sm transition-all duration-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">My Dept Queue</span>
+                                <div className="flex size-7 items-center justify-center rounded-lg bg-accent/30 text-accent-foreground group-hover:scale-105 transition-transform">
+                                  <Radio className="size-3.5" />
+                                </div>
                               </div>
-                              <p className="mt-1 text-2xl font-bold text-primary">{myDeptCount}</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight">{myDeptCount}</p>
                             </div>
-                            <div className="rounded-lg border bg-card p-3 shadow-xs">
-                              <div className="flex items-center gap-2 text-muted-foreground">
-                                <CheckCircle2 className="size-4 text-success" />
-                                <span className="text-xs font-medium">Completed</span>
+                            <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">Completed</span>
+                                <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
+                                  <CheckCircle2 className="size-3.5" />
+                                </div>
                               </div>
-                              <p className="mt-1 text-2xl font-bold text-muted-foreground">{doneCount}</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight text-muted-foreground">{doneCount}</p>
                             </div>
                           </div>
 
@@ -307,11 +315,11 @@ export function TasksView() {
                                   return (
                                     <div>
                                       {prereq.ready ? (
-                                        <span className="inline-flex items-center gap-1 rounded bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-semibold text-success border border-success/30">
                                           <CheckCircle2 className="size-3" /> {prereq.label}
                                         </span>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1 rounded bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger">
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-semibold text-destructive border border-destructive/30">
                                           <AlertCircle className="size-3" /> {prereq.label}
                                         </span>
                                       )}

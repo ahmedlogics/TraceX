@@ -139,33 +139,41 @@ export function OrdersView() {
             <div className="space-y-6">
               {/* Metric Overview Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Package className="size-4 text-primary" />
-                    <span className="text-xs font-medium">Total Orders</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Total Orders</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                      <Package className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold">{orders.length}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight">{orders.length}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <CheckCircle2 className="size-4 text-success" />
-                    <span className="text-xs font-medium">Approved / In Progress</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Approved / Active</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
+                      <CheckCircle2 className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-success">{approvedCount}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-success">{approvedCount}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Clock className="size-4 text-warning" />
-                    <span className="text-xs font-medium">Pending Approval</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-warning/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Pending Approval</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-warning/10 text-warning group-hover:scale-105 transition-transform">
+                      <Clock className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-warning">{pendingApproval}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-warning">{pendingApproval}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <ClipboardCheck className="size-4 text-muted-foreground" />
-                    <span className="text-xs font-medium">Planned Garments</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-muted-foreground/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Planned Garments</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:scale-105 transition-transform">
+                      <ClipboardCheck className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold">{totalPlanned} pcs</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight">{totalPlanned} pcs</p>
                 </div>
               </div>
 

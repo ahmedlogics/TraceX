@@ -107,33 +107,41 @@ export function LotsView() {
             <div className="space-y-6">
               {/* Metric Overview Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Layers className="size-4 text-primary" />
-                    <span className="text-xs font-medium">Fabric Lots</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Fabric Lots</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                      <Layers className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold">{lots.length}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight">{lots.length}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <CheckCircle2 className="size-4 text-success" />
-                    <span className="text-xs font-medium">Accepted Balance</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Accepted Balance</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
+                      <CheckCircle2 className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-success">{totalBalance.toFixed(1)} m</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-success">{totalBalance.toFixed(1)} m</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <PackagePlus className="size-4 text-warning" />
-                    <span className="text-xs font-medium">Awaiting QC</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-warning/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Awaiting QC</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-warning/10 text-warning group-hover:scale-105 transition-transform">
+                      <PackagePlus className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-warning">{awaitingQc}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-warning">{awaitingQc}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Tag className="size-4 text-accent-foreground" />
-                    <span className="text-xs font-medium">RFID Tagged</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-accent-foreground/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">RFID Tagged</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-accent/30 text-accent-foreground group-hover:scale-105 transition-transform">
+                      <Tag className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold">{assignedCards} / {lots.length}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight">{assignedCards} / {lots.length}</p>
                 </div>
               </div>
 
@@ -188,15 +196,15 @@ export function LotsView() {
                     cell: (l) => {
                       const pct = Math.max(0, Math.min(100, Math.round((l.balanceQty / l.receivedQty) * 100)));
                       return (
-                        <div className="space-y-1 min-w-[120px]">
+                        <div className="space-y-1.5 min-w-[130px]">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold tabular-nums">{l.balanceQty} {l.unit ?? "m"}</span>
+                            <span className="font-semibold tabular-nums text-foreground">{l.balanceQty} {l.unit ?? "m"}</span>
                             <span className="text-muted-foreground text-[11px]">of {l.receivedQty} {l.unit ?? "m"}</span>
                           </div>
-                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div className="h-2 w-full rounded-full bg-muted/80 overflow-hidden shadow-inner">
                             <div
-                              className={`h-full rounded-full transition-all ${
-                                l.balanceQty > 0 ? "bg-primary" : "bg-muted-foreground"
+                              className={`h-full rounded-full transition-all duration-300 ${
+                                l.balanceQty > 0 ? "bg-gradient-to-r from-primary to-primary/80" : "bg-muted-foreground"
                               }`}
                               style={{ width: `${pct}%` }}
                             />

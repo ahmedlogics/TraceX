@@ -61,33 +61,41 @@ export function GarmentsView() {
             <div className="space-y-6">
               {/* Metric Overview Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Tag className="size-4 text-primary" />
-                    <span className="text-xs font-medium">Total Garments</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Total Garments</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                      <Tag className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold">{gs.length}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight">{gs.length}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Scissors className="size-4 text-accent-foreground" />
-                    <span className="text-xs font-medium">In Assembly</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-accent-foreground/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">In Assembly</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-accent/30 text-accent-foreground group-hover:scale-105 transition-transform">
+                      <Scissors className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-primary">{inAssembly}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-primary">{inAssembly}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <CheckCircle2 className="size-4 text-success" />
-                    <span className="text-xs font-medium">QC Released</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">QC Released</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
+                      <CheckCircle2 className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-success">{releasedCount}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-success">{releasedCount}</p>
                 </div>
-                <div className="rounded-lg border bg-card p-3 shadow-xs">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <OctagonAlert className="size-4 text-destructive" />
-                    <span className="text-xs font-medium">Quality Holds</span>
+                <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-destructive/40 hover:shadow-sm transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Quality Holds</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive group-hover:scale-105 transition-transform">
+                      <OctagonAlert className="size-3.5" />
+                    </div>
                   </div>
-                  <p className="mt-1 text-2xl font-bold text-destructive">{heldCount}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-destructive">{heldCount}</p>
                 </div>
               </div>
 

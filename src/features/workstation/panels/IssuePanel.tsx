@@ -159,18 +159,26 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">Lifecycle state:</span>
                         {isCtxForThisStation ? (
-                          <StatusBadge
-                            status={activeCtx.status}
-                            tone={
-                              activeCtx.status === "ready"
-                                ? "success"
-                                : activeCtx.status === "awaiting_ack"
-                                  ? "warning"
-                                  : activeCtx.status === "confirmed"
-                                    ? "success"
-                                    : "neutral"
-                            }
-                          />
+                          <div className="inline-flex items-center gap-1.5">
+                            {activeCtx.status === "ready" && (
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                              </span>
+                            )}
+                            <StatusBadge
+                              status={activeCtx.status}
+                              tone={
+                                activeCtx.status === "ready"
+                                  ? "success"
+                                  : activeCtx.status === "awaiting_ack"
+                                    ? "warning"
+                                    : activeCtx.status === "confirmed"
+                                      ? "success"
+                                      : "neutral"
+                              }
+                            />
+                          </div>
                         ) : (
                           <StatusBadge status="idle" tone="neutral" />
                         )}
