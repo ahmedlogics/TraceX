@@ -296,4 +296,186 @@ describe("Member 2: Materials & Production Domain Logic", () => {
       expect(saved?.standardConsumptionMeters).toBe(3.2);
     });
   });
+
+  describe("Phase 5 — Complete Member 2 End-to-End Operational Lifecycle", () => {
+    it("executes the complete Member 2 flow from raw fabric bundle receipt through order issue, bench cutting, tag binding, and routine assembly to QA handoff", () => {
+      const s = createSeed();
+
+      // Factory staff operators
+      const rcvStaff = as(s, "receiving.demo");
+      const mgrStaff = as(s, "manager.demo");
+      const storeStaff = as(s, "rawstore.demo");
+      const cutStaff = as(s, "cutting.demo");
+      const stitchStaff = as(s, "stitching.demo");
+      const finishStaff = as(s, "finishing.demo");
+
+      // -------------------------------------------------------------
+      // 1. Raw Fabric Receipt & Bundle Card Binding at Station 1
+      // -------------------------------------------------------------
+      const lotId = E.receiveLot(s, rcvStaff, {
+        material: "100% Organic GOTS Cotton Poplin, Sky Blue, 140cm",
+        supplierRef: "GOTS-POPLIN-2026",
+        qty: 30.0,
+        unit: "m",
+      });
+      const lot = s.lots.find((l) => l.id === lotId)!;
+      expect(lot).toBeDefined();
+      expect(lot.status).toBe("awaiting-inspection");
+      expect(lot.balanceQty).toBe(30.0);
+
+      // Bind bundle RFID card at Station 1 (fabric_receiving)
+      const rcvCtx = E.prepareActionContext(s, rcvStaff, "fabric_receiving", "assign_bundle_card", {
+        kind: "assign_bundle_card",
+        lotId,
+      });
+      E.acknowledgeContext(s, rcvStaff, rcvCtx);
+      const rcvOutcome = E.resolveRfidScan(s, rcvStaff, "04EE5566");
+      expect(rcvOutcome.resolution).toBe("accepted");
+      expect(lot.rfidUid).toBe("04EE5566");
+
+      // -------------------------------------------------------------
+      // 2. Incoming QC Clearance (Member 3 Handoff)
+      // -------------------------------------------------------------
+      E.applyIncomingQCQuantity(s, lotId, 30.0, 0, 0);
+      expect(lot.status).toBe("accepted");
+      expect(lot.balanceQty).toBe(30.0);
+
+      // -------------------------------------------------------------
+      // 3. Digital Production Order Planning & Approval
+      // -------------------------------------------------------------
+      // Orders have NO RFID card; product specification determines standard consumption
+      const orderId = E.planOrder(s, mgrStaff, {
+        product: "Organic Oxford Shirt",
+        styleCode: "WT-SH-100",
+        qty: 2,
+        dueDate: "2026-12-20",
+      });
+      const order = s.orders.find((o) => o.id === orderId)!;
+      expect(order.status).toBe("planned");
+
+      // Manager approves order for factory production
+      E.approveOrder(s, mgrStaff, orderId);
+      expect(order.status).toBe("approved");
+
+      // -------------------------------------------------------------
+      // 4. Fabric Allocation & Physical Issue at Station 2 (fabric_issue)
+      // -------------------------------------------------------------
+      // 2 shirts * 2.0m consumption = 4.0m issued
+      const issCtx = E.prepareActionContext(s, storeStaff, "fabric_issue", "confirm_issue", {
+        kind: "confirm_issue",
+        lotId: lot.id,
+        orderId: order.id,
+        qty: 4.0,
+      });
+      E.acknowledgeContext(s, storeStaff, issCtx);
+
+      // Presenting the bundle card (04EE5566) confirms the physical warehouse transfer
+      const issOutcome = E.resolveRfidScan(s, storeStaff, "04EE5566");
+      expect(issOutcome.resolution).toBe("accepted");
+      expect(lot.balanceQty).toBe(26.0); // 30m - 4m = 26m
+      expect(order.status).toBe("in-progress");
+
+      const issueRecord = s.issues.find((i) => i.lotId === lot.id && i.orderId === order.id)!;
+      expect(issueRecord).toBeDefined();
+      expect(issueRecord.qty).toBe(4.0);
+
+      // -------------------------------------------------------------
+      // 5. Cutting Table Bench Lock at Station 3 (cutting)
+      // -------------------------------------------------------------
+      // Cutting operator locks the confirmed fabric source on the bench
+      const srcCtx = E.prepareActionContext(s, cutStaff, "cutting", "select_cutting_source", {
+        kind: "select_cutting_source",
+        orderId: order.id,
+        issueId: issueRecord.id,
+        consumedQty: 4.0,
+        wasteQty: 0.2,
+      });
+      E.acknowledgeContext(s, cutStaff, srcCtx);
+
+      // Tap the fabric bundle card to confirm source
+      const srcOutcome = E.resolveRfidScan(s, cutStaff, "04EE5566");
+      expect(srcOutcome.resolution).toBe("accepted");
+
+      const activeBenchSource = s.cuttingSourceSelections.find(
+        (cs) => cs.confirmedBy === cutStaff.id && cs.active,
+      )!;
+      expect(activeBenchSource).toBeDefined();
+      expect(activeBenchSource.lotId).toBe(lot.id);
+      expect(activeBenchSource.issueId).toBe(issueRecord.id);
+
+      // -------------------------------------------------------------
+      // 6. Individual Garment Card Binding at Station 3
+      // -------------------------------------------------------------
+      // Garment 1 (Size M) cut and tagged with fresh card 04771122
+      const g1Ctx = E.prepareActionContext(s, cutStaff, "cutting", "bind_garment_tag", {
+        kind: "bind_garment_tag",
+        cuttingSourceSelectionId: activeBenchSource.id,
+        orderId: order.id,
+        size: "M",
+      });
+      E.acknowledgeContext(s, cutStaff, g1Ctx);
+
+      const g1Outcome = E.resolveRfidScan(s, cutStaff, "04771122");
+      expect(g1Outcome.resolution).toBe("accepted");
+      const garment1 = s.garments.find((g) => g.id === g1Outcome.garmentCode)!;
+      expect(garment1).toBeDefined();
+      expect(garment1.rfidUid).toBe("04771122");
+      expect(garment1.size).toBe("M");
+      expect(garment1.stage).toBe("stitching");
+      expect(garment1.disposition).toBe("not-inspected");
+
+      // Verify exact actual lineage for Garment 1
+      const cut1 = s.cuttingOutputs.find((c) => c.id === garment1.cuttingOutputId)!;
+      expect(cut1.issueId).toBe(issueRecord.id);
+      expect(cut1.lotId).toBe(lot.id);
+      expect(cut1.fabricUsed).toBe(2.0); // 4.0m / 2 planned shirts = 2.0m each
+
+      // Cutting source remains active on bench for Garment 2 without re-entering bundle data!
+      expect(activeBenchSource.active).toBe(true);
+
+      // Garment 2 (Size L) cut and tagged with fresh card 04882233
+      const g2Ctx = E.prepareActionContext(s, cutStaff, "cutting", "bind_garment_tag", {
+        kind: "bind_garment_tag",
+        cuttingSourceSelectionId: activeBenchSource.id,
+        orderId: order.id,
+        size: "L",
+      });
+      E.acknowledgeContext(s, cutStaff, g2Ctx);
+
+      const g2Outcome = E.resolveRfidScan(s, cutStaff, "04882233");
+      expect(g2Outcome.resolution).toBe("accepted");
+      const garment2 = s.garments.find((g) => g.id === g2Outcome.garmentCode)!;
+      expect(garment2.rfidUid).toBe("04882233");
+      expect(garment2.size).toBe("L");
+
+      // -------------------------------------------------------------
+      // 7. Routine Assembly Advancement at Stations 4 & 5
+      // -------------------------------------------------------------
+      // Station 4: Routine Stitching scan — identity resolved purely from card UID 04771122
+      const stitchOutcome = E.routineScan(s, stitchStaff, "04771122", "stitching");
+      expect(stitchOutcome.resolution).toBe("accepted");
+      expect(garment1.stage).toBe("finishing");
+
+      // Station 5: Routine Finishing scan — advances directly to Final QC
+      const finishOutcome = E.routineScan(s, finishStaff, "04771122", "finishing");
+      expect(finishOutcome.resolution).toBe("accepted");
+      expect(garment1.stage).toBe("final-qc");
+      expect(garment1.disposition).toBe("awaiting-inspection");
+
+      // Inspection record created for Member 3 (QA) handoff
+      const insp = s.inspections.find((i) => i.subjectId === garment1.id && i.kind === "final");
+      expect(insp).toBeDefined();
+      expect(insp?.status).toBe("open");
+
+      // -------------------------------------------------------------
+      // 8. End-to-End Trace Lineage Verification
+      // -------------------------------------------------------------
+      // Garment 1 -> Cutting Output 1 -> Issue Movement -> Material Lot (Cotton Poplin)
+      expect(garment1.cuttingOutputId).toBe(cut1.id);
+      expect(cut1.issueId).toBe(issueRecord.id);
+      expect(cut1.lotId).toBe(lot.id);
+      expect(issueRecord.lotId).toBe(lot.id);
+      expect(lot.material).toBe("100% Organic GOTS Cotton Poplin, Sky Blue, 140cm");
+    });
+  });
 });
