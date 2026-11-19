@@ -73,3 +73,16 @@ export {
   type SimulationResult,
 } from "./rfid/simulator";
 export { rfidRouter } from "./routes/rfid";
+
+// Ledger Commitment & Outbox Services
+export {
+  createInternalCommitment,
+  createPublicCommitment,
+  computeCommitmentId,
+  getActiveLedgerDeployment,
+  ledgerOutboxService,
+  LedgerOutboxService,
+  type CreateInternalCommitmentInput,
+  type CreatePublicCommitmentInput,
+  type EnqueuedCommitmentResult,
+} from "./ledger";

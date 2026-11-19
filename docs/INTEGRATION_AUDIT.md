@@ -50,7 +50,8 @@ Status Definitions:
 | **Database Connectivity** | Member 1 | Connect to Supabase PostgreSQL pooler on port 5432 with verified TLS and private `supplyease` schema. | **`[VERIFIED REAL]`** | [src/server/db/pool.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/db/pool.ts), [scripts/check-db-connection.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/scripts/check-db-connection.ts) | Node warning regarding `pg-connection-string` SSL mode alias (addressed via explicit CA cert). |
 | **Prisma 7 Setup & Baseline** | Member 1 | Single shared Prisma client, introspected models, 13 custom relation fixes, applied baseline migration. | **`[VERIFIED REAL]`** | [prisma/schema.prisma](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/prisma/schema.prisma), [src/server/db/client.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/db/client.ts) | Prisma cannot represent custom triggers or partial indexes natively; relies on PostgreSQL enforcement. |
 | **Express Foundation** | Member 1 | Request correlation IDs, CORS allowlist, body bounds, `/healthz` & `/ready` probes, standard error responses. | **`[VERIFIED REAL]`** | [src/server/app.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/app.ts), [src/server/middleware/](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/middleware/) | Domain routes (`/api/*`) are not yet mounted in `app.ts`. |
-| **Smart Contract & Hashing** | Member 1 | Append-only commitment store, writer auth, identical retry idempotency, conflicting write revert, canonical SHA-256. | **`[VERIFIED REAL]`** | [packages/blockchain/contracts/WearTrailCommitmentStore.sol](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/packages/blockchain/contracts/WearTrailCommitmentStore.sol), [src/domain/canonical.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/domain/canonical.ts) | Worker daemon that syncs `supplyease.ledger_outbox` to the contract is missing. |
+| **Smart Contract & Hashing** | Member 1 | Append-only commitment store, writer auth, identical retry idempotency, conflicting write revert, canonical SHA-256. | **`[VERIFIED REAL]`** | [packages/blockchain/contracts/WearTrailCommitmentStore.sol](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/packages/blockchain/contracts/WearTrailCommitmentStore.sol), [src/domain/canonical.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/domain/canonical.ts) | 22 Hardhat tests passing; contract registered in DB table `supplyease.ledger_deployments`. |
+| **Ledger Commitments & Outbox** | Member 1 | Atomic transaction-scoped internal/public commitment creation, `sha256_nonce_v1` formula, outbox enqueueing. | **`[VERIFIED REAL / HARNESS]`** | [src/server/ledger/commitment-service.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/ledger/commitment-service.ts), [docs/LEDGER_PRE_INTEGRATION.md](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/docs/LEDGER_PRE_INTEGRATION.md) | Verified active deployment in PostgreSQL DB; 12 unit tests passing in `src/test/ledger-commitments.test.ts`. Outbox worker daemon remains pending. |
 | **Staff Auth & ActorContext** | Member 4 | Secure password hashing (`scrypt`), credential tokens, session lifecycle, role/department authorization. | **`[VERIFIED REAL / MOCK]`** | [src/server/auth/actor-context.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/auth/actor-context.ts), [src/domain/permissions.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/domain/permissions.ts) | Session store in `actor-context.ts` uses in-memory Map; needs persistence to `supplyease.staff_sessions`. |
 | **Materials & Receipts** | Member 2 | Supplier lot receipt, unit tracking, material issue reducing stock balances, no order-level RFID cards. | **`[VERIFIED MOCK]`** | [src/features/material-lots/](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/material-lots/), [src/mock/engine.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/mock/engine.ts#L430) | Implemented only in browser mock engine; Express Prisma service not yet wired. |
 | **Cutting Enrollment & Lineage** | Member 2 | Multi-card split (Card A remains bundle card; Cards B/C bind distinct garments), order & source attribution. | **`[VERIFIED MOCK]`** | [src/features/workstation/CuttingPanel.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/workstation/CuttingPanel.tsx), [src/mock/engine.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/mock/engine.ts#L910) | UI talks to mock client. No real database insertion of `garments` and `rfid_tag_bindings`. |
@@ -171,14 +172,20 @@ sequenceDiagram
   - Conflicting write rejection (`ConflictingCommitment` revert when same ID is submitted with a different hash).
   - Empty hash/ID rejection.
   - Batch commitment execution.
-- **Integration Gap:** The contract is not deployed to an active testnet or local node during app startup, and no records exist in the database `ledger_deployments` table.
+- **Database Registration:** Active deployment verified in PostgreSQL table `supplyease.ledger_deployments`:
+  - Deployment ID: `7c41dac6-1687-4608-a9ce-bee3c57179f3`
+  - Code: `local-hardhat-20261119150320-1c094d99`
+  - Chain ID: `31337`
+  - Contract Address: `0x5FbDB2315678afecb367f032d93F642f64180aa3`
+  - Tx Hash: `0x1c094d99ba4fa2e1f19944fb3f219269866ec39ca09abab50f358e8ef69a7819`
+- **Integration Status:** Full transaction-scoped commitment and outbox enqueueing implemented in [src/server/ledger/commitment-service.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/ledger/commitment-service.ts). Background broadcast worker daemon is pending.
 
-### B. Canonical Serialization & Hashing (`src/domain/canonical.ts`)
+### B. Canonical Serialization & Hashing (`src/domain/canonical.ts` & `src/server/ledger/commitment-service.ts`)
 - **Implementation:** Recursively sorts object keys, formats UTF-8 string without whitespace, and produces consistent SHA-256 digests.
-- **Formulas:**
-  - Internal Factory Events: `sha256(canonicalPayload + privateNonce)` (`sha256_nonce_v1`).
-  - Public Commitments: `sha256(canonicalPublicPayload)`.
-- **Status:** Verified with automated unit tests in `src/test/access-public.test.ts`.
+- **Formulas & Compliance:**
+  - Internal Factory Events: `SHA256(nonce || canonicalBytes)` using `sha256_nonce_v1`, with private unpredictable 32-byte nonces generated via `crypto.randomBytes(32)`. Fully satisfies PostgreSQL constraint `ledger_commitment_hash_scheme` and trigger `protect_new_private_commitment`.
+  - Public Commitments: `sha256` of canonical public payload bytes; internal nonces and internal payload bytes strictly kept `NULL`.
+- **Status:** Verified with automated unit tests in `src/test/access-public.test.ts` and `src/test/ledger-commitments.test.ts`.
 
 ### C. Public Customer Experience (`/p/:publicId`)
 - **Views:** [PublicJourneyView.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/public/PublicJourneyView.tsx) and [PublicProofView.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/public/PublicProofView.tsx) provide an interactive timeline, human-readable status cards, and cryptographic proof inspector.
@@ -215,16 +222,17 @@ sequenceDiagram
 ### Test Suites
 ```bash
 $ npm test
-✓ src/test/app-routing.test.tsx (1 test)
-✓ src/test/workflow.test.ts (11 tests)
-✓ src/test/server-foundation.test.ts (14 tests)
-✓ src/test/quality-fulfilment.test.ts (9 tests)
+✓ src/test/ledger-commitments.test.ts (12 tests)
 ✓ src/test/materials-production.test.ts (9 tests)
+✓ src/test/quality-fulfilment.test.ts (9 tests)
 ✓ src/test/access-public.test.ts (13 tests)
+✓ src/test/workflow.test.ts (11 tests)
+✓ src/test/scan-ingestion.test.ts (25 tests)
+✓ src/test/server-foundation.test.ts (14 tests)
+✓ src/test/app-routing.test.tsx (1 test)
 
-Test Files  6 passed (6)
-     Tests  57 passed (57)
-  Duration  1.61s
+Test Files  8 passed (8)
+     Tests  94 passed (94)
 ```
 
 ### Blockchain Test Suites
