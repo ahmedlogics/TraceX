@@ -24,6 +24,7 @@ import {
   finishingScanHandler,
 } from "./domain-handlers";
 import { getPersistedFulfilmentEligibility } from "../fulfilment/fulfilment-service";
+import { publishPublicGarmentPayload } from "../public/public-service";
 
 /**
  * Station 6: Final QA Scan Handler.
@@ -641,6 +642,12 @@ export class DispatchScanHandler implements DomainScanHandler<ScanOutcomeResult>
       },
       tx,
     );
+
+    try {
+      await publishPublicGarmentPayload(tx, subject.subjectId, staffUserId);
+    } catch (pubErr) {
+      console.warn(`[DISPATCH_SCAN_WARN] Public payload publication skipped for garment ${subject.subjectId}:`, pubErr);
+    }
 
     return {
       scanId: envelope.scanId,

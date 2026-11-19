@@ -25,6 +25,7 @@ import type {
 } from "../contracts/quality-fulfilment";
 import type { ActorContext } from "../contracts/actor";
 import { ensureStaffUserRecord } from "../quality/quality-service";
+import { publishPublicGarmentPayload } from "../public/public-service";
 
 function isValidUuid(id?: string): boolean {
   if (!id) return false;
@@ -864,7 +865,7 @@ export async function confirmShipmentDeparture(
     });
   }
 
-  // Commit departure: update garments
+  // Commit departure: update garments and publish public payload
   for (const g of manifestGarments) {
     await tx.garments.update({
       where: { id: g.id },
@@ -873,6 +874,12 @@ export async function confirmShipmentDeparture(
         revision: { increment: 1 },
       },
     });
+
+    try {
+      await publishPublicGarmentPayload(tx, g.id, staffUserId);
+    } catch (pubErr) {
+      console.warn(`[FULFILMENT_WARN] Public payload publication skipped for garment ${g.id}:`, pubErr);
+    }
   }
 
   return {

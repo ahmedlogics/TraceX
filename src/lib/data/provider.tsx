@@ -14,6 +14,11 @@ const DATA_MODE_STORAGE_KEY = "weartrail.data_mode";
  * Defaults to "mock" for isolated client development unless configured or toggled to "live".
  */
 export function getDataMode(): DataMode {
+  // Anonymous customer journey and technical proof routes must always query live API data
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/p/")) {
+    return "live";
+  }
+
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem(DATA_MODE_STORAGE_KEY);
@@ -27,8 +32,8 @@ export function getDataMode(): DataMode {
   if (envMode === "live") return "live";
   if (envMode === "mock") return "mock";
 
-  // When backend is explicitly configured via VITE_API_URL, default to live
-  if (import.meta.env?.["VITE_API_URL"]) return "live";
+  // When backend is explicitly configured via VITE_API_URL or VITE_API_BASE_URL, default to live
+  if (import.meta.env?.["VITE_API_URL"] || import.meta.env?.["VITE_API_BASE_URL"]) return "live";
 
   return "mock";
 }

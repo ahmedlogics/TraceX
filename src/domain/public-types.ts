@@ -56,6 +56,7 @@ export interface PublicJourney {
 
 export interface PublicPayload {
   schema: "weartrail.public-journey/v1";
+  schemaVersion?: number | undefined;
   publicId: string;
   version: number;
   productName: string;

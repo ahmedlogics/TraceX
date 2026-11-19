@@ -7,9 +7,11 @@
  * deterministic canonical UTF-8 JSON hashing, and truthful blockchain evidence derivation.
  */
 import crypto from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, public_payload_versions } from "@prisma/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { toCanonicalJson, toUtf8Bytes } from "@/domain/canonical";
+import { createPublicCommitment, type EnqueuedCommitmentResult } from "../ledger/commitment-service";
+import { ApiError } from "../middleware/responses";
 import type {
   PublicEvidenceState,
   PublicJourney,
@@ -224,8 +226,8 @@ export async function getPublicJourney(
     return null;
   }
 
-  const spec = garment.cutting_jobs.production_orders.product_spec_versions;
-  const productName = spec.product_name;
+  const spec = garment.cutting_jobs?.production_orders?.product_spec_versions;
+  const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
   const productDescription =
     typeof spec.specifications === "object" &&
     spec.specifications !== null &&
@@ -324,6 +326,7 @@ export async function getPublicJourney(
   // Build canonical payload for hashing
   const publicPayload: PublicPayload = {
     schema: "weartrail.public-journey/v1",
+    schemaVersion: 1,
     publicId: garment.public_id,
     version,
     productName,
@@ -444,3 +447,195 @@ export async function getPublicProof(
     blockchain,
   };
 }
+
+export interface PublishGarmentPayloadResult {
+  versionRecord: public_payload_versions;
+  commitment: EnqueuedCommitmentResult;
+  publicId: string;
+  journeyHash: string;
+  payload: PublicPayload;
+}
+
+/**
+ * Constructs, canonically hashes, and records a new versioned public payload for a garment
+ * in `supplyease.public_payload_versions` and atomically enqueues its blockchain commitment
+ * into `supplyease.ledger_commitments` and `supplyease.ledger_outbox`.
+ *
+ * Strictly adheres to the public allowlist (no internal defect notes, staff names, or nonces).
+ */
+export async function publishPublicGarmentPayload(
+  tx: PrismaTransactionClient,
+  garmentId: string,
+  approvedById: string,
+): Promise<PublishGarmentPayloadResult> {
+  const garment = await tx.garments.findUnique({
+    where: { id: garmentId },
+    include: {
+      cutting_jobs: {
+        include: {
+          production_orders: {
+            include: {
+              product_spec_versions: true,
+            },
+          },
+        },
+      },
+      garment_holds: {
+        where: { released_at: null },
+      },
+      garment_material_inputs: {
+        include: {
+          cutting_inputs: {
+            include: {
+              material_stock_movements: {
+                include: {
+                  material_lots: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      inspections: true,
+      trace_events: {
+        orderBy: { occurred_at: "asc" },
+      },
+    },
+  });
+
+  if (!garment) {
+    throw ApiError.notFound(`Garment '${garmentId}' not found for public publication.`, { garmentId }, "WT_ERR_NOT_FOUND");
+  }
+
+  const spec = garment.cutting_jobs?.production_orders?.product_spec_versions;
+  const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
+
+  // Resolve next sequential version index for this garment's public ID
+  const latestVersion = await tx.public_payload_versions.findFirst({
+    where: { public_id: garment.public_id },
+    orderBy: { version: "desc" },
+  });
+  const versionIndex = (latestVersion?.version ?? 0) + 1;
+
+  // Determine current public status
+  const hasActiveHold = garment.garment_holds.length > 0;
+  let status: PublicStatus;
+  if (hasActiveHold) {
+    status = "Temporarily on hold";
+  } else if (garment.stage === "dispatched") {
+    status = "Dispatched to authorized retail network";
+  } else {
+    status = "In production";
+  }
+
+  // Construct allowable public milestones
+  const milestones: PublicMilestone[] = [];
+
+  const lotInput = garment.garment_material_inputs[0]?.cutting_inputs?.material_stock_movements?.material_lots;
+  if (lotInput) {
+    milestones.push({
+      key: "fabric-sourced",
+      label: "Fabric lot received",
+      date: day(lotInput.received_at),
+      department: "Materials",
+      lotLevel: true,
+      description: MILESTONE_DESCRIPTIONS["fabric-sourced"],
+    });
+  }
+
+  milestones.push({
+    key: "garment-cut",
+    label: "Cut from fabric lot",
+    date: day(garment.created_at),
+    department: "Production",
+    description: MILESTONE_DESCRIPTIONS["garment-cut"],
+  });
+
+  const assemblyEvent = garment.trace_events.find(
+    (e) => e.event_type === "finishing_completed" || e.event_type === "assembly_completed",
+  );
+  if (assemblyEvent) {
+    milestones.push({
+      key: "garment-assembled",
+      label: "Garment assembled",
+      date: day(assemblyEvent.occurred_at),
+      department: "Production",
+      description: MILESTONE_DESCRIPTIONS["garment-assembled"],
+    });
+  }
+
+  const inspectionPassed = garment.quality_disposition === "released";
+  if (!hasActiveHold && inspectionPassed) {
+    const passedDate = garment.inspections?.submitted_at ?? garment.created_at;
+    milestones.push({
+      key: "quality-passed",
+      label: "Passed quality control",
+      date: day(passedDate),
+      department: "Quality Control",
+      description: MILESTONE_DESCRIPTIONS["quality-passed"],
+    });
+  }
+
+  if (garment.stage === "dispatched") {
+    const dispatchEvent = garment.trace_events.find((e) => e.event_type === "shipment_dispatched");
+    const dispatchDate = dispatchEvent?.occurred_at ?? new Date();
+    milestones.push({
+      key: "dispatched",
+      label: "Dispatched to authorized retail network",
+      date: day(dispatchDate),
+      department: "Logistics",
+      description: MILESTONE_DESCRIPTIONS["dispatched"],
+    });
+  }
+
+  const payload: PublicPayload = {
+    schema: "weartrail.public-journey/v1",
+    schemaVersion: 1,
+    publicId: garment.public_id,
+    version: versionIndex,
+    productName,
+    garmentReference: garment.id,
+    status,
+    size: garment.size_label ?? undefined,
+    milestones: milestones.map((m) => ({
+      key: m.key,
+      label: m.label,
+      date: m.date,
+      department: m.department,
+      lotLevel: m.lotLevel,
+    })),
+  };
+
+  const canonicalJson = toCanonicalJson(payload);
+  const payloadBytes = Buffer.from(canonicalJson, "utf-8");
+  const payloadSha256 = crypto.createHash("sha256").update(payloadBytes).digest();
+
+  const versionRecord = await tx.public_payload_versions.create({
+    data: {
+      garment_id: garment.id,
+      public_id: garment.public_id,
+      version: versionIndex,
+      schema_version: 1,
+      payload_bytes: new Uint8Array(payloadBytes),
+      approved_by: approvedById,
+      published_at: new Date(),
+    },
+  });
+
+  const commitment = await createPublicCommitment(
+    {
+      publicPayloadId: versionRecord.id,
+      payloadSha256,
+    },
+    tx,
+  );
+
+  return {
+    versionRecord,
+    commitment,
+    publicId: garment.public_id,
+    journeyHash: payloadSha256.toString("hex"),
+    payload,
+  };
+}
+
