@@ -28,7 +28,16 @@ export function createCorsMiddleware() {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id", "X-WearTrail-Device"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Request-Id",
+      "X-WearTrail-Device",
+      "X-Actor-Role",
+      "X-Actor-Dept",
+      "X-Actor-Username",
+      "X-Actor-Id",
+    ],
     exposedHeaders: ["X-Request-Id"],
     maxAge: 86400, // 24 hours
   });

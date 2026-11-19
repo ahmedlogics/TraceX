@@ -35,7 +35,7 @@ function resolveActor(req: Request, _res: Response, next: NextFunction): void {
     return next();
   }
 
-  if (process.env["NODE_ENV"] === "test" || !process.env["NODE_ENV"]) {
+  if (process.env["NODE_ENV"] !== "production") {
     const role = (req.headers["x-actor-role"] as StaffRole) || "logistics";
     const dept = (req.headers["x-actor-dept"] as Department) || "packing";
     const username = (req.headers["x-actor-username"] as string) || "logistics.operator";
