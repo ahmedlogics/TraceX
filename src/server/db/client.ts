@@ -8,7 +8,6 @@ import { getPgPool, closePgPool } from "./pool";
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 declare global {
-  // eslint-disable-next-line no-var
   var __wt_prisma: PrismaClient | undefined;
 }
 

@@ -14,37 +14,52 @@ import { validatePasswordStrength } from "@/domain/crypto-auth";
 
 function CardWrapper({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-background px-4 py-10">
-      <div className="mx-auto max-w-md space-y-6">
+    <div className="relative min-h-screen bg-[#0B0713] text-[#F3F0F8] px-4 py-12 overflow-hidden selection:bg-purple-500/30 selection:text-purple-100">
+      {/* Ambient background glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed -top-40 left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-purple-600/15 blur-[120px] animate-ambient-pulse"
+      />
+      <div className="relative z-10 mx-auto max-w-md space-y-6">
         <div className="text-center">
           <AppLink
             href={paths.login}
-            className="inline-block rounded-xl border bg-card px-5 py-2.5 shadow-sm"
+            className="inline-flex items-center gap-2.5 rounded-2xl border border-purple-500/20 bg-[#160E24]/90 px-5 py-3 shadow-xl backdrop-blur-xl hover:border-purple-400/40 transition-colors"
             aria-label="Back to staff sign-in"
           >
-            <Logo height={32} />
+            <span className="flex h-6 w-6 items-center justify-center rounded bg-purple-500/20 text-white">
+              <svg width="14" height="9" viewBox="0 0 24 14" fill="none" className="text-white">
+                <path
+                  d="M1 7C3.5 2 6 2 8.5 7C11 12 13.5 12 16 7C18.5 2 21 2 23 7"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+            <span className="font-bold text-white tracking-tight">WearTrail</span>
           </AppLink>
         </div>
-        <section className="rounded-xl border bg-card p-6 shadow-sm">{children}</section>
-        <div className="text-center text-xs text-muted-foreground">
-          <p className="mb-1 font-medium">Sample test tokens:</p>
-          <div className="flex justify-center gap-3">
+        <section className="rounded-3xl border border-purple-500/20 bg-[#160E24]/90 p-7 shadow-2xl backdrop-blur-xl">
+          {children}
+        </section>
+        <div className="text-center text-xs text-purple-300/70">
+          <p className="mb-1.5 font-medium text-purple-200">Sample test tokens:</p>
+          <div className="flex justify-center gap-2">
             <AppLink
-              className="text-primary underline hover:text-primary/80"
+              className="rounded-full border border-purple-700/40 bg-purple-950/40 px-2.5 py-1 text-[11px] font-mono text-purple-300 hover:text-white hover:border-purple-500 transition-colors"
               href={paths.credentials("demo-valid-token")}
             >
               valid token
             </AppLink>
-            {" · "}
             <AppLink
-              className="text-primary underline hover:text-primary/80"
+              className="rounded-full border border-purple-700/40 bg-purple-950/40 px-2.5 py-1 text-[11px] font-mono text-purple-300 hover:text-white hover:border-purple-500 transition-colors"
               href={paths.credentials("demo-expired-token")}
             >
               expired token
             </AppLink>
-            {" · "}
             <AppLink
-              className="text-primary underline hover:text-primary/80"
+              className="rounded-full border border-purple-700/40 bg-purple-950/40 px-2.5 py-1 text-[11px] font-mono text-purple-300 hover:text-white hover:border-purple-500 transition-colors"
               href={paths.credentials("demo-used-token")}
             >
               used token
