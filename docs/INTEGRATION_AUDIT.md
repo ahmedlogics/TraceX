@@ -1,25 +1,32 @@
 # WearTrail Integration Audit & Application Health Report
 
-**Audit Date:** 19 November 2026  
-**Repository Branch:** `integration/audit-checkpoint`  
+**Audit Date:** 20 November 2026  
+**Repository Branch:** `backend/live`  
 **Auditor:** Member 1 (Platform & Integration Lead)  
-**Status:** Integrated Checkpoint Created & Audited across All 4 Member Branches  
+**Status:** Members 2 & 3 Merged into `backend/live`, Integration Wiring Complete, 12 Test Files Passed (150 Tests Passing, 100%)  
 
 ---
 
 ## 1. Executive Summary
 
-WearTrail has reached a critical integration milestone. All four member feature branches have been merged into the unified integration branch `integration/audit-checkpoint`:
-- **Member 1 (`origin/ahmed`):** Shared Express/TypeScript platform foundation, Prisma 7 database configuration, scan contracts, Hardhat 3 blockchain commitment store, and test harness.
-- **Member 4 (`origin/areeba`):** Staff access, scrypt password hashing, session tokens, ActorContext builder, customer-facing public journey, public cryptographic proof, user administration, and audit views.
-- **Member 2 (`origin/basim`):** Materials receiving, stock accounting, production orders, material issuing, cutting enrollment with multi-card split (Card A bundle, Cards B/C garments), routine stitching/finishing station panels, and task registers.
-- **Member 3 (`origin/daniyal`):** Lot incoming QC, pre-scan QA decision-first flow, quality holds & rework cases, independent reinspection verification, packing eligibility gate, warehouse movements, and outbound shipment gate.
+WearTrail has completed the backend integration checkpoint on `backend/live`. Members 2 (`origin/basim`) and 3 (`origin/daniyal`) have been merged, and Member 1's integration wiring across domain services, scan handlers, and ledger outbox workers is complete and verified.
 
 ### Actual Completion State
-The project currently exhibits **two distinct, highly functional halves that are not yet connected across their runtime boundary**:
-1. **The Frontend & Mock Domain Layer is 100% Complete & Passing:** All 26 planned UI routes compile, build (`npm run build` in 1.25s), and run cleanly. The rich domain logic across materials, cutting, routine production, quality holds, rework, packing, shipments, auth, and public journey is thoroughly verified through **57 passing integration and workflow tests** executing against the browser-local mock engine (`src/mock/engine.ts`).
-2. **The Database & Blockchain Foundation is 100% Verified:** The shared Prisma 7 ORM connects to the live Supabase PostgreSQL database (`aws-1-ap-southeast-1.pooler.supabase.com:5432`) under private schema `supplyease` (59 tables) with verified TLS certificates. Baseline migration `20261118_weartrail_rfid_v1` is applied. The smart contract `WearTrailCommitmentStore.sol` is fully tested with **22 passing Hardhat tests** enforcing owner authorization, idempotency, and conflict rejection.
-3. **The Core Integration Gap (The "Mock Island"):** The frontend UI remains wired to `createMockClient` in [src/lib/data/provider.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/lib/data/provider.tsx#L16). The Express application in [src/server/app.ts](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/server/app.ts) currently mounts only health probes (`/healthz`, `/ready`), while domain endpoints (`/api/materials`, `/api/production`, `/api/quality`, `/api/fulfilment`, `/api/auth`, `/api/rfid`, `/api/public`) are not yet routed to live Prisma queries. Connecting the frontend `WearTrailClient` to a live Express HTTP client and wiring the scan orchestrator to live transactions is the remaining bridge to complete production readiness.
+1. **The Merged & Wired Backend is Fully Operational:**
+   - Express application in `src/server/app.ts` mounts all 6 domain route namespaces: `/api/materials`, `/api/production`, `/api/tasks`, `/api/quality`, `/api/fulfilment`, and `/api/rfid`.
+   - All 9 factory station scan handlers (Stations 1-5 from Member 2, Stations 6-9 from Member 3) are registered with the central scan router `src/server/rfid/scan-router.ts`.
+   - Every domain scan operation executes within an atomic PostgreSQL transaction that updates entity lifecycle state, logs immutable trace events, and enqueues ledger commitments using scheme `sha256_nonce_v1`.
+2. **Automated End-to-End Workflow Verification:**
+   - 12 Vitest test files with 150 automated tests pass with a 100% success rate across the entire repository.
+   - Dedicated combined integration test `src/test/combined-domain-workflow.test.ts` exercises the complete 10-step lifecycle: fabric receiving (20m), lot incoming QC acceptance (20m), issuing to two orders (8m and 6m, leaving 6m unallocated), cutting enrollment with roll attribution, stitching and finishing stage advancement, result-first card-second final QA (passing Garment B and holding Garment A with defect & rework case), packing eligibility gate blocking Garment A while Garment B proceeds, technician repair recording, strict rejection of repairer self-approval (`WT_ERR_INDEPENDENT_QC`), independent reinspector approval and release, packing of the released garment, departure gate hold blocking, and clean transaction rollback.
+3. **Ledger Outbox & Worker Subsystem:**
+   - Smart contract `WearTrailCommitmentStore.sol` is compiled and verified with 22 passing Hardhat tests.
+   - Active deployment registered in PostgreSQL table `supplyease.ledger_deployments`.
+   - `LedgerOutboxWorker` daemon leases pending batches with crash recovery, submits opaque hashes using `SignerNonceManager`, and reconciles receipts idempotently.
+4. **Current External Boundary (Pending Member 4):**
+   - The React frontend (`src/lib/data/provider.tsx`) still uses `createMockClient`.
+   - Member 4 is currently completing persistent staff sessions in `supplyease.staff_sessions`, the HTTP `WearTrailClient`, and the customer-facing public journey projection.
+   - Express routes strictly enforce production authorization (`requireAuthenticatedActor`), rejecting unauthenticated requests with `401 WT_ERR_UNAUTHORIZED`.
 
 ---
 
@@ -27,12 +34,10 @@ The project currently exhibits **two distinct, highly functional halves that are
 
 | Branch Name | Audited Commit SHA | Purpose & Scope | Integration Status | Merge Resolution Notes |
 |---|---|---|---|---|
-| **Baseline** | `1f946d723a9ffd4a99ab20f67abdcce3b3006599` | Server-only Prisma 7 foundation & environment configuration | Common Base | Pinned Prisma 7, Supabase session pooler configuration, verified TLS cert setup. |
-| **Member 1 (`origin/ahmed`)** | `8cf956399dd5495a777e1fb6784472b3e5c9fd60` | Express foundation, middleware, RFID & workstation contracts, Hardhat commitment store | Base for Checkpoint | Established `src/server/`, `packages/blockchain/`, server tests, and atomic transaction helper `runInTransaction`. |
-| **Member 4 (`origin/areeba`)** | `df852b881335b7194f42f741ae01a248f2195dfb` | Staff access, auth hashing, ActorContext, public journey & proof UI, admin/audit/reports | Merged (`f8da4bc`) | **Conflicts Resolved:** Kept Member 1's validated `schema.prisma` (13 relation fixes for Prisma 7 vs unvalidated raw introspection); preserved verified TLS with CA certs in `check-db-connection.ts` (areeba had set `rejectUnauthorized: false`). |
-| **Member 2 (`origin/basim`)** | `93ac97e9d7211ba10dd065dd6774ecfa324545bc` | Materials, production orders, issuing, cutting enrollment, routine production, station panels | Merged (`f719e8a`) | **Conflicts Resolved:** Combined Member 4 auth types and Member 2 product spec types in `src/domain/types.ts`; merged fixtures; kept Member 2's authoritative `GarmentsView.tsx`; preserved verified TLS in `src/server/db/pool.ts`. |
-| **Member 3 (`origin/daniyal`)** | `2eb200e65c010a3dd9195b6c3697a3a60c8e2270` | Incoming lot QC, pre-scan QA decision, rework cases, independent reinspection, fulfilment gates | Merged (`ee98591`) | **Conflicts Resolved:** Harmonized `releaseHold` in `src/domain/permissions.ts` to accept either `reworkCase?: ReworkCase \| null` or `repairPerformerId?: string`, satisfying both Member 3 and Member 4 signatures while enforcing the independent reinspector rule; preserved verified TLS. |
-| **Checkpoint Fix** | `28b37fe9fdf6d2ba7cb84a51167439009ce43dbf` | Post-merge syntax cleanup | HEAD of `integration/audit-checkpoint` | Removed stray closing brace at line 72 of `src/domain/types.ts`. All 57 tests passing. |
+| **Baseline Integration** | `447975608f502a871ccf07c59bf857c1303a82f4` | Base of `backend/live` with scan ingestion & ledger worker | Baseline | Created recovery reference `backup/backend-live-pre-merge-m2-m3` before merging. |
+| **Member 2 (`origin/basim`)** | `5332e28b5bd4f5e55322e9d1faff8347fe6b30e3` | Materials, production orders, issuing, cutting enrollment, routine production | Merged (`5332e28`) | Fast-forward merge into `backend/live`. |
+| **Member 3 (`origin/daniyal`)** | `05f378e3330fe6970f4d4cbe3c06bb89236c5cce` | Incoming QC, Final QA, rework cases, independent reinspection, fulfilment gates | Merged (`7b7e12d`) | **Conflict Resolved in `src/server/app.ts`:** Preserved and mounted all route namespaces (`/api/materials`, `/api/production`, `/api/tasks`, `/api/quality`, `/api/fulfilment`, `/api/rfid`); registered all 9 station scan handlers; exported handlers in `src/server/index.ts`. |
+| **Combined Integration Verification** | `HEAD` (`backend/live`) | End-to-end multi-domain integration test suite & wiring completion | Current HEAD | Added `src/test/combined-domain-workflow.test.ts`. 150/150 tests passing. |
 
 ---
 
@@ -229,11 +234,14 @@ $ npm test
 ✓ src/test/scan-ingestion.test.ts (25 tests)
 ✓ src/test/ledger-commitments.test.ts (12 tests)
 ✓ src/test/ledger-worker.test.ts (11 tests)
+✓ src/test/combined-domain-workflow.test.ts (4 tests)
 ✓ src/test/server-foundation.test.ts (14 tests)
+✓ src/test/materials-persistence.test.ts (19 tests)
+✓ src/test/quality-fulfilment-persistence.test.ts (22 tests)
 ✓ src/test/app-routing.test.tsx (1 test)
 
-Test Files  9 passed (9)
-     Tests  105 passed (105)
+Test Files  12 passed (12)
+     Tests  150 passed (150)
 ```
 
 ### Blockchain Test Suites

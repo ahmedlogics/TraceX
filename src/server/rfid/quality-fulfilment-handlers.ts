@@ -1,0 +1,695 @@
+import crypto from "node:crypto";
+import type { PrismaTransactionClient } from "../db/types";
+import type {
+  DomainScanContext,
+  DomainScanHandler,
+  PreparedScanSubject,
+  RfidStationCode,
+  ScanOutcomeResult,
+  VersionedScanEnvelope,
+} from "../contracts/rfid";
+import { normalizeTagUid } from "../contracts/rfid";
+import { ApiError } from "../middleware/responses";
+import { scanRoutingService, ScanRoutingService } from "./scan-router";
+import { createInternalCommitment } from "../ledger/commitment-service";
+import {
+  ensureStaffUserRecord,
+  getOrCreateChecklistVersion,
+} from "../quality/quality-service";
+import {
+  fabricReceivingScanHandler,
+  fabricIssueScanHandler,
+  cuttingScanHandler,
+  stitchingScanHandler,
+  finishingScanHandler,
+} from "./domain-handlers";
+import { getPersistedFulfilmentEligibility } from "../fulfilment/fulfilment-service";
+
+/**
+ * Station 6: Final QA Scan Handler.
+ * Result-First, Card-Second Quality Evaluation.
+ *
+ * Phase 1 (`prepare`):
+ *   - Resolves garment card binding.
+ *   - Verifies garment stage is 'finished'.
+ *   - Resolves armed QC action context with selected outcome (pass/fail).
+ *   - Enforces independent inspector rule on reinspections (technician cannot approve own repair).
+ *
+ * Phase 2 (`process`):
+ *   - Creates immutable inspection record.
+ *   - On Pass: updates garment quality_disposition to 'released', increments revision, resolves rework cases.
+ *   - On Fail: updates garment quality_disposition to 'held', opens garment_hold, and creates rework_case.
+ *   - Consumes action context, logs trace_events, and emits internal commitment (sha256_nonce_v1).
+ */
+export class FinalQcScanHandler implements DomainScanHandler<ScanOutcomeResult> {
+  readonly stationCode: RfidStationCode = "final_qc";
+
+  async prepare(
+    envelope: VersionedScanEnvelope,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<PreparedScanSubject> {
+    const tagUid = normalizeTagUid(envelope.tagUid);
+
+    // 1. Resolve active garment binding
+    const binding = await tx.rfid_tag_bindings.findFirst({
+      where: { tag_uid: tagUid, unbound_at: null },
+      include: {
+        garments: true,
+        material_lots: true,
+      },
+    });
+
+    if (!binding) {
+      throw ApiError.badRequest(
+        `Scanned card UID '${tagUid}' is not bound to any known entity.`,
+        { tagUid },
+        "WT_ERR_UNKNOWN_CARD",
+      );
+    }
+
+    if (binding.material_lot_id && !binding.garment_id) {
+      throw ApiError.badRequest(
+        `Card UID '${tagUid}' is bound to fabric lot '${binding.material_lots?.code ?? binding.material_lot_id}'. Expected garment card.`,
+        { tagUid },
+        "WT_ERR_WRONG_SUBJECT_TYPE",
+      );
+    }
+
+    if (!binding.garment_id || !binding.garments) {
+      throw ApiError.badRequest(
+        `Card UID '${tagUid}' is not actively bound to a garment.`,
+        { tagUid },
+        "WT_ERR_UNBOUND_CARD",
+      );
+    }
+
+    const garment = binding.garments;
+
+    // 2. Validate garment stage: must be 'finished'
+    if (garment.stage !== "finished") {
+      throw ApiError.badRequest(
+        `Garment '${garment.code}' is at stage '${garment.stage}', expected 'finished'.`,
+        { garmentId: garment.id, stage: garment.stage },
+        "WT_ERR_WRONG_STAGE",
+      );
+    }
+
+    // 3. Action Context is strictly required at Final QA
+    if (!envelope.actionContextId) {
+      throw ApiError.badRequest(
+        "Station final_qc requires an armed action context before scanning card.",
+        undefined,
+        "WT_ERR_CONTEXT_REQUIRED",
+      );
+    }
+
+    const actionContext = await tx.rfid_action_contexts.findUnique({
+      where: { id: envelope.actionContextId },
+    });
+
+    if (!actionContext || Boolean(actionContext.closed_at)) {
+      throw ApiError.badRequest(
+        "Armed QC action context is missing, expired, or already closed.",
+        { actionContextId: envelope.actionContextId },
+        "WT_ERR_CONTEXT_EXPIRED",
+      );
+    }
+
+    if (actionContext.status === "consumed") {
+      throw ApiError.conflict(
+        "Armed QC action context has already been consumed.",
+        { actionContextId: envelope.actionContextId },
+        "WT_ERR_CONTEXT_ALREADY_CONSUMED",
+      );
+    }
+
+    if (!actionContext.qc_outcome) {
+      throw ApiError.badRequest(
+        "Armed action context does not have a recorded QC outcome (pass/fail).",
+        undefined,
+        "WT_ERR_NO_CONTEXT",
+      );
+    }
+
+    // 4. Independent Reinspection Check
+    const operatorId =
+      context?.actor?.actorId || (context as any)?.operator?.actorId || context?.session?.operatorId;
+    if (actionContext.qc_scope === "reinspection" && operatorId) {
+      const activeRework = await tx.rework_cases.findFirst({
+        where: {
+          garment_id: garment.id,
+          status: { in: ["assigned", "repair_recorded"] },
+        },
+        include: {
+          repair_records: {
+            orderBy: { performed_at: "desc" },
+            take: 1,
+          },
+        },
+      });
+
+      if (activeRework && activeRework.repair_records.length > 0) {
+        const latestRepair = activeRework.repair_records[0];
+        if (latestRepair && latestRepair.performed_by === operatorId) {
+          throw ApiError.forbidden(
+            "The technician who performed the repair cannot approve their own repair. Independent inspector required.",
+            "WT_ERR_INDEPENDENT_QC",
+          );
+        }
+      }
+    }
+
+    return {
+      kind: "garment",
+      subjectId: garment.id,
+      subjectCode: garment.code,
+      isNewEnrollment: false,
+      tagUid,
+      tagBindingId: binding.id,
+    };
+  }
+
+  async process(
+    envelope: VersionedScanEnvelope,
+    subject: PreparedScanSubject,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<ScanOutcomeResult> {
+    const actionContext = await tx.rfid_action_contexts.findUniqueOrThrow({
+      where: { id: envelope.actionContextId! },
+    });
+
+    const garment = await tx.garments.findUniqueOrThrow({
+      where: { id: subject.subjectId },
+    });
+
+    const actor = context?.actor ?? (context as any)?.operator;
+    const staffUserId = actor
+      ? await ensureStaffUserRecord(tx, actor, "final_qc")
+      : ((await tx.reader_sessions.findUnique({ where: { id: actionContext.reader_session_id } }))?.operator_id ??
+        (await tx.staff_users.findFirstOrThrow()).id);
+
+    const scope = (actionContext.qc_scope ?? "final") as "final" | "reinspection";
+    const checklistVer = await getOrCreateChecklistVersion(tx, scope, staffUserId);
+
+    // 1. Record immutable inspection
+    const inspectionCode = `INSP-QA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const inspection = await tx.inspections.create({
+      data: {
+        code: inspectionCode,
+        scope,
+        checklist_version_id: checklistVer.id,
+        garment_id: garment.id,
+        inspector_id: staffUserId,
+        outcome: actionContext.qc_outcome!,
+        answers: (actionContext.answers as any) ?? {},
+        notes: actionContext.notes ?? null,
+        defect_reason:
+          actionContext.qc_outcome === "fail"
+            ? (actionContext.defect_reason ?? "Inspection failed")
+            : null,
+        submitted_at: new Date(),
+      },
+    });
+
+    let holdOpened = false;
+
+    // 2. Branch outcome
+    if (actionContext.qc_outcome === "pass") {
+      // Pass: release garment
+      await tx.garments.update({
+        where: { id: garment.id },
+        data: {
+          quality_disposition: "released",
+          revision: { increment: 1 },
+        },
+      });
+
+      // If resolving active rework case, mark it reinspected_passed and close the hold
+      const activeRework = await tx.rework_cases.findFirst({
+        where: { garment_id: garment.id, status: { in: ["open", "assigned", "repair_recorded"] } },
+        orderBy: { opened_at: "desc" },
+      });
+
+      if (activeRework) {
+        await tx.rework_cases.update({
+          where: { id: activeRework.id },
+          data: {
+            status: "closed",
+          },
+        });
+
+        if (activeRework.hold_id) {
+          await tx.garment_holds.update({
+            where: { id: activeRework.hold_id },
+            data: {
+              released_at: new Date(),
+              released_by: staffUserId,
+              release_reason: "Passed independent reinspection",
+            },
+          });
+        }
+      }
+    } else {
+      // Fail: open hold and rework case
+      holdOpened = true;
+      const hold = await tx.garment_holds.create({
+        data: {
+          garment_id: garment.id,
+          kind: "quality",
+          origin_inspection_id: inspection.id,
+          reason: actionContext.defect_reason || "Failed Final QA inspection",
+          opened_by: staffUserId,
+          opened_at: new Date(),
+        },
+      });
+
+      await tx.rework_cases.create({
+        data: {
+          code: `RWK-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          garment_id: garment.id,
+          hold_id: hold.id,
+          status: "open",
+          description: actionContext.defect_reason || "Failed Final QA inspection",
+          opened_by: staffUserId,
+          opened_at: new Date(),
+        },
+      });
+
+      await tx.garments.update({
+        where: { id: garment.id },
+        data: {
+          quality_disposition: "held",
+          revision: { increment: 1 },
+        },
+      });
+    }
+
+    // 3. Close action context as consumed
+    await tx.rfid_action_contexts.update({
+      where: { id: actionContext.id },
+      data: {
+        status: "consumed",
+        closed_at: new Date(),
+        close_reason: `Inspection ${actionContext.qc_outcome} confirmed via card scan`,
+      },
+    });
+
+    // 4. Record trace event
+    const now = new Date();
+    const traceEvent = await tx.trace_events.create({
+      data: {
+        event_type: actionContext.qc_outcome === "pass" ? "qa_passed" : "qa_failed",
+        subject_type: "garment",
+        subject_id: garment.id,
+        subject_revision: garment.revision + 1,
+        garment_id: garment.id,
+        inspection_id: inspection.id,
+        actor_id: staffUserId,
+        details: {
+          inspectionId: inspection.id,
+          outcome: actionContext.qc_outcome,
+          scope,
+          holdOpened,
+        },
+        occurred_at: now,
+        recorded_at: now,
+      },
+    });
+
+    // 5. Emit transaction-scoped internal commitment (sha256_nonce_v1)
+    await createInternalCommitment(
+      {
+        traceEventId: traceEvent.id,
+        payload: {
+          eventType: traceEvent.event_type,
+          garmentId: garment.id,
+          inspectionId: inspection.id,
+          outcome: actionContext.qc_outcome,
+          timestamp: traceEvent.occurred_at.toISOString(),
+        },
+      },
+      tx,
+    );
+
+    return {
+      scanId: envelope.scanId,
+      outcome: actionContext.qc_outcome === "pass" ? "accepted" : "rejected",
+      outcomeCode: actionContext.qc_outcome === "pass" ? "QC_PASSED" : "QC_FAILED",
+      outcomeMessage:
+        actionContext.qc_outcome === "pass"
+          ? "Garment passed Final QA inspection; released for packing"
+          : "Garment failed Final QA inspection; quality hold and rework case opened",
+      stationCode: "final_qc",
+      subjectKind: "garment",
+      subjectId: garment.id,
+      subjectCode: garment.code,
+      processedAt: new Date().toISOString(),
+      nextExpectedStation: actionContext.qc_outcome === "pass" ? "packing" : undefined,
+    };
+  }
+}
+
+/**
+ * Station 7: Packing Scan Handler.
+ * Gate: Garment must have quality_disposition === 'released' and ZERO active holds.
+ */
+export class PackingScanHandler implements DomainScanHandler<ScanOutcomeResult> {
+  readonly stationCode: RfidStationCode = "packing";
+
+  async prepare(
+    envelope: VersionedScanEnvelope,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<PreparedScanSubject> {
+    const tagUid = normalizeTagUid(envelope.tagUid);
+
+    const binding = await tx.rfid_tag_bindings.findFirst({
+      where: { tag_uid: tagUid, unbound_at: null },
+      include: { garments: true },
+    });
+
+    if (!binding || !binding.garment_id || !binding.garments) {
+      throw ApiError.badRequest(
+        `Card UID '${tagUid}' is not actively bound to a garment.`,
+        { tagUid },
+        "WT_ERR_UNKNOWN_CARD",
+      );
+    }
+
+    const garment = binding.garments;
+
+    // Enforce fulfilment gate
+    const eligibility = await getPersistedFulfilmentEligibility(tx, garment.id, "packing");
+    if (!eligibility.eligible) {
+      throw ApiError.badRequest(
+        `Packing blocked: ${eligibility.blockingReasons.join("; ")}`,
+        { garmentId: garment.id, reasons: eligibility.blockingReasons },
+        "WT_ERR_FULFILMENT_BLOCKED",
+      );
+    }
+
+    return {
+      kind: "garment",
+      subjectId: garment.id,
+      subjectCode: garment.code,
+      isNewEnrollment: false,
+      tagUid,
+      tagBindingId: binding.id,
+    };
+  }
+
+  async process(
+    envelope: VersionedScanEnvelope,
+    subject: PreparedScanSubject,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<ScanOutcomeResult> {
+    const garment = await tx.garments.update({
+      where: { id: subject.subjectId },
+      data: {
+        stage: "packed",
+        revision: { increment: 1 },
+      },
+    });
+
+    const staffUserId =
+      context?.actor?.actorId ??
+      (context as any)?.operator?.actorId ??
+      (await tx.staff_users.findFirstOrThrow()).id;
+
+    const now = new Date();
+    const traceEvent = await tx.trace_events.create({
+      data: {
+        event_type: "garment_packed",
+        subject_type: "garment",
+        subject_id: garment.id,
+        subject_revision: garment.revision,
+        garment_id: garment.id,
+        actor_id: staffUserId,
+        details: { stage: "packed" },
+        occurred_at: now,
+        recorded_at: now,
+      },
+    });
+
+    await createInternalCommitment(
+      {
+        traceEventId: traceEvent.id,
+        payload: {
+          eventType: "garment_packed",
+          garmentId: garment.id,
+          stage: "packed",
+          timestamp: traceEvent.occurred_at.toISOString(),
+        },
+      },
+      tx,
+    );
+
+    return {
+      scanId: envelope.scanId,
+      outcome: "accepted",
+      outcomeCode: "PACKING_ACCEPTED",
+      outcomeMessage: `Garment ${garment.code} packed successfully`,
+      stationCode: "packing",
+      subjectKind: "garment",
+      subjectId: garment.id,
+      subjectCode: garment.code,
+      processedAt: new Date().toISOString(),
+      nextExpectedStation: "warehouse",
+    };
+  }
+}
+
+/**
+ * Station 8: Warehouse Movement Scan Handler.
+ */
+export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult> {
+  readonly stationCode: RfidStationCode = "warehouse";
+
+  async prepare(
+    envelope: VersionedScanEnvelope,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<PreparedScanSubject> {
+    const tagUid = normalizeTagUid(envelope.tagUid);
+
+    const binding = await tx.rfid_tag_bindings.findFirst({
+      where: { tag_uid: tagUid, unbound_at: null },
+      include: { garments: true },
+    });
+
+    if (!binding || !binding.garment_id || !binding.garments) {
+      throw ApiError.badRequest(
+        `Card UID '${tagUid}' is not actively bound to a garment.`,
+        { tagUid },
+        "WT_ERR_UNKNOWN_CARD",
+      );
+    }
+
+    return {
+      kind: "garment",
+      subjectId: binding.garments.id,
+      subjectCode: binding.garments.code,
+      isNewEnrollment: false,
+      tagUid,
+      tagBindingId: binding.id,
+    };
+  }
+
+  async process(
+    envelope: VersionedScanEnvelope,
+    subject: PreparedScanSubject,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<ScanOutcomeResult> {
+    const staffUserId =
+      context?.actor?.actorId ??
+      (context as any)?.operator?.actorId ??
+      (await tx.staff_users.findFirstOrThrow()).id;
+
+    const now = new Date();
+    const traceEvent = await tx.trace_events.create({
+      data: {
+        event_type: "warehouse_movement",
+        subject_type: "garment",
+        subject_id: subject.subjectId,
+        subject_revision: 1,
+        garment_id: subject.subjectId,
+        actor_id: staffUserId,
+        details: { location: "main_warehouse" },
+        occurred_at: now,
+        recorded_at: now,
+      },
+    });
+
+    await createInternalCommitment(
+      {
+        traceEventId: traceEvent.id,
+        payload: {
+          eventType: "warehouse_movement",
+          garmentId: subject.subjectId,
+          timestamp: traceEvent.occurred_at.toISOString(),
+        },
+      },
+      tx,
+    );
+
+    return {
+      scanId: envelope.scanId,
+      outcome: "accepted",
+      outcomeCode: "WAREHOUSE_ACCEPTED",
+      outcomeMessage: `Warehouse movement recorded for ${subject.subjectCode}`,
+      stationCode: "warehouse",
+      subjectKind: "garment",
+      subjectId: subject.subjectId,
+      subjectCode: subject.subjectCode,
+      processedAt: new Date().toISOString(),
+      nextExpectedStation: "dispatch",
+    };
+  }
+}
+
+/**
+ * Station 9: Dispatch Scan Handler.
+ * Gate: Evaluates package and shipment eligibility. Blocks if any garment has an active hold.
+ */
+export class DispatchScanHandler implements DomainScanHandler<ScanOutcomeResult> {
+  readonly stationCode: RfidStationCode = "dispatch";
+
+  async prepare(
+    envelope: VersionedScanEnvelope,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<PreparedScanSubject> {
+    const tagUid = normalizeTagUid(envelope.tagUid);
+
+    const binding = await tx.rfid_tag_bindings.findFirst({
+      where: { tag_uid: tagUid, unbound_at: null },
+      include: {
+        garments: {
+          include: {
+            garment_holds: { where: { released_at: null } },
+          },
+        },
+      },
+    });
+
+    if (!binding || !binding.garment_id || !binding.garments) {
+      throw ApiError.badRequest(
+        `Card UID '${tagUid}' is not actively bound to a garment.`,
+        { tagUid },
+        "WT_ERR_UNKNOWN_CARD",
+      );
+    }
+
+    const garment = binding.garments;
+
+    if (garment.garment_holds.length > 0) {
+      throw ApiError.badRequest(
+        `Dispatch departure blocked: Garment '${garment.code}' has an active quality hold.`,
+        { garmentId: garment.id },
+        "WT_ERR_DISPATCH_HOLD_ACTIVE",
+      );
+    }
+
+    return {
+      kind: "garment",
+      subjectId: garment.id,
+      subjectCode: garment.code,
+      isNewEnrollment: false,
+      tagUid,
+      tagBindingId: binding.id,
+    };
+  }
+
+  async process(
+    envelope: VersionedScanEnvelope,
+    subject: PreparedScanSubject,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
+  ): Promise<ScanOutcomeResult> {
+    const staffUserId =
+      context?.actor?.actorId ??
+      (context as any)?.operator?.actorId ??
+      (await tx.staff_users.findFirstOrThrow()).id;
+
+    const now = new Date();
+    const traceEvent = await tx.trace_events.create({
+      data: {
+        event_type: "shipment_dispatched",
+        subject_type: "garment",
+        subject_id: subject.subjectId,
+        subject_revision: 1,
+        garment_id: subject.subjectId,
+        actor_id: staffUserId,
+        details: { dispatched: true },
+        occurred_at: now,
+        recorded_at: now,
+      },
+    });
+
+    await createInternalCommitment(
+      {
+        traceEventId: traceEvent.id,
+        payload: {
+          eventType: "shipment_dispatched",
+          garmentId: subject.subjectId,
+          timestamp: traceEvent.occurred_at.toISOString(),
+        },
+      },
+      tx,
+    );
+
+    return {
+      scanId: envelope.scanId,
+      outcome: "accepted",
+      outcomeCode: "DISPATCH_ACCEPTED",
+      outcomeMessage: `Garment ${subject.subjectCode} cleared dispatch departure gate`,
+      stationCode: "dispatch",
+      subjectKind: "garment",
+      subjectId: subject.subjectId,
+      subjectCode: subject.subjectCode,
+      processedAt: new Date().toISOString(),
+    };
+  }
+}
+
+// Singletons
+export const finalQcScanHandler = new FinalQcScanHandler();
+export const packingScanHandler = new PackingScanHandler();
+export const warehouseScanHandler = new WarehouseScanHandler();
+export const dispatchScanHandler = new DispatchScanHandler();
+
+/**
+ * Registers all Member 3 quality and fulfilment domain scan handlers.
+ */
+export function registerMember3ScanHandlers(
+  router: ScanRoutingService = scanRoutingService,
+): void {
+  router.registerHandler(finalQcScanHandler);
+  router.registerHandler(packingScanHandler);
+  router.registerHandler(warehouseScanHandler);
+  router.registerHandler(dispatchScanHandler);
+}
+
+/**
+ * Registers all station scan handlers across Members 2 & 3 (Stations 1 through 9).
+ */
+export function registerAllDomainScanHandlers(
+  router: ScanRoutingService = scanRoutingService,
+): void {
+  // Member 2: Stations 1 - 5
+  router.registerHandler(fabricReceivingScanHandler);
+  router.registerHandler(fabricIssueScanHandler);
+  router.registerHandler(cuttingScanHandler);
+  router.registerHandler(stitchingScanHandler);
+  router.registerHandler(finishingScanHandler);
+
+  // Member 3: Stations 6 - 9
+  router.registerHandler(finalQcScanHandler);
+  router.registerHandler(packingScanHandler);
+  router.registerHandler(warehouseScanHandler);
+  router.registerHandler(dispatchScanHandler);
+}

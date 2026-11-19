@@ -79,6 +79,23 @@ export {
   type SimulationResult,
 } from "./rfid/simulator";
 export { rfidRouter } from "./routes/rfid";
+export {
+  registerMember2ScanHandlers,
+  FabricReceivingScanHandler,
+  FabricReceivingScanHandler as ReceivingScanHandler,
+  FabricIssueScanHandler,
+  CuttingScanHandler,
+  StitchingScanHandler,
+  FinishingScanHandler,
+} from "./rfid/domain-handlers";
+export {
+  registerMember3ScanHandlers,
+  registerAllDomainScanHandlers,
+  FinalQcScanHandler,
+  PackingScanHandler,
+  WarehouseScanHandler,
+  DispatchScanHandler,
+} from "./rfid/quality-fulfilment-handlers";
 
 // Ledger Commitment & Outbox Services
 export {
