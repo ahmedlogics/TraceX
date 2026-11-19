@@ -34,9 +34,19 @@ async function runCheck() {
     process.exit(1);
   }
 
+  let cleanUrl = databaseUrl;
+  if (!cleanUrl.includes("uselibpqcompat=")) {
+    cleanUrl = cleanUrl.includes("?")
+      ? `${cleanUrl}&uselibpqcompat=true`
+      : `${cleanUrl}?uselibpqcompat=true`;
+  }
+
   const pool = new pg.Pool({
-    connectionString: databaseUrl,
+    connectionString: cleanUrl,
     connectionTimeoutMillis: 10000,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   });
 
   try {

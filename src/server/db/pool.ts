@@ -26,11 +26,20 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
 
   if (!globalThis.__wt_pg_pool) {
     const maxVal = process.env["DB_POOL_MAX"];
+    let targetUrl = connectionString;
+    const isSupabaseOrSsl =
+      targetUrl.includes("supabase.com") || targetUrl.includes("sslmode=");
+    if (isSupabaseOrSsl && !targetUrl.includes("uselibpqcompat=")) {
+      targetUrl = targetUrl.includes("?")
+        ? `${targetUrl}&uselibpqcompat=true`
+        : `${targetUrl}?uselibpqcompat=true`;
+    }
     globalThis.__wt_pg_pool = new pg.Pool({
-      connectionString,
+      connectionString: targetUrl,
       max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
       connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 10000,
+      ssl: isSupabaseOrSsl ? { rejectUnauthorized: false } : undefined,
     });
 
     globalThis.__wt_pg_pool.on("error", (err) => {
