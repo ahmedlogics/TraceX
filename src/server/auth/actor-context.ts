@@ -238,3 +238,30 @@ export function createPrismaAuthMiddleware(prisma: PrismaClient): RequestHandler
     }
   };
 }
+
+/**
+ * Global session resolution middleware.
+ * Attempts to extract and resolve a staff session from Authorization headers or cookies.
+ * Attaches req.actor and req.staffUser if a valid active session is found.
+ * Does not block anonymous access, allowing public endpoints to proceed while
+ * populating context for protected downstream guards.
+ */
+export function createSessionResolverMiddleware(prisma: PrismaClient): RequestHandler {
+  return async (req, _res, next): Promise<void> => {
+    try {
+      const token = extractSessionToken(req as unknown as RequestLike);
+      if (token) {
+        const resolved = await resolveSession(prisma, token);
+        if (resolved && resolved.user.status === "active") {
+          req.actor = toServerActorContext(resolved.user, resolved.sessionId);
+          (req as unknown as { staffUser?: unknown }).staffUser = resolved.user;
+          (req as unknown as { sessionToken?: string }).sessionToken = token;
+        }
+      }
+      next();
+    } catch {
+      next();
+    }
+  };
+}
+

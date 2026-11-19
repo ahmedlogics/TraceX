@@ -23,7 +23,10 @@
     "blockchain:node": "npm --prefix packages/blockchain run node",
     "blockchain:deploy:local": "npm --prefix packages/blockchain run deploy:local",
     "blockchain:register": "npm --prefix packages/blockchain run register:deployment",
-    "ledger:worker": "tsx scripts/ledger-worker.ts"
+    "ledger:worker": "tsx scripts/ledger-worker.ts",
+    "bootstrap:staff": "tsx scripts/bootstrap-staff.ts",
+    "bootstrap:simulator": "tsx scripts/bootstrap-simulator.ts",
+    "simulate:scan": "tsx scripts/simulate-scan.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"

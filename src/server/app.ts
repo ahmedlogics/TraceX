@@ -15,6 +15,8 @@ import { publicRouter } from "./routes/public";
 import { staffRouter } from "./routes/staff";
 import { registerMember2ScanHandlers } from "./rfid/domain-handlers";
 import { registerMember3ScanHandlers } from "./rfid/quality-fulfilment-handlers";
+import { prisma } from "./db/client";
+import { createSessionResolverMiddleware } from "./auth/actor-context";
 
 /**
  * Creates and configures the WearTrail Express application.
@@ -33,7 +35,10 @@ export function createExpressApp(): Express {
   app.use(express.json({ limit: serverConfig.bodyLimit }));
   app.use(express.urlencoded({ extended: false, limit: serverConfig.bodyLimit }));
 
-  // 4. Liveness and Readiness probes
+  // 4. Session resolution middleware (populates req.actor when Bearer token/cookie is present)
+  app.use(createSessionResolverMiddleware(prisma));
+
+  // 5. Liveness and Readiness probes
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
