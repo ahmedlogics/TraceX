@@ -843,9 +843,9 @@ flowchart LR
   - Implemented pure domain engine ([src/mock/engine.ts](src/mock/engine.ts)) with `DEMO_STATE_VERSION = 5`.
   - Verified 12 Vitest unit and integration tests passing.
 - **Milestone 2: Database Foundation & Express API (`IN PROGRESS`):**
-  - **Prisma 7 Foundation (COMPLETED):** Configured Prisma 7 (`7.10.1`) with `@prisma/adapter-pg` driver adapter targeting private `supplyease` schema, singleton connection pool with graceful shutdown in [src/server/db/](src/server/db/), typed transaction client, `.env.example`, `.env` ignore rules, and [scripts/check-db-connection.ts](scripts/check-db-connection.ts).
-  - **Introspection & Baseline (PENDING CREDENTIALS):** Run `npm run db:pull` once credentials are populated in local `.env`, verify models, and register initial baseline migration.
-  - **Express Server (NEXT):** Implement Express server with REST endpoints matching [src/lib/data/client.ts](src/lib/data/client.ts) and replace mock client with fetch adapter.
+  - **Prisma 7 Foundation & Schema Introspection (COMPLETED & VERIFIED):** Configured Prisma 7 (`7.10.1`) with `@prisma/adapter-pg` driver adapter targeting private `supplyease` schema, singleton connection pool with graceful shutdown in [src/server/db/](src/server/db/), typed transaction client, `.env.example`, `.env` ignore rules, and [scripts/check-db-connection.ts](scripts/check-db-connection.ts). Introspected all 58 models into [prisma/schema.prisma](prisma/schema.prisma), resolved composite foreign key relations into one-to-many, registered baseline migration `20261118_weartrail_rfid_v1`, and verified live read-only query against Supabase IPv4 Session pooler on port 5432.
+  - **Shared Express Server & Contracts Foundation (COMPLETED by Member 1):** Built production Express server foundation in [src/server/](src/server/) with validated Zod configuration, request correlation IDs, explicit CORS origin allowlist, bounded request bodies, standardized response envelopes (`sendSuccess`, `sendError`), sanitized error logging, minimal liveness (`/healthz`) and readiness (`/ready`) probes, graceful shutdown hooks, and shared transaction runner `runInTransaction`. Established versioned scan envelope (`VersionedScanEnvelope`), actor authorization guards (`requireAuthenticatedActor`, `requireRole`, `requireDepartment`), domain scan handler contracts supporting both Cutting enrollment and QA without database insertion order failures, transaction-scoped services (`ITraceAuditService`, `ISubjectRevisionService`, `ILedgerOutboxService`), public publication hook (`IPublicPublicationHook`), and workstation transport interfaces for Members 2 and 3.
+  - **Domain REST Routes & Handlers (NEXT for Teammates):** Member 2 implements Materials & Production handlers/routes; Member 3 implements Quality & Logistics handlers/routes; Member 4 connects real authentication.
 - **Milestone 3: USB Serial Bridge & ESP32 Bench Integration (`PLANNED`):**
   - Flash ESP32 controller firmware; connect 9 RC522 reader modules.
   - Test physical channels; record and activate draft `device_reader_mappings`.
@@ -862,7 +862,7 @@ flowchart LR
 # 1. Install dependencies from lockfile
 npm install
 
-# 2. Run unit and behavioral test suite (12 tests)
+# 2. Run unit and behavioral test suite (26 tests)
 npm test
 
 # 3. Typecheck codebase with zero emit
@@ -874,22 +874,28 @@ npm run lint
 # 5. Format code with Prettier
 npm run format
 
-# 6. Start local development server (http://localhost:8080)
+# 6. Start local Vite frontend development server (http://localhost:8080)
 npm run dev
 
-# 7. Production build with Vite and Nitro
+# 7. Start local Express backend API server (http://localhost:4000)
+npm run server:dev
+
+# 8. Start production Express backend API server
+npm run server:start
+
+# 9. Production build with Vite and Nitro
 npm run build
 
-# 8. Database connectivity check (non-destructive; uses DATABASE_URL in .env)
+# 10. Database connectivity check (non-destructive; uses DATABASE_URL in .env)
 npm run db:check
 
-# 9. Validate Prisma 7 schema and configuration
+# 11. Validate Prisma 7 schema and configuration
 npm run db:validate
 
-# 10. Generate Prisma Client (does not require database connection)
+# 12. Generate Prisma Client (does not require database connection)
 npm run db:generate
 
-# 11. Introspect Supabase database into prisma/schema.prisma (requires MIGRATION_DATABASE_URL in .env)
+# 13. Introspect Supabase database into prisma/schema.prisma (requires MIGRATION_DATABASE_URL in .env)
 npm run db:pull
 ```
 
@@ -907,6 +913,82 @@ Server-side environment variables required for backend integration (stored secur
 | `LEDGER_SIGNER_KEY` | Private key for signing on-chain commitment transactions. | Backend / Worker |
 | `PUBLIC_APP_URL` | Public base URL for customer QR codes (e.g., `https://weartrail.com`). | Frontend / Backend |
 
+### 11.4 Shared Backend Foundation & Teammate Integration Guide
+
+Member 1 has completed the shared server foundation in `src/server/`. Teammates must import all shared infrastructure and contracts from `src/server` (or `src/server/contracts`):
+
+#### 1. Core Module Paths & Shared Exports
+
+| Export / Capability | Source Path | Teammate Import Path | Purpose & Ownership |
+|---|---|---|---|
+| **Prisma Client & Pool** | `src/server/db/client.ts`, `src/server/db/pool.ts` | `import { prisma, runInTransaction, PrismaTransactionClient } from "@/server"` | Singleton PostgreSQL pool & atomic transaction runner. Domain services must receive `tx` instead of spawning independent transactions. |
+| **Express App & Server** | `src/server/app.ts`, `src/server/server.ts` | `import { createExpressApp, startServer } from "@/server"` | Validated Express app with CORS, bounded bodies, request IDs, error handling, `/healthz`, `/ready`. |
+| **Response & Error Utils** | `src/server/middleware/responses.ts` | `import { ApiError, sendSuccess, sendError } from "@/server"` | Standard response envelopes with request correlation. |
+| **Input Validation** | `src/server/middleware/validation.ts` | `import { validateRequest } from "@/server"` | Zod request body, query, and param validation middleware. |
+| **Actor & Auth Guards** | `src/server/contracts/actor.ts` | `import { ActorContext, requireAuthenticatedActor, requireRole, requireDepartment } from "@/server"` | Server-authoritative actor context and route authorization guards. Protected routes reject with 401 until Member 4 connects real auth (no dev bypass). |
+| **RFID Scan Envelopes** | `src/server/contracts/rfid.ts` | `import { VersionedScanEnvelope, DomainScanHandler, PreparedScanSubject, normalizeTagUid } from "@/server"` | Standard v1 scan envelope, reader sessions, action contexts, and two-phase domain scan handler contract. |
+| **Domain Services** | `src/server/contracts/services.ts` | `import { ITraceAuditService, ISubjectRevisionService, ILedgerOutboxService, IPublicPublicationHook } from "@/server"` | Transaction-scoped service contracts for audit, optimistic revision locking, outbox commitments, and public journey updates. |
+| **Workstation Transport** | `src/server/contracts/workstation.ts` | `import { StationScanEvent, IStationTransport, StationPanelProps } from "@/server"` | Event contracts for SSE scan streams and station panels (Members 2 & 3). |
+| **Pending Stubs** | `src/server/contracts/pending.ts` | `import { PendingImplementationError } from "@/server"` | Stubs throw explicit errors with domain/member metadata rather than silent no-ops. |
+
+#### 2. Atomic Domain Transaction Pattern
+
+Teammates implementing business mutations must follow the atomic `runInTransaction` pattern:
+
+```typescript
+import { runInTransaction, type PrismaTransactionClient } from "@/server";
+
+export async function processCuttingScan(
+  envelope: VersionedScanEnvelope,
+  existingTx?: PrismaTransactionClient,
+) {
+  return runInTransaction(async (tx) => {
+    // 1. Prepare/create the garment entity first (Phase 1)
+    const garment = await tx.garments.create({ ... });
+
+    // 2. Bind RFID card to garment
+    await tx.rfid_tag_bindings.create({ ... });
+
+    // 3. Record scan referencing the newly created garment
+    await tx.rfid_scans.create({ ... });
+
+    // 4. Record trace event within the same transaction
+    await traceService.recordTraceEvent({ ... }, tx);
+  }, existingTx);
+}
+```
+
+#### 3. Safe Example DTOs
+
+- **VersionedScanEnvelope (v1):**
+  ```json
+  {
+    "version": "v1",
+    "deviceId": "550e8400-e29b-41d4-a716-446655440000",
+    "scanId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "bootId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "sequence": 104,
+    "readerIndex": 2,
+    "mappingVersion": 1,
+    "tagUid": "E28011606000021A",
+    "actionContextId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "deviceUptimeMs": 345600,
+    "timestamp": "2026-11-19T14:30:00.000Z"
+  }
+  ```
+
+- **ActorContext:**
+  ```json
+  {
+    "actorId": "usr-f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "username": "sarah.chen",
+    "displayName": "Sarah Chen",
+    "role": "materials",
+    "department": "receiving",
+    "authenticatedAt": "2026-11-19T14:00:00.000Z"
+  }
+  ```
+
 ---
 
 ## 12. Team & Coding Agent Onboarding Guide
@@ -917,7 +999,7 @@ Server-side environment variables required for backend integration (stored secur
 2. **Read Project Rules:** Read [AGENTS.md](AGENTS.md) and this entire `PROJECT_CONTEXT.md` before making edits.
 3. **Inspect Feature Scope:** Locate your domain folder in `src/features/` and review the client contract in [src/lib/data/client.ts](src/lib/data/client.ts).
 4. **Install Dependencies:** Run `npm install` to ensure lockfile compliance.
-5. **Verify Baseline Tests:** Run `npm test` to confirm all 12 tests pass on your machine.
+5. **Verify Baseline Tests:** Run `npm test` to confirm all 26 tests pass on your machine.
 6. **Implement Within Scope:** Follow the four-domain ownership matrix. Do not modify another team member's domain without cross-team agreement.
 7. **Run Checks:** Validate `npm test`, `npx tsc --noEmit`, and `npm run build` before opening a pull request.
 
@@ -952,8 +1034,10 @@ To maintain transparent engineering discipline across the team:
 |---|---|---|---|---|
 | **ESP32 Hardware Bench Mapping** | `Planned` / Unmapped | Logical stations defined in [src/domain/types.ts](src/domain/types.ts); hardware indices unmeasured. | Wire 9 readers to ESP32; record antenna indices in draft `device_reader_mappings`. | Team Member 1 (Hardware) |
 | **USB Serial Bridge Script** | `Planned` / Unimplemented | Bridge message JSON specified in guide; bridge script absent from repo. | Create Node.js script using `serialport` forwarding lines to Express. | Team Member 1 (Hardware) |
-| **Express REST Endpoints** | `Mocked` in browser | Mock client implements full workflow; Express endpoints do not exist yet. | Implement Express routes matching `WearTrailClient` interface. | Team Member 2 (Backend) |
-| **Prisma ORM Models** | `Foundation Implemented` / Introspection Pending | Server-only Prisma 7 foundation and connection pooling implemented in `src/server/db/`; awaiting local `.env` credentials for `npm run db:pull`. | Run `npm run db:pull` after populating `.env` to generate models. | Team Member 2 (Backend) |
+| **Express Shared Foundation** | `Implemented & Verified` | Validated config, request IDs, CORS allowlist, error handlers, `/healthz` & `/ready`, shutdown hooks in [src/server/](src/server/). | Ready for team import. Run `npm run server:dev`. | Team Member 1 (Foundation) |
+| **Shared Contracts & DTOs** | `Implemented & Verified` | Typed scan envelopes, actor auth guards, two-phase domain handlers, revision/outbox services in [src/server/contracts/](src/server/contracts/). | Teammates implement domain handlers using exported contracts. | Team Member 1 (Foundation) |
+| **Prisma ORM Models & Baseline** | `Implemented & Verified` | 58 models introspected in [prisma/schema.prisma](prisma/schema.prisma); baseline `20261118_weartrail_rfid_v1` applied; verified via `npm run db:check`. | Use generated `@prisma/client` in domain services. | Team Member 1 (Foundation) |
+| **Express Domain Endpoints** | `Pending Implementation` | Mock client implements full workflow in browser; server endpoints pending. | Implement Express routes matching `WearTrailClient` interface. | Team Member 2 & 3 (Backend) |
 | **Smart Contract & Ledger Worker** | `Planned` / Schema designed | `ledger_commitments` and outbox tables defined; smart contract absent. | Write Solidity commitment contract; implement Node outbox processor. | Team Member 4 (Ledger) |
 | **Prettier CRLF Line Endings** | `Known Lint Warning` | `npm run lint` reports CRLF warnings in config files on Windows. | Run `npm run format` when repository formatting window is approved. | Team Member 1 (Foundation) |
 

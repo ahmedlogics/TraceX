@@ -15,7 +15,14 @@
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:pull": "prisma db pull",
-    "db:check": "tsx scripts/check-db-connection.ts"
+    "db:check": "tsx scripts/check-db-connection.ts",
+    "server:dev": "tsx watch src/server/server.ts",
+    "server:start": "tsx src/server/server.ts",
+    "blockchain:compile": "npm --prefix packages/blockchain run compile",
+    "blockchain:test": "npm --prefix packages/blockchain run test",
+    "blockchain:node": "npm --prefix packages/blockchain run node",
+    "blockchain:deploy:local": "npm --prefix packages/blockchain run deploy:local",
+    "blockchain:register": "npm --prefix packages/blockchain run register:deployment"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -59,9 +66,11 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "dotenv": "^16.6.1",
     "embla-carousel-react": "^8.6.0",
+    "express": "^5.3.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "pg": "^8.23.1",
@@ -86,6 +95,8 @@
     "@lovable.dev/vite-tanstack-config": "2.27.1",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

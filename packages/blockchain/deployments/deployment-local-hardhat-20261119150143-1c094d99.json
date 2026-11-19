@@ -1,0 +1,20 @@
+{
+  "id": "75c6f958-9be5-4cca-888c-7016296e3e22",
+  "code": "local-hardhat-20261119150143-1c094d99",
+  "chain_id": 31337,
+  "network_name": "hardhat-local",
+  "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "deployment_tx_hash": "0x1c094d99ba4fa2e1f19944fb3f219269866ec39ca09abab50f358e8ef69a7819",
+  "protocol_version": 1,
+  "block_number": 1,
+  "block_hash": "0x391a75fcddb6bcd2b680e6c9074c6f2eb76c21a928b514bccfe73f9b94a97e67",
+  "registered_at": "2026-11-19T15:01:43.594Z",
+  "deployer_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "verification": {
+    "bytecode_verified": true,
+    "round_trip_verified": true,
+    "idempotency_verified": true,
+    "test_commitment_id": "0x6b8b25fd9169f453e19ea74058109a4db768dd12b1591f358cc60cabb70608b7",
+    "test_payload_hash": "0x37bbd20c07fb044cfc7838eb23238a0febba149f9448dc15f616e6e2f3fadbac"
+  }
+}

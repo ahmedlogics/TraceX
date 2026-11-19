@@ -31,15 +31,21 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
     const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
     const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
 
-    const parsedConfig = parseConnectionString(connectionString);
+    const parsed = parseConnectionString(connectionString);
 
-    globalThis.__wt_pg_pool = new pg.Pool({
-      ...parsedConfig,
+    const poolConfig: pg.PoolConfig = {
+      host: parsed.host ?? undefined,
+      port: parsed.port ? Number.parseInt(parsed.port, 10) : undefined,
+      database: parsed.database ?? undefined,
+      user: parsed.user ?? undefined,
+      password: parsed.password ?? undefined,
       max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
       connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 10000,
-      ssl: ca ? { ca, rejectUnauthorized: true } : (parsedConfig.ssl ? { rejectUnauthorized: false } : undefined),
-    });
+      ssl: ca ? { ca, rejectUnauthorized: true } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
+    };
+
+    globalThis.__wt_pg_pool = new pg.Pool(poolConfig);
 
     globalThis.__wt_pg_pool.on("error", (err) => {
       // Non-sensitive logging of connection pool errors

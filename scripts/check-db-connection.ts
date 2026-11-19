@@ -39,12 +39,17 @@ async function runCheck() {
   const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
   const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
 
-  const parsedConfig = parseConnectionString(databaseUrl);
-  const pool = new pg.Pool({
-    ...parsedConfig,
+  const parsed = parseConnectionString(databaseUrl);
+  const poolConfig: pg.PoolConfig = {
+    host: parsed.host ?? undefined,
+    port: parsed.port ? Number.parseInt(parsed.port, 10) : undefined,
+    database: parsed.database ?? undefined,
+    user: parsed.user ?? undefined,
+    password: parsed.password ?? undefined,
     connectionTimeoutMillis: 10000,
-    ssl: ca ? { ca, rejectUnauthorized: true } : (parsedConfig.ssl ? { rejectUnauthorized: false } : undefined),
-  });
+    ssl: ca ? { ca, rejectUnauthorized: true } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
+  };
+  const pool = new pg.Pool(poolConfig);
 
   try {
     console.log("\nAttempting connection to PostgreSQL database...");

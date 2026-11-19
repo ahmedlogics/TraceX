@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { getPgPool, closePgPool } from "./pool";
+import type { PrismaTransactionClient } from "./types";
 
 // Explicitly load .env from the application root
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
@@ -64,4 +65,23 @@ export async function disconnectPrisma(): Promise<void> {
     globalThis.__wt_prisma = undefined;
   }
   await closePgPool();
+}
+
+/**
+ * Shared transaction helper.
+ * Executes the provided callback within an interactive Prisma transaction.
+ * If an existing transaction client is supplied, it reuses it instead of starting a new transaction,
+ * guaranteeing that domain operations share the exact same atomic transaction boundary.
+ */
+export async function runInTransaction<T>(
+  callback: (tx: PrismaTransactionClient) => Promise<T>,
+  existingTx?: PrismaTransactionClient,
+): Promise<T> {
+  if (existingTx) {
+    return callback(existingTx);
+  }
+  const client = getPrismaClient();
+  return client.$transaction(async (tx) => {
+    return callback(tx as PrismaTransactionClient);
+  });
 }
