@@ -69,7 +69,6 @@ export interface ProductSpecification {
   version: number;
   description?: string | undefined;
 }
-}
 
 // ---------------------------------------------------------------- RFID station / reader types
 
