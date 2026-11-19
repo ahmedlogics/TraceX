@@ -97,11 +97,14 @@ describe("Member 4: Staff Access & Credential Lifecycle", () => {
       (t) => t.userId === newUserId && t.kind === "invite",
     );
     expect(tokenRecord).toBeDefined();
-    expect(tokenRecord?.status).toBe("valid");
+    if (!tokenRecord) {
+      throw new Error("Invite token record was not found");
+    }
+    expect(tokenRecord.status).toBe("valid");
 
     // Consume the token with a new password
     const newPw = "SuperSecurePassword2026!";
-    E.consumeCredentialToken(s, tokenRecord!.token, newPw);
+    E.consumeCredentialToken(s, tokenRecord.token, newPw);
 
     // Verify token is now marked used
     expect(tokenRecord.status).toBe("used");
