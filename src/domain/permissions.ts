@@ -1,6 +1,6 @@
 /**
- * Mock access rules (UI simulation only — the Express API must enforce its own).
- * Route access is by role; actions are checked by role AND department.
+ * Mock and Authoritative access rules.
+ * Route access is by role; operational actions are checked by role AND department/grants.
  */
 import type {
   Department,
@@ -12,6 +12,9 @@ import type {
   StaffUser,
   Task,
 } from "./types";
+import { type ActorContext, assertIndependentRepairReinspection } from "./actor";
+
+export * from "./actor";
 
 export type RouteKey =
   | "account"
@@ -111,13 +114,22 @@ export const can = {
   operateFinishing: (u: StaffUser) =>
     u.status === "active" && u.role === "P" && u.department === "finishing",
 
-  /** Inspector only. Managers have read-only inspection access. */
-  submitInspection: (u: StaffUser, i: Inspection) => is(u, "Q") && i.status === "open",
+  /** Inspector only. Managers have read-only inspection access. Independent reinspection rule enforced. */
+  submitInspection: (u: StaffUser, i: Inspection, repairPerformerId?: string) => {
+    if (!is(u, "Q") || i.status !== "open") return false;
+    if (i.kind === "reinspection" && repairPerformerId && u.id === repairPerformerId) return false;
+    return true;
+  },
   /** Inspector: prepare QC context (choose Pass/Fail before scanning). */
   prepareQcContext: (u: StaffUser) => is(u, "Q"),
   /** Inspector only, and only after a passing reinspection. Repair operators can never release. */
-  releaseHold: (u: StaffUser, g: Garment, latest?: Inspection) =>
-    is(u, "Q") && !!g.hold && latest?.kind === "reinspection" && latest.status === "passed",
+  releaseHold: (u: StaffUser, g: Garment, latest?: Inspection, repairPerformerId?: string) => {
+    if (!is(u, "Q") || !g.hold || latest?.kind !== "reinspection" || latest.status !== "passed") {
+      return false;
+    }
+    if (repairPerformerId && u.id === repairPerformerId) return false;
+    return true;
+  },
   assignRework: (u: StaffUser, c: ReworkCase) => is(u, "M") && c.status === "awaiting-assignment",
   completeRework: (u: StaffUser, c: ReworkCase) =>
     u.role === "P" && c.status === "assigned" && c.assignedDepartment === u.department,

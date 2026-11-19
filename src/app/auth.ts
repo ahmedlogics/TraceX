@@ -21,6 +21,17 @@ export function useSignIn() {
   };
 }
 
+export function useAuthenticate() {
+  const client = useClient();
+  const qc = useQueryClient();
+  return async (username: string, password: string) => {
+    const user = await client.authenticate(username, password);
+    qc.clear();
+    setSessionUserId(user.id);
+    return user;
+  };
+}
+
 export function useSignOut() {
   const client = useClient();
   const qc = useQueryClient();

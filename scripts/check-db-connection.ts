@@ -25,12 +25,18 @@ async function runCheck() {
   console.log("==================================================");
   console.log(" WearTrail Server Database Connectivity Check");
   console.log("==================================================");
-  console.log(`DATABASE_URL configured: ${databaseUrl ? "Yes (" + maskConnectionString(databaseUrl) + ")" : "No (Empty)"}`);
-  console.log(`MIGRATION_DATABASE_URL configured: ${migrationUrl ? "Yes (" + maskConnectionString(migrationUrl) + ")" : "No (Empty)"}`);
+  console.log(
+    `DATABASE_URL configured: ${databaseUrl ? "Yes (" + maskConnectionString(databaseUrl) + ")" : "No (Empty)"}`,
+  );
+  console.log(
+    `MIGRATION_DATABASE_URL configured: ${migrationUrl ? "Yes (" + maskConnectionString(migrationUrl) + ")" : "No (Empty)"}`,
+  );
 
   if (!databaseUrl) {
     console.warn("\n[PENDING] DATABASE_URL is not set in .env.");
-    console.warn("Please populate DATABASE_URL with the restricted 'weartrail_api' runtime connection string.");
+    console.warn(
+      "Please populate DATABASE_URL with the restricted 'weartrail_api' runtime connection string.",
+    );
     process.exit(1);
   }
 
@@ -63,7 +69,9 @@ async function runCheck() {
       console.log(`- Database Name:       ${row.db_name}`);
       console.log(`- Database User:       ${row.session_user}`);
       console.log(`- Active Schema:       ${row.active_schema}`);
-      console.log(`- SupplyEase Schema:   ${row.supplyease_namespace ? "Detected ('supplyease')" : "NOT FOUND"}`);
+      console.log(
+        `- SupplyEase Schema:   ${row.supplyease_namespace ? "Detected ('supplyease')" : "NOT FOUND"}`,
+      );
 
       // 2. Count tables in supplyease schema without reading business records
       if (row.supplyease_namespace) {
@@ -86,8 +94,12 @@ async function runCheck() {
     console.error(`Error Code:    ${(error as { code?: string }).code || "UNKNOWN"}`);
     console.error(`Error Message: ${error.message}`);
     console.error("\nTroubleshooting tips:");
-    console.error("1. Confirm the Supabase Session Pooler host (port 5432) is used for IPv4 networks.");
-    console.error("2. Verify the username includes your project ref (e.g., 'weartrail_api.your-project-ref').");
+    console.error(
+      "1. Confirm the Supabase Session Pooler host (port 5432) is used for IPv4 networks.",
+    );
+    console.error(
+      "2. Verify the username includes your project ref (e.g., 'weartrail_api.your-project-ref').",
+    );
     console.error("3. Ensure the password does not contain unescaped special characters.");
     process.exit(1);
   } finally {

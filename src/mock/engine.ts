@@ -35,7 +35,15 @@ import type {
   Task,
   TaskKind,
   TriggerOutcome,
+  StaffCredentialToken,
+  StaffSession,
 } from "@/domain/types";
+import {
+  DEMO_DEFAULT_PASSWORD,
+  hashPassword,
+  validatePasswordStrength,
+  verifyPassword,
+} from "@/domain/crypto-auth";
 import { DemoError, ensure } from "./errors";
 import { finalChecklist, incomingChecklist } from "./fixtures";
 
@@ -1179,6 +1187,155 @@ export function routineScan(
 
 // ---------------------------------------------------------------- auth
 
+export function authenticateStaff(
+  s: DemoState,
+  usernameInput: string,
+  passwordInput: string,
+): { user: StaffUser; sessionId: string; token: string } {
+  const username = usernameInput.trim().toLowerCase();
+  const u = s.users.find((x) => x.username.toLowerCase() === username);
+  if (!u) {
+    throw new DemoError("invalid", "Invalid username or password.");
+  }
+  if (u.status === "suspended") {
+    throw new DemoError("forbidden", `Account '${u.username}' is suspended. Access denied.`);
+  }
+
+  s.credentials = s.credentials ?? {};
+  const storedHash = s.credentials[u.id] ?? hashPassword(DEMO_DEFAULT_PASSWORD);
+  s.credentials[u.id] = storedHash;
+
+  const valid = verifyPassword(passwordInput, storedHash);
+  if (!valid) {
+    throw new DemoError("invalid", "Invalid username or password.");
+  }
+
+  // Generate session
+  s.sessions = s.sessions ?? [];
+  const sessionId = nextId(s, "session", "sess");
+  const token = `tk_${sessionId}_${Math.random().toString(36).slice(2, 10)}`;
+  const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+
+  s.sessions.push({
+    id: sessionId,
+    userId: u.id,
+    token,
+    status: "active",
+    createdAt: now(),
+    expiresAt,
+    lastActiveAt: now(),
+  });
+
+  audit(s, u, "auth", "Staff authenticated with credentials", "user", u.username);
+  return { user: u, sessionId, token };
+}
+
+export function changeStaffPassword(
+  s: DemoState,
+  actor: StaffUser,
+  currentPassword: string,
+  newPassword: string,
+): void {
+  s.credentials = s.credentials ?? {};
+  const storedHash = s.credentials[actor.id] ?? hashPassword(DEMO_DEFAULT_PASSWORD);
+  s.credentials[actor.id] = storedHash;
+
+  const valid = verifyPassword(currentPassword, storedHash);
+  if (!valid) {
+    throw new DemoError("invalid", "Current password is incorrect.");
+  }
+
+  const strength = validatePasswordStrength(newPassword);
+  if (!strength.valid) {
+    throw new DemoError("invalid", strength.reason ?? "Invalid password.");
+  }
+
+  s.credentials[actor.id] = hashPassword(newPassword);
+  audit(s, actor, "auth", "Password updated", "user", actor.username);
+}
+
+export function signOutOtherSessions(s: DemoState, actor: StaffUser): void {
+  s.sessions = s.sessions ?? [];
+  for (const sess of s.sessions) {
+    if (sess.userId === actor.id && sess.status === "active") {
+      sess.status = "revoked";
+      sess.revokedAt = now();
+    }
+  }
+  audit(s, actor, "auth", "All other staff sessions revoked", "user", actor.username);
+}
+
+export function checkCredentialToken(
+  s: DemoState,
+  token: string,
+): "valid" | "expired" | "used" | "revoked" | "unknown" {
+  s.credentialTokens = s.credentialTokens ?? [];
+  const tok = s.credentialTokens.find((t) => t.token === token);
+  if (!tok) {
+    if (token === "demo-valid-token") return "valid";
+    if (token === "demo-expired-token") return "expired";
+    if (token === "demo-used-token") return "used";
+    return "unknown";
+  }
+
+  if (tok.status === "used") return "used";
+  if (tok.status === "revoked") return "revoked";
+
+  if (new Date(tok.expiresAt) < new Date()) {
+    tok.status = "expired";
+    return "expired";
+  }
+
+  return tok.status;
+}
+
+export function consumeCredentialToken(s: DemoState, token: string, newPassword: string): void {
+  const status = checkCredentialToken(s, token);
+  if (status === "expired") {
+    throw new DemoError("conflict", "This setup/reset link has expired.");
+  }
+  if (status === "used") {
+    throw new DemoError("conflict", "This setup/reset link has already been used.");
+  }
+  if (status !== "valid") {
+    throw new DemoError("invalid", "Invalid setup/reset link.");
+  }
+
+  const strength = validatePasswordStrength(newPassword);
+  if (!strength.valid) {
+    throw new DemoError("invalid", strength.reason ?? "Password must be at least 10 characters.");
+  }
+
+  s.credentialTokens = s.credentialTokens ?? [];
+  let tok = s.credentialTokens.find((t) => t.token === token);
+  if (!tok && token === "demo-valid-token") {
+    tok = {
+      id: "tok-demo-valid",
+      token: "demo-valid-token",
+      userId: "u-admin",
+      kind: "reset",
+      status: "valid",
+      createdAt: now(),
+      expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    };
+    s.credentialTokens.push(tok);
+  }
+
+  if (tok) {
+    tok.status = "used";
+    tok.usedAt = now();
+    const user = s.users.find((u) => u.id === tok.userId);
+    if (user) {
+      if (user.status === "invited") {
+        user.status = "active";
+      }
+      s.credentials = s.credentials ?? {};
+      s.credentials[user.id] = hashPassword(newPassword);
+      audit(s, user, "auth", "Credential token activated and password set", "user", user.username);
+    }
+  }
+}
+
 export function recordSignIn(s: DemoState, actor: StaffUser) {
   audit(s, actor, "auth", "Demo sign-in", "user", actor.username);
 }
@@ -2070,7 +2227,20 @@ export function inviteUser(
     status: "invited",
     scope: input.department,
   });
-  audit(s, actor, "admin", "Staff invited (mock)", "user", username);
+
+  const token = `inv_${username}_${Math.random().toString(36).slice(2, 10)}`;
+  s.credentialTokens = s.credentialTokens ?? [];
+  s.credentialTokens.push({
+    id: nextId(s, "token", "tok"),
+    token,
+    userId: id,
+    kind: "invite",
+    status: "valid",
+    createdAt: now(),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+
+  audit(s, actor, "admin", "Staff invited with activation token", "user", username);
   return id;
 }
 
@@ -2105,14 +2275,38 @@ export function setUserSuspended(
   const u = findOrThrow(s.users, userId, "User");
   ensure(u.id !== actor.id, "conflict", "You cannot suspend yourself.");
   u.status = suspended ? "suspended" : "active";
+
+  // When suspended, revoke all active sessions immediately
+  if (suspended && s.sessions) {
+    for (const sess of s.sessions) {
+      if (sess.userId === userId && sess.status === "active") {
+        sess.status = "revoked";
+        sess.revokedAt = now();
+      }
+    }
+  }
+
   audit(s, actor, "admin", suspended ? "Staff suspended" : "Staff reactivated", "user", u.username);
 }
 
-export function issueReset(s: DemoState, actor: StaffUser, userId: string) {
+export function issueReset(s: DemoState, actor: StaffUser, userId: string): string {
   ensure(can.manageUsers(actor), "forbidden", "Only the administrator can issue resets.");
   const u = findOrThrow(s.users, userId, "User");
-  audit(s, actor, "admin", "Credential reset link issued (mock)", "user", u.username);
-  return "demo-valid-token";
+
+  const token = `rst_${u.username}_${Math.random().toString(36).slice(2, 10)}`;
+  s.credentialTokens = s.credentialTokens ?? [];
+  s.credentialTokens.push({
+    id: nextId(s, "token", "tok"),
+    token,
+    userId: u.id,
+    kind: "reset",
+    status: "valid",
+    createdAt: now(),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  });
+
+  audit(s, actor, "admin", "Credential reset link issued", "user", u.username);
+  return token;
 }
 
 // ---------------------------------------------------------------- settings
