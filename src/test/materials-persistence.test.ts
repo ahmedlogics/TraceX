@@ -42,6 +42,7 @@ import {
 import { createExpressApp } from "../server/app";
 import type { VersionedScanEnvelope } from "../server/contracts/rfid";
 import { ApiError } from "../server/middleware/responses";
+import type { StaffRole, Department } from "../server/contracts/actor";
 
 // ---------------------------------------------------------------- In-Memory Database Harness
 
@@ -61,6 +62,7 @@ interface MockDbState {
   staff_users: any[];
   audit_events: any[];
   rfid_action_contexts: any[];
+  trace_events: any[];
 }
 
 function createMockDb(): { db: PrismaTransactionClient; state: MockDbState } {
@@ -129,6 +131,7 @@ function createMockDb(): { db: PrismaTransactionClient; state: MockDbState } {
     ],
     audit_events: [],
     rfid_action_contexts: [],
+    trace_events: [],
   };
 
   const getFullCuttingJob = (cjId: string) => {
@@ -478,6 +481,13 @@ function createMockDb(): { db: PrismaTransactionClient; state: MockDbState } {
     rfid_action_contexts: {
       findFirst: async ({ where }: any) => state.rfid_action_contexts.find((c) => c.id === where.id),
     },
+    trace_events: {
+      create: async ({ data }: any) => {
+        const item = { id: data.id || `te-${state.trace_events.length + 1}`, ...data };
+        state.trace_events.push(item);
+        return item;
+      },
+    },
   };
 
   return { db: client as PrismaTransactionClient, state };
@@ -489,13 +499,13 @@ describe("Member 2: Real Materials & Production Persistence Services", () => {
   let db: PrismaTransactionClient;
   let state: MockDbState;
 
-  const receivingActor = { actorId: "u-receiving", role: "materials", department: "receiving", username: "receiving.demo" };
-  const storeActor = { actorId: "u-store", role: "materials", department: "raw_store", username: "rawstore.demo" };
-  const cuttingActor = { actorId: "u-cutting", role: "production", department: "cutting", username: "cutting.demo" };
-  const stitchingActor = { actorId: "u-stitching", role: "production", department: "stitching", username: "stitching.demo" };
-  const finishingActor = { actorId: "u-finishing", role: "production", department: "finishing", username: "finishing.demo" };
-  const managerActor = { actorId: "u-manager", role: "manager", department: "planning", username: "manager.demo" };
-  const qcActor = { actorId: "u-qc", role: "quality", department: "quality", username: "quality.demo" };
+  const receivingActor = { actorId: "u-receiving", role: "materials" as StaffRole, department: "receiving" as Department, username: "receiving.demo", displayName: "Receiving Demo", authenticatedAt: new Date() };
+  const storeActor = { actorId: "u-store", role: "materials" as StaffRole, department: "raw-store" as Department, username: "rawstore.demo", displayName: "Store Demo", authenticatedAt: new Date() };
+  const cuttingActor = { actorId: "u-cutting", role: "production" as StaffRole, department: "cutting" as Department, username: "cutting.demo", displayName: "Cutting Demo", authenticatedAt: new Date() };
+  const stitchingActor = { actorId: "u-stitching", role: "production" as StaffRole, department: "stitching" as Department, username: "stitching.demo", displayName: "Stitching Demo", authenticatedAt: new Date() };
+  const finishingActor = { actorId: "u-finishing", role: "production" as StaffRole, department: "finishing" as Department, username: "finishing.demo", displayName: "Finishing Demo", authenticatedAt: new Date() };
+  const managerActor = { actorId: "u-manager", role: "manager" as StaffRole, department: undefined, username: "manager.demo", displayName: "Manager Demo", authenticatedAt: new Date() };
+  const qcActor = { actorId: "u-qc", role: "quality" as StaffRole, department: "quality" as Department, username: "quality.demo", displayName: "QC Demo", authenticatedAt: new Date() };
 
   beforeEach(() => {
     const mock = createMockDb();
@@ -905,10 +915,178 @@ describe("Member 2: Real Materials & Production Persistence Services", () => {
       const prep = await handler.prepare(envelope, db);
       expect(prep.kind).toBe("material_lot");
       expect(prep.tagUid).toBe("04666666");
+      expect(prep.tagBindingId).toBeDefined();
 
       const outcome = await handler.process(envelope, prep, db);
       expect(outcome.outcome).toBe("accepted");
       expect(outcome.outcomeCode).toBe("bundle_card_bound");
+    });
+
+    it("executes CuttingScanHandler: in prepare creates garment and active tag binding; in process attributes roll consumption", async () => {
+      const { lotId } = await receiveMaterialLot({ materialName: "Denim", quantity: 20.0 }, receivingActor, db);
+      await acceptIncomingStockHelper(lotId, 20.0, "INSP-01", qcActor, db);
+      const { orderId } = await createProductionOrder({ product: "Jeans", styleCode: "WT-TR-200", qty: 2 }, managerActor, db);
+      await approveProductionOrder(orderId, managerActor, db);
+      const issue = await issueMaterial({ lotId, orderId, quantity: 4.0 }, storeActor, db);
+      await confirmCuttingSource({ orderId, issueId: issue.issueId, consumedQty: 4.0 }, cuttingActor, db);
+
+      const cuttingJob = state.cutting_jobs.find((cj) => cj.production_order_id === orderId);
+      const cuttingInput = state.cutting_inputs.find((ci) => ci.cutting_job_id === cuttingJob.id);
+
+      const actionContextId = "ctx-cut-001";
+      state.rfid_action_contexts.push({
+        id: actionContextId,
+        cutting_job_id: cuttingJob.id,
+        production_order_id: orderId,
+        cutting_input_id: cuttingInput.id,
+        answers: { size: "32" },
+      });
+
+      const handler = new CuttingScanHandler();
+      const envelope: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: "dev-bench-01",
+        scanId: "scan-cut-01",
+        bootId: "boot-01",
+        sequence: 2,
+        readerIndex: 2,
+        mappingVersion: 1,
+        tagUid: "04777777",
+        actionContextId,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Phase 1: prepare creates garment in tx.garments and active binding in tx.rfid_tag_bindings
+      const prepared = await handler.prepare(envelope, db, {
+        actor: cuttingActor,
+        session: { id: "sess-01", deviceId: "dev-bench-01", readerIndex: 2, mappingVersion: 1, stationCode: "cutting", operatorId: "u-cutting", openedAt: new Date(), expiresAt: new Date(Date.now() + 3600000) },
+      });
+
+      expect(prepared.kind).toBe("garment");
+      expect(prepared.isNewEnrollment).toBe(true);
+      expect(prepared.tagUid).toBe("04777777");
+      expect(prepared.tagBindingId).toBeDefined();
+
+      // Verify garment was created in db with valid public ID
+      const createdGarment = state.garments.find((g) => g.id === prepared.subjectId);
+      expect(createdGarment).toBeDefined();
+      expect(createdGarment.stage).toBe("cut");
+      expect(createdGarment.public_id).toMatch(/^[a-z0-9][a-z0-9-]{7,127}$/);
+
+      // Verify active tag binding in db
+      const bindingInDb = state.rfid_tag_bindings.find((b) => b.id === prepared.tagBindingId);
+      expect(bindingInDb).toBeDefined();
+      expect(bindingInDb.garment_id).toBe(createdGarment.id);
+      expect(bindingInDb.unbound_at).toBeNull();
+
+      // Phase 2: process attributes roll consumption in tx.garment_material_inputs
+      const outcome = await handler.process(envelope, prepared, db, {
+        actor: cuttingActor,
+        session: { id: "sess-01", deviceId: "dev-bench-01", readerIndex: 2, mappingVersion: 1, stationCode: "cutting", operatorId: "u-cutting", openedAt: new Date(), expiresAt: new Date(Date.now() + 3600000) },
+      });
+
+      expect(outcome.outcome).toBe("accepted");
+      expect(outcome.outcomeCode).toBe("garment_enrolled");
+      expect(outcome.nextExpectedStation).toBe("stitching");
+
+      // Verify garment_material_inputs roll attribution
+      const matInput = state.garment_material_inputs.find((m) => m.garment_id === prepared.subjectId);
+      expect(matInput).toBeDefined();
+      expect(matInput.cutting_job_id).toBe(cuttingJob.id);
+      expect(matInput.cutting_input_id).toBe(cuttingInput.id);
+    });
+
+    it("executes routine production handlers: Stitching advances to stitched, Finishing advances to finished", async () => {
+      // Setup a garment at cut stage with active tag 04888888
+      const garmentId = "g-test-routine";
+      state.garments.push({
+        id: garmentId,
+        code: "GAR-TEST-ROUTINE",
+        public_id: "wt-routine-test-01",
+        stage: "cut",
+        quality_disposition: "awaiting_inspection",
+        revision: 0,
+      });
+      state.rfid_tag_bindings.push({
+        id: "bind-routine",
+        garment_id: garmentId,
+        tag_uid: "04888888",
+        tag_identifier: "04888888",
+        unbound_at: null,
+      });
+
+      // 1. Stitching Scan Handler
+      const stitchingHandler = new StitchingScanHandler();
+      const stitchEnv: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: "dev-bench-01",
+        scanId: "scan-stitch-01",
+        bootId: "boot-01",
+        sequence: 3,
+        readerIndex: 3,
+        mappingVersion: 1,
+        tagUid: "04888888",
+        timestamp: new Date().toISOString(),
+      };
+
+      const prepStitch = await stitchingHandler.prepare(stitchEnv, db);
+      expect(prepStitch.subjectId).toBe(garmentId);
+      expect(prepStitch.tagBindingId).toBe("bind-routine");
+
+      const stitchOutcome = await stitchingHandler.process(stitchEnv, prepStitch, db, {
+        actor: stitchingActor,
+        session: { id: "sess-02", deviceId: "dev-bench-01", readerIndex: 3, mappingVersion: 1, stationCode: "stitching", operatorId: "u-stitching", openedAt: new Date(), expiresAt: new Date(Date.now() + 3600000) },
+      });
+      expect(stitchOutcome.outcome).toBe("accepted");
+      expect(stitchOutcome.outcomeCode).toBe("stitching_completed");
+      expect(stitchOutcome.nextExpectedStation).toBe("finishing");
+
+      const stitchedGarment = state.garments.find((g) => g.id === garmentId);
+      expect(stitchedGarment.stage).toBe("stitched");
+      expect(stitchedGarment.revision).toBe(1);
+
+      // 2. Finishing Scan Handler
+      const finishingHandler = new FinishingScanHandler();
+      const finishEnv: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: "dev-bench-01",
+        scanId: "scan-finish-01",
+        bootId: "boot-01",
+        sequence: 4,
+        readerIndex: 4,
+        mappingVersion: 1,
+        tagUid: "04888888",
+        timestamp: new Date().toISOString(),
+      };
+
+      const prepFinish = await finishingHandler.prepare(finishEnv, db);
+      expect(prepFinish.subjectId).toBe(garmentId);
+
+      const finishOutcome = await finishingHandler.process(finishEnv, prepFinish, db, {
+        actor: finishingActor,
+        session: { id: "sess-03", deviceId: "dev-bench-01", readerIndex: 4, mappingVersion: 1, stationCode: "finishing", operatorId: "u-finishing", openedAt: new Date(), expiresAt: new Date(Date.now() + 3600000) },
+      });
+      expect(finishOutcome.outcome).toBe("accepted");
+      expect(finishOutcome.outcomeCode).toBe("finishing_completed");
+      expect(finishOutcome.nextExpectedStation).toBe("final_qc");
+
+      const finishedGarment = state.garments.find((g) => g.id === garmentId);
+      expect(finishedGarment.stage).toBe("finished");
+      expect(finishedGarment.revision).toBe(2);
+    });
+
+    it("verifies registration of all Member 2 handlers with ScanRoutingService", async () => {
+      const { ScanRoutingService } = await import("../server/rfid/scan-router");
+      const { registerMember2ScanHandlers } = await import("../server/rfid/domain-handlers");
+
+      const router = new ScanRoutingService();
+      registerMember2ScanHandlers(router);
+
+      expect(router.getHandler("fabric_receiving")).toBeDefined();
+      expect(router.getHandler("fabric_issue")).toBeDefined();
+      expect(router.getHandler("cutting")).toBeDefined();
+      expect(router.getHandler("stitching")).toBeDefined();
+      expect(router.getHandler("finishing")).toBeDefined();
     });
   });
 

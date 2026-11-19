@@ -8,6 +8,7 @@ import { materialsRouter } from "./routes/materials";
 import { productionRouter } from "./routes/production";
 import { tasksRouter } from "./routes/tasks";
 import { rfidRouter } from "./routes/rfid";
+import { registerMember2ScanHandlers } from "./rfid/domain-handlers";
 
 /**
  * Creates and configures the WearTrail Express application.
@@ -30,7 +31,8 @@ export function createExpressApp(): Express {
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
-  // 5. Authenticated RFID Ingestion routes
+  // 5. Authenticated RFID Ingestion routes & Domain Handlers
+  registerMember2ScanHandlers();
   app.use("/api/rfid", rfidRouter);
 
   // 6. Domain Routers
