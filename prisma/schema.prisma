@@ -1,8 +1,1509 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
   provider = "postgresql"
   schemas  = ["supplyease"]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model api_idempotency_keys {
+  staff_user_id   String      @db.Uuid
+  operation_code  String
+  request_key     String
+  request_sha256  Bytes
+  response_status Int?        @db.SmallInt
+  response_body   Json?
+  created_at      DateTime    @default(now()) @db.Timestamptz(6)
+  expires_at      DateTime    @db.Timestamptz(6)
+  staff_users     staff_users @relation(fields: [staff_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([staff_user_id, operation_code, request_key])
+  @@index([expires_at], map: "api_idempotency_keys_expiry_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model audit_events {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actor_staff_id   String?      @db.Uuid
+  actor_device_id  String?      @db.Uuid
+  department_code  String?
+  action_code      String
+  target_type      String
+  target_reference String
+  request_id       String?      @db.Uuid
+  details          Json         @default("{}")
+  recorded_at      DateTime     @default(now()) @db.Timestamptz(6)
+  devices          devices?     @relation(fields: [actor_device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users      staff_users? @relation(fields: [actor_staff_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments      departments? @relation(fields: [department_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([department_code, recorded_at(sort: Desc)], map: "audit_events_dept_idx")
+  @@index([target_type, target_reference, recorded_at(sort: Desc)], map: "audit_events_target_idx")
+  @@index([recorded_at(sort: Desc)], map: "audit_events_time_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model capture_runs {
+  id                                              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  device_id                                       String         @unique(map: "capture_runs_active_device_uq", where: raw("(closed_at IS NULL)")) @db.Uuid
+  material_lot_id                                 String?        @db.Uuid
+  garment_id                                      String?        @db.Uuid
+  package_id                                      String?        @db.Uuid
+  opened_by                                       String         @db.Uuid
+  opened_at                                       DateTime       @default(now()) @db.Timestamptz(6)
+  closed_by                                       String?        @db.Uuid
+  closed_at                                       DateTime?      @db.Timestamptz(6)
+  close_reason                                    String?
+  staff_users_capture_runs_closed_byTostaff_users staff_users?   @relation("capture_runs_closed_byTostaff_users", fields: [closed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  devices                                         devices        @relation(fields: [device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  garments                                        garments?      @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_lots                                   material_lots? @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_capture_runs_opened_byTostaff_users staff_users    @relation("capture_runs_opened_byTostaff_users", fields: [opened_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages                                        packages?      @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  capture_steps                                   capture_steps[]
+
+  @@unique([id, device_id])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model capture_steps {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  context_token          String                 @unique
+  capture_run_id         String                 @db.Uuid
+  device_id              String                 @unique(map: "capture_steps_active_device_uq", where: raw("(closed_at IS NULL)")) @db.Uuid
+  task_id                String                 @unique(map: "capture_steps_completed_task_uq", where: raw("(status = 'completed'::capture_status)")) @db.Uuid
+  operator_id            String                 @db.Uuid
+  checkpoint_code        String
+  mapping_version        Int
+  sensor_code            String
+  status                 capture_status         @default(awaiting_ack)
+  created_at             DateTime               @default(now()) @db.Timestamptz(6)
+  expires_at             DateTime               @db.Timestamptz(6)
+  acknowledged_at        DateTime?              @db.Timestamptz(6)
+  cleared_at             DateTime?              @db.Timestamptz(6)
+  armed_at               DateTime?              @db.Timestamptz(6)
+  closed_at              DateTime?              @db.Timestamptz(6)
+  capture_runs           capture_runs           @relation(fields: [capture_run_id, device_id], references: [id, device_id], onDelete: NoAction, onUpdate: NoAction)
+  device_sensor_mappings device_sensor_mappings @relation(fields: [device_id, mapping_version, sensor_code, checkpoint_code], references: [device_id, mapping_version, sensor_code, checkpoint_code], onDelete: NoAction, onUpdate: NoAction)
+  staff_users            staff_users            @relation(fields: [operator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  work_tasks             work_tasks             @relation(fields: [task_id, checkpoint_code], references: [id, checkpoint_code], onDelete: NoAction, onUpdate: NoAction)
+  sensor_observations    sensor_observations[]
+
+  @@unique([id, device_id, context_token])
+  @@schema("supplyease")
+}
+
+model carriers {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code      String      @unique
+  name      String
+  active    Boolean     @default(true)
+  shipments shipments[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model checklist_versions {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checklist_code       String
+  version              Int
+  scope                inspection_scope
+  items                Json
+  approved_by          String                 @db.Uuid
+  approved_at          DateTime               @default(now()) @db.Timestamptz(6)
+  staff_users          staff_users            @relation(fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inspections          inspections[]
+  rfid_action_contexts rfid_action_contexts[]
+
+  @@unique([checklist_code, version])
+  @@unique([id, scope])
+  @@schema("supplyease")
+}
+
+model checkpoints {
+  code                   String                   @id
+  name                   String
+  department_code        String
+  departments            departments              @relation(fields: [department_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  device_sensor_mappings device_sensor_mappings[]
+  rfid_stations          rfid_stations?
+  work_tasks             work_tasks[]
+  workflow_steps         workflow_steps[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model cutting_inputs {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cutting_job_id            String                      @db.Uuid
+  production_order_id       String                      @db.Uuid
+  material_lot_id           String                      @db.Uuid
+  issue_id                  String                      @db.Uuid
+  issue_kind                material_movement_kind      @default(issued)
+  consumed_quantity         Decimal                     @db.Decimal(14, 3)
+  waste_quantity            Decimal                     @default(0) @db.Decimal(14, 3)
+  cutting_jobs              cutting_jobs                @relation(fields: [cutting_job_id, production_order_id], references: [id, production_order_id], onDelete: NoAction, onUpdate: NoAction)
+  material_stock_movements  material_stock_movements    @relation(fields: [issue_id, material_lot_id, production_order_id, issue_kind], references: [id, material_lot_id, production_order_id, kind], onDelete: NoAction, onUpdate: NoAction)
+  cutting_source_selections cutting_source_selections[]
+  garment_material_inputs   garment_material_inputs[]
+  rfid_action_contexts      rfid_action_contexts[]
+
+  @@unique([cutting_job_id, issue_id])
+  @@unique([id, cutting_job_id])
+  @@index([issue_id], map: "cutting_inputs_issue_idx")
+  @@schema("supplyease")
+}
+
+model cutting_jobs {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                 String                 @unique
+  production_order_id  String                 @db.Uuid
+  performed_by         String                 @db.Uuid
+  performed_at         DateTime               @default(now()) @db.Timestamptz(6)
+  cutting_inputs       cutting_inputs[]
+  staff_users          staff_users            @relation(fields: [performed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  production_orders    production_orders      @relation(fields: [production_order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  garments             garments[]
+  rfid_action_contexts rfid_action_contexts[]
+
+  @@unique([id, production_order_id])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model cutting_source_selections {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reader_session_id    String                @unique(map: "cutting_one_source_per_session_uq", where: raw("(closed_at IS NULL)")) @db.Uuid
+  cutting_job_id       String                @db.Uuid
+  cutting_input_id     String                @db.Uuid
+  source_scan_id       String                @unique @db.Uuid
+  selected_by          String                @db.Uuid
+  selected_at          DateTime              @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  closed_at            DateTime?             @db.Timestamptz(6)
+  close_reason         String?
+  cutting_inputs       cutting_inputs        @relation(fields: [cutting_input_id, cutting_job_id], references: [id, cutting_job_id], onDelete: NoAction, onUpdate: NoAction)
+  reader_sessions      reader_sessions       @relation(fields: [reader_session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users          staff_users           @relation(fields: [selected_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_scans           rfid_scans            @relation(fields: [source_scan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_action_contexts rfid_action_contexts[]
+
+  @@unique([id, reader_session_id, cutting_job_id, cutting_input_id])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model departments {
+  code              String              @id
+  name              String
+  active            Boolean             @default(true)
+  audit_events      audit_events[]
+  checkpoints       checkpoints[]
+  rework_cases      rework_cases[]
+  staff_role_grants staff_role_grants[]
+  work_tasks        work_tasks[]
+  workflow_steps    workflow_steps[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model device_bridge_sessions {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  device_id         String       @unique(map: "bridge_one_active_device_uq", where: raw("(disconnected_at IS NULL)")) @db.Uuid
+  instance_id       String       @db.Uuid
+  transport         String       @default("usb_serial")
+  software_version  String
+  connected_at      DateTime     @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  last_seen_at      DateTime     @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  disconnected_at   DateTime?    @db.Timestamptz(6)
+  disconnect_reason String?
+  devices           devices      @relation(fields: [device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_scans        rfid_scans[]
+
+  @@unique([id, device_id])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model device_credentials {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  device_id         String      @db.Uuid
+  credential_digest Bytes       @unique
+  issued_by         String      @db.Uuid
+  issued_at         DateTime    @default(now()) @db.Timestamptz(6)
+  expires_at        DateTime?   @db.Timestamptz(6)
+  revoked_at        DateTime?   @db.Timestamptz(6)
+  devices           devices     @relation(fields: [device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users       staff_users @relation(fields: [issued_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([device_id], map: "device_credentials_active_idx", where: raw("(revoked_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model device_mapping_versions {
+  device_id              String                   @unique(map: "device_mapping_active_uq", where: raw("((activated_at IS NOT NULL) AND (retired_at IS NULL))")) @db.Uuid
+  version                Int
+  created_by             String                   @db.Uuid
+  created_at             DateTime                 @default(now()) @db.Timestamptz(6)
+  bench_verified_at      DateTime?                @db.Timestamptz(6)
+  activated_at           DateTime?                @db.Timestamptz(6)
+  retired_at             DateTime?                @db.Timestamptz(6)
+  staff_users            staff_users              @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  devices                devices                  @relation(fields: [device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  device_reader_mappings device_reader_mappings[]
+  device_sensor_mappings device_sensor_mappings[]
+
+  @@id([device_id, version])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model device_reader_mappings {
+  device_id               String                  @db.Uuid
+  mapping_version         Int
+  reader_index            Int                     @db.SmallInt
+  station_code            String
+  physical_label          String?
+  device_mapping_versions device_mapping_versions @relation(fields: [device_id, mapping_version], references: [device_id, version], onDelete: NoAction, onUpdate: NoAction)
+  rfid_stations           rfid_stations           @relation(fields: [station_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  reader_sessions         reader_sessions[]
+
+  @@id([device_id, mapping_version, reader_index])
+  @@unique([device_id, mapping_version, reader_index, station_code])
+  @@unique([device_id, mapping_version, station_code])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model device_sensor_mappings {
+  device_id               String                  @db.Uuid
+  mapping_version         Int
+  sensor_code             String
+  checkpoint_code         String
+  gpio                    Int                     @db.SmallInt
+  active_low              Boolean
+  capture_steps           capture_steps[]
+  checkpoints             checkpoints             @relation(fields: [checkpoint_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  device_mapping_versions device_mapping_versions @relation(fields: [device_id, mapping_version], references: [device_id, version], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([device_id, mapping_version, sensor_code])
+  @@unique([device_id, mapping_version, gpio])
+  @@unique([device_id, mapping_version, sensor_code, checkpoint_code])
+  @@schema("supplyease")
+}
+
+model devices {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                    String                   @unique
+  name                    String
+  enabled                 Boolean                  @default(false)
+  registered_by           String                   @db.Uuid
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  last_seen_at            DateTime?                @db.Timestamptz(6)
+  audit_events            audit_events[]
+  capture_runs            capture_runs?
+  device_bridge_sessions  device_bridge_sessions?
+  device_credentials      device_credentials[]
+  device_mapping_versions device_mapping_versions?
+  staff_users             staff_users              @relation(fields: [registered_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_scans              rfid_scans[]
+  sensor_observations     sensor_observations[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model garment_holds {
+  id                                                                      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  garment_id                                                              String        @db.Uuid
+  kind                                                                    hold_kind
+  origin_inspection_id                                                    String?       @unique(map: "garment_holds_origin_inspection_uq", where: raw("(kind = 'quality'::hold_kind)")) @db.Uuid
+  reason                                                                  String
+  opened_by                                                               String        @db.Uuid
+  opened_at                                                               DateTime      @default(now()) @db.Timestamptz(6)
+  released_by                                                             String?       @db.Uuid
+  released_at                                                             DateTime?     @db.Timestamptz(6)
+  release_inspection_id                                                   String?       @db.Uuid
+  release_reason                                                          String?
+  garments                                                                garments      @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_garment_holds_opened_byTostaff_users                        staff_users   @relation("garment_holds_opened_byTostaff_users", fields: [opened_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inspections_garment_holds_origin_inspection_id_garment_idToinspections  inspections?  @relation("garment_holds_origin_inspection_id_garment_idToinspections", fields: [origin_inspection_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  inspections_garment_holds_release_inspection_id_garment_idToinspections inspections?  @relation("garment_holds_release_inspection_id_garment_idToinspections", fields: [release_inspection_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_garment_holds_released_byTostaff_users                      staff_users?  @relation("garment_holds_released_byTostaff_users", fields: [released_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rework_cases                                                            rework_cases[]
+
+  @@unique([id, garment_id])
+  @@index([garment_id, kind], map: "garment_holds_active_idx", where: raw("(released_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model garment_material_inputs {
+  garment_id          String         @db.Uuid
+  cutting_job_id      String         @db.Uuid
+  cutting_input_id    String         @db.Uuid
+  attributed_quantity Decimal?       @db.Decimal(14, 3)
+  cutting_inputs      cutting_inputs @relation(fields: [cutting_input_id, cutting_job_id], references: [id, cutting_job_id], onDelete: NoAction, onUpdate: NoAction)
+  garments            garments       @relation(fields: [garment_id, cutting_job_id], references: [id, cutting_job_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([garment_id, cutting_input_id])
+  @@index([cutting_input_id], map: "garment_material_inputs_input_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model garment_returns {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                 String        @unique
+  garment_id           String        @db.Uuid
+  original_shipment_id String        @db.Uuid
+  status               return_status @default(received)
+  reason               String
+  received_by          String        @db.Uuid
+  received_at          DateTime      @default(now()) @db.Timestamptz(6)
+  inspection_id        String?       @db.Uuid
+  revision             Int           @default(0)
+  garments             garments      @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inspections          inspections?  @relation(fields: [inspection_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  shipments            shipments     @relation(fields: [original_shipment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users          staff_users   @relation(fields: [received_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([garment_id, received_at(sort: Desc)], map: "garment_returns_garment_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model garments {
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                       String                       @unique
+  public_id                  String                       @unique
+  cutting_job_id             String                       @db.Uuid
+  production_order_id        String                       @db.Uuid
+  size_label                 String?
+  stage                      garment_stage                @default(cut)
+  quality_disposition        quality_status               @default(awaiting_inspection)
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  revision                   Int                          @default(0)
+  capture_runs               capture_runs[]
+  garment_holds              garment_holds[]
+  garment_material_inputs    garment_material_inputs[]
+  garment_returns            garment_returns[]
+  cutting_jobs               cutting_jobs                 @relation(fields: [cutting_job_id, production_order_id], references: [id, production_order_id], onDelete: NoAction, onUpdate: NoAction)
+  identifier_activity_alerts identifier_activity_alerts[]
+  inspections                inspections?
+  package_items              package_items?
+  public_lookup_buckets      public_lookup_buckets[]
+  public_payload_versions    public_payload_versions[]
+  rfid_scans                 rfid_scans[]
+  rfid_tag_bindings          rfid_tag_bindings?
+  trace_events               trace_events[]
+  work_tasks                 work_tasks[]
+
+  @@unique([id, cutting_job_id])
+  @@unique([id, public_id])
+  @@index([production_order_id, code], map: "garments_order_idx")
+  @@index([stage, quality_disposition], map: "garments_progress_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model identifier_activity_alerts {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  garment_id     String       @db.Uuid
+  rule_code      String
+  window_start   DateTime     @db.Timestamptz(6)
+  window_end     DateTime     @db.Timestamptz(6)
+  observed_count BigInt
+  triggered_at   DateTime     @default(now()) @db.Timestamptz(6)
+  resolved_by    String?      @db.Uuid
+  resolved_at    DateTime?    @db.Timestamptz(6)
+  garments       garments     @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users    staff_users? @relation(fields: [resolved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([garment_id, rule_code, window_start, window_end])
+  @@index([garment_id], map: "identifier_activity_alerts_active_idx", where: raw("(resolved_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model inspections {
+  id                                                                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                                                                      String                     @unique
+  scope                                                                     inspection_scope
+  checklist_version_id                                                      String                     @db.Uuid
+  material_lot_id                                                           String?                    @db.Uuid
+  garment_id                                                                String?                    @unique(map: "inspections_one_open_per_garment_uq", where: raw("((submitted_at IS NULL) AND (garment_id IS NOT NULL))")) @db.Uuid
+  prior_inspection_id                                                       String?                    @db.Uuid
+  inspector_id                                                              String                     @db.Uuid
+  answers                                                                   Json                       @default("{}")
+  notes                                                                     String?
+  defect_reason                                                             String?
+  outcome                                                                   inspection_outcome?
+  sampled_quantity                                                          Decimal?                   @db.Decimal(14, 3)
+  accepted_quantity                                                         Decimal?                   @db.Decimal(14, 3)
+  held_quantity                                                             Decimal?                   @db.Decimal(14, 3)
+  rejected_quantity                                                         Decimal?                   @db.Decimal(14, 3)
+  created_at                                                                DateTime                   @default(now()) @db.Timestamptz(6)
+  submitted_at                                                              DateTime?                  @db.Timestamptz(6)
+  rfid_scan_id                                                              String?                    @unique @db.Uuid
+  garment_holds_garment_holds_origin_inspection_id_garment_idToinspections  garment_holds[]            @relation("garment_holds_origin_inspection_id_garment_idToinspections")
+  garment_holds_garment_holds_release_inspection_id_garment_idToinspections garment_holds[]            @relation("garment_holds_release_inspection_id_garment_idToinspections")
+  garment_returns                                                           garment_returns[]
+  rfid_scans                                                                rfid_scans?                @relation(fields: [rfid_scan_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction, map: "inspection_rfid_garment_fk")
+  checklist_versions                                                        checklist_versions         @relation(fields: [checklist_version_id, scope], references: [id, scope], onDelete: NoAction, onUpdate: NoAction)
+  garments                                                                  garments?                  @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users                                                               staff_users                @relation(fields: [inspector_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_lots                                                             material_lots?             @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inspections                                                               inspections?               @relation("inspectionsToinspections", fields: [prior_inspection_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  other_inspections                                                         inspections[]              @relation("inspectionsToinspections")
+  material_stock_movements                                                  material_stock_movements[]
+  repair_records                                                            repair_records[]
+  trace_events                                                              trace_events[]
+
+  @@unique([id, garment_id])
+  @@unique([id, material_lot_id])
+  @@index([garment_id, created_at(sort: Desc)], map: "inspections_garment_idx")
+  @@index([garment_id, submitted_at(sort: Desc)], map: "inspections_latest_qc_idx", where: raw("((garment_id IS NOT NULL) AND (submitted_at IS NOT NULL))"))
+  @@index([material_lot_id, created_at(sort: Desc)], map: "inspections_lot_idx")
+  @@index([inspector_id, scope, created_at], map: "inspections_queue_idx", where: raw("(submitted_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model ledger_commitments {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deployment_id           String                   @db.Uuid
+  commitment_id           Bytes
+  payload_sha256          Bytes
+  trace_event_id          String?                  @db.Uuid
+  public_payload_id       String?                  @db.Uuid
+  internal_payload_bytes  Bytes?
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  hash_scheme             String                   @default("sha256")
+  internal_nonce          Bytes?
+  ledger_deployments      ledger_deployments       @relation(fields: [deployment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  public_payload_versions public_payload_versions? @relation(fields: [public_payload_id, payload_sha256], references: [id, payload_sha256], onDelete: NoAction, onUpdate: NoAction)
+  trace_events            trace_events?            @relation(fields: [trace_event_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ledger_outbox           ledger_outbox?
+  ledger_transactions     ledger_transactions[]
+
+  @@unique([deployment_id, commitment_id])
+  @@unique([deployment_id, trace_event_id], map: "ledger_commitments_event_uq", where: raw("(trace_event_id IS NOT NULL)"))
+  @@unique([id, deployment_id])
+  @@unique([deployment_id, public_payload_id], map: "ledger_commitments_public_uq", where: raw("(public_payload_id IS NOT NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ledger_deployments {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code               String               @unique
+  chain_id           Decimal              @db.Decimal(78, 0)
+  network_name       String
+  contract_address   Bytes
+  deployment_tx_hash Bytes
+  protocol_version   Int
+  registered_at      DateTime             @default(now()) @db.Timestamptz(6)
+  ledger_commitments ledger_commitments[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ledger_outbox {
+  commitment_id      String             @id @db.Uuid
+  status             ledger_job_status  @default(pending)
+  attempt_count      Int                @default(0)
+  next_attempt_at    DateTime           @default(now()) @db.Timestamptz(6)
+  lease_token        String?            @db.Uuid
+  lease_expires_at   DateTime?          @db.Timestamptz(6)
+  last_error_code    String?
+  last_error_summary String?
+  updated_at         DateTime           @default(now()) @db.Timestamptz(6)
+  retry_requested_by String?            @db.Uuid
+  retry_requested_at DateTime?          @db.Timestamptz(6)
+  ledger_commitments ledger_commitments @relation(fields: [commitment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users        staff_users?       @relation(fields: [retry_requested_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([next_attempt_at, lease_expires_at], map: "ledger_outbox_ready_idx", where: raw("(status = ANY (ARRAY['pending'::ledger_job_status, 'submitted'::ledger_job_status]))"))
+  @@index([status, updated_at(sort: Desc)], map: "ledger_outbox_status_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ledger_transactions {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  commitment_id      String             @unique(map: "ledger_transactions_confirmed_uq", where: raw("(status = 'confirmed'::ledger_tx_status)")) @db.Uuid
+  deployment_id      String             @db.Uuid
+  tx_hash            Bytes
+  status             ledger_tx_status   @default(submitted)
+  submitted_at       DateTime           @default(now()) @db.Timestamptz(6)
+  block_number       BigInt?
+  block_hash         Bytes?
+  block_timestamp    DateTime?          @db.Timestamptz(6)
+  confirmed_at       DateTime?          @db.Timestamptz(6)
+  ledger_commitments ledger_commitments @relation(fields: [commitment_id, deployment_id], references: [id, deployment_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([deployment_id, tx_hash])
+  @@index([commitment_id, submitted_at(sort: Desc)], map: "ledger_transactions_commitment_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model material_lots {
+  id                          String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                        String                     @unique
+  supplier_id                 String                     @db.Uuid
+  supplier_lot_ref            String?
+  receipt_ref                 String?
+  material_name               String
+  unit                        quantity_unit
+  received_quantity           Decimal                    @db.Decimal(14, 3)
+  available_accepted_quantity Decimal                    @default(0) @db.Decimal(14, 3)
+  received_by                 String                     @db.Uuid
+  received_at                 DateTime                   @default(now()) @db.Timestamptz(6)
+  revision                    Int                        @default(0)
+  capture_runs                capture_runs[]
+  inspections                 inspections[]
+  staff_users                 staff_users                @relation(fields: [received_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  suppliers                   suppliers                  @relation(fields: [supplier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_stock_movements    material_stock_movements[]
+  rfid_scans                  rfid_scans[]
+  rfid_tag_bindings           rfid_tag_bindings?
+  trace_events                trace_events[]
+  work_tasks                  work_tasks[]
+
+  @@index([supplier_id, received_at(sort: Desc)], map: "material_lots_supplier_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model material_stock_movements {
+  id                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  material_lot_id                String                     @db.Uuid
+  kind                           material_movement_kind
+  production_order_id            String?                    @db.Uuid
+  inspection_id                  String?                    @db.Uuid
+  original_issue_id              String?                    @db.Uuid
+  quantity                       Decimal                    @db.Decimal(14, 3)
+  reason                         String
+  performed_by                   String                     @db.Uuid
+  performed_at                   DateTime                   @default(now()) @db.Timestamptz(6)
+  cutting_inputs                 cutting_inputs[]
+  inspections                    inspections?               @relation(fields: [inspection_id, material_lot_id], references: [id, material_lot_id], onDelete: NoAction, onUpdate: NoAction)
+  material_lots                  material_lots              @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_stock_movements       material_stock_movements?  @relation("material_stock_movementsTomaterial_stock_movements", fields: [original_issue_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_material_stock_movements material_stock_movements[] @relation("material_stock_movementsTomaterial_stock_movements")
+  staff_users                    staff_users                @relation(fields: [performed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  production_orders              production_orders?         @relation(fields: [production_order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, material_lot_id, production_order_id, kind])
+  @@index([inspection_id], map: "material_stock_movements_inspection_idx", where: raw("(inspection_id IS NOT NULL)"))
+  @@index([material_lot_id, performed_at(sort: Desc)], map: "material_stock_movements_lot_idx")
+  @@index([original_issue_id], map: "material_stock_movements_return_idx", where: raw("(original_issue_id IS NOT NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model package_items {
+  id                                                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  package_id                                        String       @db.Uuid
+  garment_id                                        String       @unique(map: "package_items_active_garment_uq", where: raw("(removed_at IS NULL)")) @db.Uuid
+  added_by                                          String       @db.Uuid
+  added_at                                          DateTime     @default(now()) @db.Timestamptz(6)
+  removed_by                                        String?      @db.Uuid
+  removed_at                                        DateTime?    @db.Timestamptz(6)
+  staff_users_package_items_added_byTostaff_users   staff_users  @relation("package_items_added_byTostaff_users", fields: [added_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  garments                                          garments     @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages                                          packages     @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_package_items_removed_byTostaff_users staff_users? @relation("package_items_removed_byTostaff_users", fields: [removed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([package_id, garment_id], map: "package_items_package_idx", where: raw("(removed_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model packages {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                 String                 @unique
+  status               package_status         @default(open)
+  created_by           String                 @db.Uuid
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  revision             Int                    @default(0)
+  capture_runs         capture_runs[]
+  package_items        package_items[]
+  staff_users          staff_users            @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_action_contexts rfid_action_contexts[]
+  shipment_packages    shipment_packages?
+  trace_events         trace_events[]
+  warehouse_movements  warehouse_movements[]
+  warehouse_stock      warehouse_stock?
+  work_tasks           work_tasks[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model product_spec_versions {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  style_code        String
+  version           Int
+  product_name      String
+  specifications    Json
+  approved_by       String              @db.Uuid
+  approved_at       DateTime            @default(now()) @db.Timestamptz(6)
+  staff_users       staff_users         @relation(fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  production_orders production_orders[]
+
+  @@unique([style_code, version])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model production_orders {
+  id                                                     String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                                                   String                     @unique
+  workflow_version_id                                    String                     @db.Uuid
+  product_spec_version_id                                String                     @db.Uuid
+  planned_quantity                                       Int
+  status                                                 order_status               @default(draft)
+  planned_for                                            DateTime?                  @db.Date
+  created_by                                             String                     @db.Uuid
+  created_at                                             DateTime                   @default(now()) @db.Timestamptz(6)
+  approved_by                                            String?                    @db.Uuid
+  approved_at                                            DateTime?                  @db.Timestamptz(6)
+  revision                                               Int                        @default(0)
+  cutting_jobs                                           cutting_jobs[]
+  material_stock_movements                               material_stock_movements[]
+  staff_users_production_orders_approved_byTostaff_users staff_users?               @relation("production_orders_approved_byTostaff_users", fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_production_orders_created_byTostaff_users  staff_users                @relation("production_orders_created_byTostaff_users", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product_spec_versions                                  product_spec_versions      @relation(fields: [product_spec_version_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workflow_versions                                      workflow_versions          @relation(fields: [workflow_version_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_action_contexts                                   rfid_action_contexts[]
+  trace_events                                           trace_events[]
+  work_tasks                                             work_tasks[]
+
+  @@unique([id, workflow_version_id])
+  @@index([status, created_at(sort: Desc)], map: "production_orders_status_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model public_lookup_buckets {
+  garment_id   String   @db.Uuid
+  bucket_start DateTime @db.Timestamptz(6)
+  lookup_count BigInt   @default(0)
+  garments     garments @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([garment_id, bucket_start])
+  @@index([bucket_start], map: "public_lookup_buckets_time_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model public_payload_versions {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  garment_id         String               @db.Uuid
+  public_id          String
+  version            Int
+  schema_version     Int
+  payload_bytes      Bytes
+  payload_sha256     Bytes?               @default(dbgenerated("sha256(payload_bytes)"))
+  approved_by        String               @db.Uuid
+  published_at       DateTime             @default(now()) @db.Timestamptz(6)
+  ledger_commitments ledger_commitments[]
+  staff_users        staff_users          @relation(fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  garments           garments             @relation(fields: [garment_id, public_id], references: [id, public_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, payload_sha256])
+  @@unique([public_id, version])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model reader_sessions {
+  id                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  device_id                 String                     @db.Uuid
+  mapping_version           Int
+  reader_index              Int                        @db.SmallInt
+  station_code              String
+  staff_session_id          String                     @db.Uuid
+  operator_id               String                     @db.Uuid
+  opened_at                 DateTime                   @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  expires_at                DateTime                   @db.Timestamptz(6)
+  last_seen_at              DateTime                   @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  closed_at                 DateTime?                  @db.Timestamptz(6)
+  close_reason              String?
+  cutting_source_selections cutting_source_selections[]
+  device_reader_mappings    device_reader_mappings     @relation(fields: [device_id, mapping_version, reader_index, station_code], references: [device_id, mapping_version, reader_index, station_code], onDelete: NoAction, onUpdate: NoAction)
+  staff_users               staff_users                @relation(fields: [operator_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_sessions            staff_sessions             @relation(fields: [staff_session_id, operator_id], references: [id, staff_user_id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_action_contexts      rfid_action_contexts[]
+  rfid_scans                rfid_scans[]
+
+  @@unique([id, device_id, mapping_version, reader_index, station_code])
+  @@unique([device_id, reader_index], map: "reader_sessions_one_operator_uq", where: raw("(closed_at IS NULL)"))
+  @@index([operator_id, expires_at], map: "reader_sessions_operator_idx", where: raw("(closed_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model repair_records {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  rework_case_id  String       @db.Uuid
+  garment_id      String       @db.Uuid
+  performed_by    String       @db.Uuid
+  performed_at    DateTime     @default(now()) @db.Timestamptz(6)
+  work_summary    String
+  reinspection_id String       @unique @db.Uuid
+  staff_users     staff_users  @relation(fields: [performed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inspections     inspections  @relation(fields: [reinspection_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  rework_cases    rework_cases @relation(fields: [rework_case_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model rework_cases {
+  id                                                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                                              String           @unique
+  garment_id                                        String           @db.Uuid
+  hold_id                                           String           @unique @db.Uuid
+  status                                            rework_status    @default(open)
+  description                                       String
+  opened_by                                         String           @db.Uuid
+  opened_at                                         DateTime         @default(now()) @db.Timestamptz(6)
+  assigned_department_code                          String?
+  assigned_by                                       String?          @db.Uuid
+  assigned_at                                       DateTime?        @db.Timestamptz(6)
+  revision                                          Int              @default(0)
+  repair_records                                    repair_records[]
+  staff_users_rework_cases_assigned_byTostaff_users staff_users?     @relation("rework_cases_assigned_byTostaff_users", fields: [assigned_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments                                       departments?     @relation(fields: [assigned_department_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  garment_holds                                     garment_holds    @relation(fields: [hold_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_rework_cases_opened_byTostaff_users   staff_users      @relation("rework_cases_opened_byTostaff_users", fields: [opened_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, garment_id])
+  @@index([status, assigned_department_code], map: "rework_cases_queue_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model rfid_action_contexts {
+  id                        String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reader_session_id         String                     @unique(map: "rfid_context_one_live_per_reader_uq", where: raw("(closed_at IS NULL)")) @db.Uuid
+  action_code               String
+  status                    rfid_context_status        @default(awaiting_ack)
+  created_at                DateTime                   @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  expires_at                DateTime                   @db.Timestamptz(6)
+  acknowledged_at           DateTime?                  @db.Timestamptz(6)
+  closed_at                 DateTime?                  @db.Timestamptz(6)
+  close_reason              String?
+  source_selection_id       String?                    @db.Uuid
+  cutting_job_id            String?                    @db.Uuid
+  cutting_input_id          String?                    @db.Uuid
+  production_order_id       String?                    @db.Uuid
+  package_id                String?                    @db.Uuid
+  shipment_id               String?                    @db.Uuid
+  warehouse_bin_id          String?                    @db.Uuid
+  quantity                  Decimal?                   @db.Decimal(14, 3)
+  qc_scope                  inspection_scope?
+  qc_outcome                inspection_outcome?
+  checklist_version_id      String?                    @db.Uuid
+  answers                   Json                       @default("{}")
+  notes                     String?
+  defect_reason             String?
+  checklist_versions        checklist_versions?        @relation(fields: [checklist_version_id, qc_scope], references: [id, scope], onDelete: NoAction, onUpdate: NoAction)
+  cutting_inputs            cutting_inputs?            @relation(fields: [cutting_input_id, cutting_job_id], references: [id, cutting_job_id], onDelete: NoAction, onUpdate: NoAction)
+  cutting_jobs              cutting_jobs?              @relation(fields: [cutting_job_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages                  packages?                  @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  production_orders         production_orders?         @relation(fields: [production_order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reader_sessions           reader_sessions            @relation(fields: [reader_session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shipments                 shipments?                 @relation(fields: [shipment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  warehouse_bins            warehouse_bins?            @relation(fields: [warehouse_bin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cutting_source_selections cutting_source_selections? @relation(fields: [source_selection_id, reader_session_id, cutting_job_id, cutting_input_id], references: [id, reader_session_id, cutting_job_id, cutting_input_id], onDelete: NoAction, onUpdate: NoAction, map: "rfid_context_source_selection_fk")
+  rfid_scans                rfid_scans[]
+
+  @@unique([id, reader_session_id])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model rfid_scans {
+  id                                                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  device_id                                                                      String                     @db.Uuid
+  bridge_session_id                                                              String?                    @db.Uuid
+  schema_version                                                                 Int                        @default(1) @db.SmallInt
+  scan_id                                                                        String
+  boot_id                                                                        String
+  sequence                                                                       BigInt
+  reader_index                                                                   Int                        @db.SmallInt
+  reported_mapping_version                                                       Int
+  tag_uid                                                                        String
+  reported_context_id                                                            String?                    @db.Uuid
+  reader_session_id                                                              String?                    @db.Uuid
+  resolved_context_id                                                            String?                    @unique(map: "rfid_context_accepted_once_uq", where: raw("((outcome = 'accepted'::rfid_scan_outcome) AND (resolved_context_id IS NOT NULL))")) @db.Uuid
+  station_code                                                                   String?
+  tag_binding_id                                                                 String?                    @db.Uuid
+  material_lot_id                                                                String?                    @db.Uuid
+  garment_id                                                                     String?                    @db.Uuid
+  device_uptime_ms                                                               BigInt?
+  request_sha256                                                                 Bytes
+  received_at                                                                    DateTime                   @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  outcome                                                                        rfid_scan_outcome
+  outcome_code                                                                   String
+  outcome_message                                                                String?
+  cutting_source_selections                                                      cutting_source_selections?
+  inspections                                                                    inspections[]
+  device_bridge_sessions                                                         device_bridge_sessions?    @relation(fields: [bridge_session_id, device_id], references: [id, device_id], onDelete: NoAction, onUpdate: NoAction)
+  devices                                                                        devices                    @relation(fields: [device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  garments                                                                       garments?                  @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_lots                                                                  material_lots?             @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reader_sessions                                                                reader_sessions?           @relation(fields: [reader_session_id, device_id, reported_mapping_version, reader_index, station_code], references: [id, device_id, mapping_version, reader_index, station_code], onDelete: NoAction, onUpdate: NoAction)
+  rfid_action_contexts                                                           rfid_action_contexts?      @relation(fields: [resolved_context_id, reader_session_id], references: [id, reader_session_id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_stations                                                                  rfid_stations?             @relation(fields: [station_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  rfid_tag_bindings_rfid_scans_tag_binding_idTorfid_tag_bindings                 rfid_tag_bindings?         @relation("rfid_scans_tag_binding_idTorfid_tag_bindings", fields: [tag_binding_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_tag_bindings_rfid_scans_tag_binding_id_garment_idTorfid_tag_bindings      rfid_tag_bindings?         @relation("rfid_scans_tag_binding_id_garment_idTorfid_tag_bindings", fields: [tag_binding_id, garment_id], references: [id, garment_id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_tag_bindings_rfid_scans_tag_binding_id_material_lot_idTorfid_tag_bindings rfid_tag_bindings?         @relation("rfid_scans_tag_binding_id_material_lot_idTorfid_tag_bindings", fields: [tag_binding_id, material_lot_id], references: [id, material_lot_id], onDelete: NoAction, onUpdate: NoAction)
+  trace_events                                                                   trace_events[]
+
+  @@unique([device_id, boot_id, sequence])
+  @@unique([device_id, scan_id])
+  @@unique([id, garment_id])
+  @@unique([id, material_lot_id])
+  @@index([device_id, received_at(sort: Desc)], map: "rfid_scans_device_time_idx")
+  @@index([garment_id, received_at(sort: Desc)], map: "rfid_scans_garment_time_idx", where: raw("(garment_id IS NOT NULL)"))
+  @@index([material_lot_id, received_at(sort: Desc)], map: "rfid_scans_lot_time_idx", where: raw("(material_lot_id IS NOT NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rfid_stations {
+  code                      String                   @id
+  name                      String
+  original_board_label      String
+  workflow_position         Int                      @unique @db.SmallInt
+  checkpoint_code           String                   @unique
+  subject_kind              String
+  requires_explicit_context Boolean                  @default(false)
+  device_reader_mappings    device_reader_mappings[]
+  rfid_scans                rfid_scans[]
+  checkpoints               checkpoints              @relation(fields: [checkpoint_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model rfid_tag_bindings {
+  id                                                                      String         @id(map: "garment_tag_bindings_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  garment_id                                                              String?        @unique(map: "rfid_tags_active_garment_uq", where: raw("(unbound_at IS NULL)")) @db.Uuid
+  tag_technology                                                          String
+  tag_identifier                                                          String
+  bound_by                                                                String         @db.Uuid
+  bound_at                                                                DateTime       @default(now()) @db.Timestamptz(6)
+  unbound_by                                                              String?        @db.Uuid
+  unbound_at                                                              DateTime?      @db.Timestamptz(6)
+  material_lot_id                                                         String?        @unique(map: "rfid_tags_active_lot_uq", where: raw("((unbound_at IS NULL) AND (material_lot_id IS NOT NULL))")) @db.Uuid
+  tag_uid                                                                 String?        @unique(map: "rfid_tags_active_uid_uq", where: raw("(unbound_at IS NULL)")) @default(dbgenerated("upper(regexp_replace(tag_identifier, '[[:space:]:-]'::text, ''::text, 'g'::text))"))
+  rfid_scans_rfid_scans_tag_binding_idTorfid_tag_bindings                 rfid_scans[]   @relation("rfid_scans_tag_binding_idTorfid_tag_bindings")
+  rfid_scans_rfid_scans_tag_binding_id_garment_idTorfid_tag_bindings      rfid_scans[]   @relation("rfid_scans_tag_binding_id_garment_idTorfid_tag_bindings")
+  rfid_scans_rfid_scans_tag_binding_id_material_lot_idTorfid_tag_bindings rfid_scans[]   @relation("rfid_scans_tag_binding_id_material_lot_idTorfid_tag_bindings")
+  staff_users_rfid_tag_bindings_bound_byTostaff_users                     staff_users    @relation("rfid_tag_bindings_bound_byTostaff_users", fields: [bound_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "garment_tag_bindings_bound_by_fkey")
+  garments                                                                garments?      @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "garment_tag_bindings_garment_id_fkey")
+  staff_users_rfid_tag_bindings_unbound_byTostaff_users                   staff_users?   @relation("rfid_tag_bindings_unbound_byTostaff_users", fields: [unbound_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "garment_tag_bindings_unbound_by_fkey")
+  material_lots                                                           material_lots? @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, garment_id], map: "rfid_binding_garment_reference")
+  @@unique([id, material_lot_id], map: "rfid_binding_lot_reference")
+  @@schema("supplyease")
+}
+
+model schema_migrations {
+  version     String   @id
+  applied_at  DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  description String
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sensor_observations {
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  device_id                String                 @db.Uuid
+  schema_version           Int
+  event_id                 String
+  boot_id                  String
+  sequence                 BigInt
+  reported_context_token   String?
+  resolved_step_id         String?                @unique(map: "sensor_observations_accepted_step_uq", where: raw("(resolution = 'accepted'::observation_resolution)")) @db.Uuid
+  sensor_code              String
+  edge                     sensor_edge
+  device_uptime_ms         BigInt
+  reported_mapping_version Int
+  request_sha256           Bytes
+  received_at              DateTime               @default(now()) @db.Timestamptz(6)
+  resolution               observation_resolution
+  resolution_reason        String?
+  devices                  devices                @relation(fields: [device_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  capture_steps            capture_steps?         @relation(fields: [resolved_step_id, device_id, reported_context_token], references: [id, device_id, context_token], onDelete: NoAction, onUpdate: NoAction)
+  trace_events             trace_events[]
+
+  @@unique([device_id, boot_id, sequence])
+  @@unique([device_id, event_id])
+  @@index([device_id, received_at(sort: Desc)], map: "sensor_observations_device_time_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model shipment_packages {
+  id                                                        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shipment_id                                               String       @db.Uuid
+  package_id                                                String       @unique(map: "shipment_packages_active_package_uq", where: raw("(deallocated_at IS NULL)")) @db.Uuid
+  allocated_by                                              String       @db.Uuid
+  allocated_at                                              DateTime     @default(now()) @db.Timestamptz(6)
+  deallocated_by                                            String?      @db.Uuid
+  deallocated_at                                            DateTime?    @db.Timestamptz(6)
+  staff_users_shipment_packages_allocated_byTostaff_users   staff_users  @relation("shipment_packages_allocated_byTostaff_users", fields: [allocated_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_shipment_packages_deallocated_byTostaff_users staff_users? @relation("shipment_packages_deallocated_byTostaff_users", fields: [deallocated_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages                                                  packages     @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shipments                                                 shipments    @relation(fields: [shipment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([shipment_id], map: "shipment_packages_shipment_idx", where: raw("(deallocated_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model shipments {
+  id                                             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                                           String                 @unique
+  status                                         shipment_status        @default(draft)
+  carrier_id                                     String?                @db.Uuid
+  destination_details                            Json                   @default("{}")
+  tracking_reference                             String?
+  planned_at                                     DateTime?              @db.Timestamptz(6)
+  created_by                                     String                 @db.Uuid
+  created_at                                     DateTime               @default(now()) @db.Timestamptz(6)
+  approved_by                                    String?                @db.Uuid
+  approved_at                                    DateTime?              @db.Timestamptz(6)
+  departed_by                                    String?                @db.Uuid
+  departed_at                                    DateTime?              @db.Timestamptz(6)
+  delivered_at                                   DateTime?              @db.Timestamptz(6)
+  revision                                       Int                    @default(0)
+  garment_returns                                garment_returns[]
+  rfid_action_contexts                           rfid_action_contexts[]
+  shipment_packages                              shipment_packages[]
+  staff_users_shipments_approved_byTostaff_users staff_users?           @relation("shipments_approved_byTostaff_users", fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  carriers                                       carriers?              @relation(fields: [carrier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_shipments_created_byTostaff_users  staff_users            @relation("shipments_created_byTostaff_users", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_shipments_departed_byTostaff_users staff_users?           @relation("shipments_departed_byTostaff_users", fields: [departed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  trace_events                                   trace_events[]
+  work_tasks                                     work_tasks[]
+
+  @@index([status, planned_at], map: "shipments_status_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model staff_credential_tokens {
+  id                                                             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staff_user_id                                                  String             @db.Uuid
+  purpose                                                        credential_purpose
+  token_digest                                                   Bytes              @unique
+  issued_by                                                      String?            @db.Uuid
+  issued_at                                                      DateTime           @default(now()) @db.Timestamptz(6)
+  expires_at                                                     DateTime           @db.Timestamptz(6)
+  consumed_at                                                    DateTime?          @db.Timestamptz(6)
+  revoked_at                                                     DateTime?          @db.Timestamptz(6)
+  staff_users_staff_credential_tokens_issued_byTostaff_users     staff_users?       @relation("staff_credential_tokens_issued_byTostaff_users", fields: [issued_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_staff_credential_tokens_staff_user_idTostaff_users staff_users        @relation("staff_credential_tokens_staff_user_idTostaff_users", fields: [staff_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([staff_user_id, purpose, expires_at], map: "staff_credential_tokens_user_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model staff_role_grants {
+  id                                                       String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staff_user_id                                            String       @db.Uuid
+  role                                                     staff_role
+  department_code                                          String?
+  granted_by                                               String?      @db.Uuid
+  granted_at                                               DateTime     @default(now()) @db.Timestamptz(6)
+  revoked_at                                               DateTime?    @db.Timestamptz(6)
+  revoked_by                                               String?      @db.Uuid
+  departments                                              departments? @relation(fields: [department_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_staff_role_grants_granted_byTostaff_users    staff_users? @relation("staff_role_grants_granted_byTostaff_users", fields: [granted_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_staff_role_grants_revoked_byTostaff_users    staff_users? @relation("staff_role_grants_revoked_byTostaff_users", fields: [revoked_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_staff_role_grants_staff_user_idTostaff_users staff_users  @relation("staff_role_grants_staff_user_idTostaff_users", fields: [staff_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([staff_user_id, role, department_code], map: "staff_role_grants_active_uq", where: raw("(revoked_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model staff_sessions {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  staff_user_id   String            @db.Uuid
+  token_digest    Bytes             @unique
+  issued_at       DateTime          @default(now()) @db.Timestamptz(6)
+  expires_at      DateTime          @db.Timestamptz(6)
+  revoked_at      DateTime?         @db.Timestamptz(6)
+  reader_sessions reader_sessions[]
+  staff_users     staff_users       @relation(fields: [staff_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, staff_user_id], map: "staff_sessions_id_user_uq")
+  @@index([staff_user_id, expires_at], map: "staff_sessions_active_idx", where: raw("(revoked_at IS NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model staff_users {
+  id                                                                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username                                                                   String                       @unique
+  display_name                                                               String
+  password_hash                                                              String?
+  created_at                                                                 DateTime                     @default(now()) @db.Timestamptz(6)
+  activated_at                                                               DateTime?                    @db.Timestamptz(6)
+  suspended_at                                                               DateTime?                    @db.Timestamptz(6)
+  api_idempotency_keys                                                       api_idempotency_keys[]
+  audit_events                                                               audit_events[]
+  capture_runs_capture_runs_closed_byTostaff_users                           capture_runs[]               @relation("capture_runs_closed_byTostaff_users")
+  capture_runs_capture_runs_opened_byTostaff_users                           capture_runs[]               @relation("capture_runs_opened_byTostaff_users")
+  capture_steps                                                              capture_steps[]
+  checklist_versions                                                         checklist_versions[]
+  cutting_jobs                                                               cutting_jobs[]
+  cutting_source_selections                                                  cutting_source_selections[]
+  device_credentials                                                         device_credentials[]
+  device_mapping_versions                                                    device_mapping_versions[]
+  devices                                                                    devices[]
+  garment_holds_garment_holds_opened_byTostaff_users                         garment_holds[]              @relation("garment_holds_opened_byTostaff_users")
+  garment_holds_garment_holds_released_byTostaff_users                       garment_holds[]              @relation("garment_holds_released_byTostaff_users")
+  garment_returns                                                            garment_returns[]
+  identifier_activity_alerts                                                 identifier_activity_alerts[]
+  inspections                                                                inspections[]
+  ledger_outbox                                                              ledger_outbox[]
+  material_lots                                                              material_lots[]
+  material_stock_movements                                                   material_stock_movements[]
+  package_items_package_items_added_byTostaff_users                          package_items[]              @relation("package_items_added_byTostaff_users")
+  package_items_package_items_removed_byTostaff_users                        package_items[]              @relation("package_items_removed_byTostaff_users")
+  packages                                                                   packages[]
+  product_spec_versions                                                      product_spec_versions[]
+  production_orders_production_orders_approved_byTostaff_users               production_orders[]          @relation("production_orders_approved_byTostaff_users")
+  production_orders_production_orders_created_byTostaff_users                production_orders[]          @relation("production_orders_created_byTostaff_users")
+  public_payload_versions                                                    public_payload_versions[]
+  reader_sessions                                                            reader_sessions[]
+  repair_records                                                             repair_records[]
+  rework_cases_rework_cases_assigned_byTostaff_users                         rework_cases[]               @relation("rework_cases_assigned_byTostaff_users")
+  rework_cases_rework_cases_opened_byTostaff_users                           rework_cases[]               @relation("rework_cases_opened_byTostaff_users")
+  rfid_tag_bindings_rfid_tag_bindings_bound_byTostaff_users                  rfid_tag_bindings[]          @relation("rfid_tag_bindings_bound_byTostaff_users")
+  rfid_tag_bindings_rfid_tag_bindings_unbound_byTostaff_users                rfid_tag_bindings[]          @relation("rfid_tag_bindings_unbound_byTostaff_users")
+  shipment_packages_shipment_packages_allocated_byTostaff_users              shipment_packages[]          @relation("shipment_packages_allocated_byTostaff_users")
+  shipment_packages_shipment_packages_deallocated_byTostaff_users            shipment_packages[]          @relation("shipment_packages_deallocated_byTostaff_users")
+  shipments_shipments_approved_byTostaff_users                               shipments[]                  @relation("shipments_approved_byTostaff_users")
+  shipments_shipments_created_byTostaff_users                                shipments[]                  @relation("shipments_created_byTostaff_users")
+  shipments_shipments_departed_byTostaff_users                               shipments[]                  @relation("shipments_departed_byTostaff_users")
+  staff_credential_tokens_staff_credential_tokens_issued_byTostaff_users     staff_credential_tokens[]    @relation("staff_credential_tokens_issued_byTostaff_users")
+  staff_credential_tokens_staff_credential_tokens_staff_user_idTostaff_users staff_credential_tokens[]    @relation("staff_credential_tokens_staff_user_idTostaff_users")
+  staff_role_grants_staff_role_grants_granted_byTostaff_users                staff_role_grants[]          @relation("staff_role_grants_granted_byTostaff_users")
+  staff_role_grants_staff_role_grants_revoked_byTostaff_users                staff_role_grants[]          @relation("staff_role_grants_revoked_byTostaff_users")
+  staff_role_grants_staff_role_grants_staff_user_idTostaff_users             staff_role_grants[]          @relation("staff_role_grants_staff_user_idTostaff_users")
+  staff_sessions                                                             staff_sessions[]
+  trace_events                                                               trace_events[]
+  warehouse_movements                                                        warehouse_movements[]
+  work_tasks_work_tasks_assignee_idTostaff_users                             work_tasks[]                 @relation("work_tasks_assignee_idTostaff_users")
+  work_tasks_work_tasks_created_byTostaff_users                              work_tasks[]                 @relation("work_tasks_created_byTostaff_users")
+  workflow_versions                                                          workflow_versions[]
+
+  @@schema("supplyease")
+}
+
+model suppliers {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code          String          @unique
+  name          String
+  active        Boolean         @default(true)
+  material_lots material_lots[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model trace_events {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type          String
+  material_lot_id     String?              @db.Uuid
+  production_order_id String?              @db.Uuid
+  garment_id          String?              @db.Uuid
+  package_id          String?              @db.Uuid
+  shipment_id         String?              @db.Uuid
+  subject_type        String?              @default(dbgenerated("\nCASE\n    WHEN (material_lot_id IS NOT NULL) THEN 'material_lot'::text\n    WHEN (production_order_id IS NOT NULL) THEN 'production_order'::text\n    WHEN (garment_id IS NOT NULL) THEN 'garment'::text\n    WHEN (package_id IS NOT NULL) THEN 'package'::text\n    ELSE 'shipment'::text\nEND"))
+  subject_id          String?              @default(dbgenerated("COALESCE(material_lot_id, production_order_id, garment_id, package_id, shipment_id)")) @db.Uuid
+  subject_revision    Int
+  actor_id            String               @db.Uuid
+  task_id             String?              @db.Uuid
+  observation_id      String?              @db.Uuid
+  corrects_event_id   String?              @db.Uuid
+  reason              String?
+  details             Json                 @default("{}")
+  occurred_at         DateTime             @default(now()) @db.Timestamptz(6)
+  recorded_at         DateTime             @default(now()) @db.Timestamptz(6)
+  rfid_scan_id        String?              @db.Uuid
+  inspection_id       String?              @db.Uuid
+  ledger_commitments  ledger_commitments[]
+  staff_users         staff_users          @relation(fields: [actor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  trace_events        trace_events?        @relation("trace_eventsTotrace_events", fields: [corrects_event_id, subject_type, subject_id], references: [id, subject_type, subject_id], onDelete: NoAction, onUpdate: NoAction)
+  other_trace_events  trace_events[]       @relation("trace_eventsTotrace_events")
+  garments            garments?            @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  inspections         inspections?         @relation(fields: [inspection_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_lots       material_lots?       @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sensor_observations sensor_observations? @relation(fields: [observation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages            packages?            @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  production_orders   production_orders?   @relation(fields: [production_order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rfid_scans          rfid_scans?          @relation(fields: [rfid_scan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shipments           shipments?           @relation(fields: [shipment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  work_tasks          work_tasks?          @relation(fields: [task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, subject_type, subject_id])
+  @@unique([subject_type, subject_id, subject_revision])
+  @@index([garment_id, subject_revision(sort: Desc)], map: "trace_events_garment_idx", where: raw("(garment_id IS NOT NULL)"))
+  @@index([rfid_scan_id], map: "trace_events_scan_idx", where: raw("(rfid_scan_id IS NOT NULL)"))
+  @@schema("supplyease")
+}
+
+model warehouse_bins {
+  id                                                                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                                                                String                 @unique
+  label                                                               String
+  active                                                              Boolean                @default(true)
+  rfid_action_contexts                                                rfid_action_contexts[]
+  warehouse_movements_warehouse_movements_from_bin_idTowarehouse_bins warehouse_movements[]  @relation("warehouse_movements_from_bin_idTowarehouse_bins")
+  warehouse_movements_warehouse_movements_to_bin_idTowarehouse_bins   warehouse_movements[]  @relation("warehouse_movements_to_bin_idTowarehouse_bins")
+  warehouse_stock                                                     warehouse_stock[]
+
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model warehouse_movements {
+  id                                                             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  package_id                                                     String          @db.Uuid
+  from_bin_id                                                    String?         @db.Uuid
+  to_bin_id                                                      String?         @db.Uuid
+  performed_by                                                   String          @db.Uuid
+  performed_at                                                   DateTime        @default(now()) @db.Timestamptz(6)
+  reason                                                         String
+  warehouse_bins_warehouse_movements_from_bin_idTowarehouse_bins warehouse_bins? @relation("warehouse_movements_from_bin_idTowarehouse_bins", fields: [from_bin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages                                                       packages        @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  staff_users                                                    staff_users     @relation(fields: [performed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  warehouse_bins_warehouse_movements_to_bin_idTowarehouse_bins   warehouse_bins? @relation("warehouse_movements_to_bin_idTowarehouse_bins", fields: [to_bin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([package_id, performed_at(sort: Desc)], map: "warehouse_movements_package_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model warehouse_stock {
+  package_id     String         @id @db.Uuid
+  current_bin_id String         @db.Uuid
+  updated_at     DateTime       @default(now()) @db.Timestamptz(6)
+  revision       Int            @default(0)
+  warehouse_bins warehouse_bins @relation(fields: [current_bin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages       packages       @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([current_bin_id], map: "warehouse_stock_bin_idx")
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model work_tasks {
+  id                                              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  action_code                                     String
+  department_code                                 String
+  checkpoint_code                                 String?
+  workflow_version_id                             String?            @db.Uuid
+  workflow_step_code                              String?
+  material_lot_id                                 String?            @db.Uuid
+  garment_id                                      String?            @db.Uuid
+  package_id                                      String?            @db.Uuid
+  production_order_id                             String?            @db.Uuid
+  shipment_id                                     String?            @db.Uuid
+  predecessor_task_id                             String?            @db.Uuid
+  status                                          task_status        @default(queued)
+  created_by                                      String             @db.Uuid
+  assignee_id                                     String?            @db.Uuid
+  created_at                                      DateTime           @default(now()) @db.Timestamptz(6)
+  claimed_at                                      DateTime?          @db.Timestamptz(6)
+  completed_at                                    DateTime?          @db.Timestamptz(6)
+  revision                                        Int                @default(0)
+  capture_steps                                   capture_steps[]
+  trace_events                                    trace_events[]
+  staff_users_work_tasks_assignee_idTostaff_users staff_users?       @relation("work_tasks_assignee_idTostaff_users", fields: [assignee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  checkpoints                                     checkpoints?       @relation(fields: [checkpoint_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  staff_users_work_tasks_created_byTostaff_users  staff_users        @relation("work_tasks_created_byTostaff_users", fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments                                     departments        @relation(fields: [department_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  garments                                        garments?          @relation(fields: [garment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  material_lots                                   material_lots?     @relation(fields: [material_lot_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  packages                                        packages?          @relation(fields: [package_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  work_tasks                                      work_tasks?        @relation("work_tasksTowork_tasks", fields: [predecessor_task_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_work_tasks                                work_tasks[]       @relation("work_tasksTowork_tasks")
+  production_orders                               production_orders? @relation(fields: [production_order_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shipments                                       shipments?         @relation(fields: [shipment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workflow_steps                                  workflow_steps?    @relation(fields: [workflow_version_id, workflow_step_code], references: [workflow_version_id, step_code], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([id, checkpoint_code])
+  @@index([assignee_id, status], map: "work_tasks_assignee_idx")
+  @@index([department_code, status, created_at], map: "work_tasks_department_queue_idx")
+  @@index([garment_id], map: "work_tasks_garment_idx", where: raw("(garment_id IS NOT NULL)"))
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model workflow_steps {
+  workflow_version_id String            @db.Uuid
+  step_code           String
+  position            Int
+  department_code     String
+  checkpoint_code     String?
+  work_tasks          work_tasks[]
+  checkpoints         checkpoints?      @relation(fields: [checkpoint_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  departments         departments       @relation(fields: [department_code], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  workflow_versions   workflow_versions @relation(fields: [workflow_version_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([workflow_version_id, step_code])
+  @@unique([workflow_version_id, position])
+  @@schema("supplyease")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model workflow_versions {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflow_code     String
+  version           Int
+  title             String
+  approved_by       String              @db.Uuid
+  approved_at       DateTime            @default(now()) @db.Timestamptz(6)
+  production_orders production_orders[]
+  workflow_steps    workflow_steps[]
+  staff_users       staff_users         @relation(fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([workflow_code, version])
+  @@schema("supplyease")
+}
+
+enum capture_status {
+  awaiting_ack
+  awaiting_clear
+  armed
+  completed
+  expired
+  cancelled
+
+  @@schema("supplyease")
+}
+
+enum credential_purpose {
+  activate
+  reset
+
+  @@schema("supplyease")
+}
+
+enum garment_stage {
+  cut
+  stitched
+  finished
+  packed
+  warehoused
+  dispatched
+  returned
+  scrapped
+
+  @@schema("supplyease")
+}
+
+enum hold_kind {
+  quality
+  operational
+  recall
+
+  @@schema("supplyease")
+}
+
+enum inspection_outcome {
+  pass
+  fail
+
+  @@schema("supplyease")
+}
+
+enum inspection_scope {
+  incoming
+  final
+  reinspection
+
+  @@schema("supplyease")
+}
+
+enum ledger_job_status {
+  pending
+  submitted
+  confirmed
+  failed
+
+  @@schema("supplyease")
+}
+
+enum ledger_tx_status {
+  submitted
+  confirmed
+  reverted
+  replaced
+  orphaned
+
+  @@schema("supplyease")
+}
+
+enum material_movement_kind {
+  accepted
+  issued
+  unused_return
+  adjustment_add
+  adjustment_remove
+
+  @@schema("supplyease")
+}
+
+enum observation_resolution {
+  recorded
+  accepted
+  quarantined
+
+  @@schema("supplyease")
+}
+
+enum order_status {
+  draft
+  approved
+  in_progress
+  completed
+  cancelled
+
+  @@schema("supplyease")
+}
+
+enum package_status {
+  open
+  sealed
+  warehoused
+  dispatched
+  void
+
+  @@schema("supplyease")
+}
+
+enum quality_status {
+  awaiting_inspection
+  held
+  released
+  scrapped
+
+  @@schema("supplyease")
+}
+
+enum quantity_unit {
+  m
+  kg
+  pcs
+
+  @@schema("supplyease")
+}
+
+enum return_status {
+  received
+  under_inspection
+  released
+  scrapped
+  closed
+
+  @@schema("supplyease")
+}
+
+enum rework_status {
+  open
+  assigned
+  repair_recorded
+  closed
+  scrapped
+
+  @@schema("supplyease")
+}
+
+enum rfid_context_status {
+  awaiting_ack
+  armed
+  consumed
+  expired
+  cancelled
+
+  @@schema("supplyease")
+}
+
+enum rfid_scan_outcome {
+  observed
+  accepted
+  rejected
+  quarantined
+
+  @@schema("supplyease")
+}
+
+enum sensor_edge {
+  OBJECT_DETECTED
+  OBJECT_CLEARED
+
+  @@schema("supplyease")
+}
+
+enum shipment_status {
+  draft
+  approved
+  dispatched
+  delivered
+  cancelled
+
+  @@schema("supplyease")
+}
+
+enum staff_role {
+  admin
+  manager
+  materials
+  production
+  quality
+  logistics
+
+  @@schema("supplyease")
+}
+
+enum task_status {
+  queued
+  assigned
+  claimed
+  in_progress
+  completed
+  cancelled
+
+  @@schema("supplyease")
 }
