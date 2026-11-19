@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { CheckCircle2, Radio, ScanLine, XCircle } from "lucide-react";
+import { CheckCircle2, Radio, ScanLine, Sparkles, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DataTable } from "@/components/wt/DataTable";
 import { Field, NativeSelect, ScopeNote } from "@/components/wt/forms";
-import { fmt, KeyValue, Section } from "@/components/wt/layout";
+import { fmt, IdLink, KeyValue, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
+
+function generateFreshUid(): string {
+  return "04" + Array.from({ length: 6 }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join("");
+}
 
 export function ReceivingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
@@ -196,20 +202,32 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                             placeholder="e.g. 04E1F2A3"
                           />
                         </Field>
-                        <div className="flex flex-wrap gap-2 pt-1">
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
                           <Button
                             disabled={pending || !scanUid.trim()}
                             onClick={() =>
                               void run(
                                 (c) => c.resolveRfidScan(scanUid.trim()),
-                                (outcome) =>
-                                  outcome.resolution === "accepted"
-                                    ? `Card ${outcome.uid} bound to ${outcome.subjectId}`
-                                    : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+                                (outcome) => {
+                                  if (outcome.resolution === "accepted") {
+                                    setScanUid(generateFreshUid());
+                                    return `Card ${outcome.uid} bound to ${outcome.subjectId}!`;
+                                  }
+                                  return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                },
                               )
                             }
                           >
-                            <ScanLine className="size-4" /> Simulate RFID Scan
+                            <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={pending}
+                            onClick={() => setScanUid(generateFreshUid())}
+                          >
+                            <Sparkles className="size-3 mr-1" /> Generate Fresh UID
                           </Button>
                           <Button
                             variant="outline"
@@ -235,6 +253,58 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                 </div>
               </Section>
             </div>
+
+            {/* Warehouse Fabric Lots Table */}
+            <Section
+              title="Registered Fabric Lots & Bundle Card Status"
+              description="Inventory summary of raw fabric lots and assigned Station 1 bundle cards."
+            >
+              <DataTable
+                rows={lots}
+                rowKey={(l) => l.id}
+                empty="No fabric lots recorded."
+                columns={[
+                  {
+                    header: "Lot Code",
+                    cell: (l) => <IdLink href={paths.lot(l.id)} id={l.id} />,
+                  },
+                  {
+                    header: "Fabric Material",
+                    cell: (l) => (
+                      <div>
+                        <p className="font-medium text-xs sm:text-sm">{l.material}</p>
+                        <p className="text-[11px] text-muted-foreground">Ref: {l.supplierRef}</p>
+                      </div>
+                    ),
+                  },
+                  {
+                    header: "Stock Balance",
+                    cell: (l) => (
+                      <span className="font-semibold tabular-nums text-xs">
+                        {l.balanceQty} / {l.receivedQty} {l.unit ?? "m"}
+                      </span>
+                    ),
+                  },
+                  {
+                    header: "Bundle Card (Station 1)",
+                    cell: (l) =>
+                      l.rfidUid ? (
+                        <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
+                          <Radio className="size-3" /> {l.rfidUid}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
+                          Unassigned
+                        </span>
+                      ),
+                  },
+                  {
+                    header: "Incoming QC",
+                    cell: (l) => <StatusBadge status={l.status} />,
+                  },
+                ]}
+              />
+            </Section>
           </div>
         );
       }}

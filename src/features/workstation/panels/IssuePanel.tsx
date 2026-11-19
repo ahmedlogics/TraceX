@@ -219,31 +219,43 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                             <Field
                               label="Bundle Card UID"
                               htmlFor="iss-uid"
-                              hint="Enter tag UID to simulate tap."
+                              hint={currentLot?.rfidUid ? `Bundle RFID: ${currentLot.rfidUid}` : "Enter tag UID to simulate tap."}
                             >
                               <Input
                                 id="iss-uid"
-                                value={scanUid || currentLot?.rfidUid || ""}
+                                value={scanUid}
                                 onChange={(e) => setScanUid(e.target.value.toUpperCase())}
                                 className="font-mono bg-card"
-                                placeholder="e.g. 04A1B2C3"
+                                placeholder={currentLot?.rfidUid ?? "e.g. 04A1B2C3"}
                               />
                             </Field>
-                            <div className="flex flex-wrap gap-2 pt-1">
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
                               <Button
-                                disabled={pending || !scanUid.trim()}
-                                onClick={() =>
+                                disabled={pending || !(scanUid.trim() || currentLot?.rfidUid)}
+                                onClick={() => {
+                                  const targetUid = scanUid.trim() || currentLot?.rfidUid || "";
                                   void run(
-                                    (c) => c.resolveRfidScan(scanUid.trim()),
+                                    (c) => c.resolveRfidScan(targetUid),
                                     (outcome) =>
                                       outcome.resolution === "accepted"
-                                        ? `Fabric issue confirmed! Recorded against ${orderId}.`
+                                        ? `Fabric issue confirmed! ${qty} m allocated to order ${orderId}.`
                                         : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
-                                  )
-                                }
+                                  );
+                                }}
                               >
-                                <ScanLine className="size-4" /> Simulate RFID Scan
+                                <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
                               </Button>
+                              {currentLot?.rfidUid && (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() => setScanUid(currentLot.rfidUid!)}
+                                >
+                                  Pre-fill Bundle Card ({currentLot.rfidUid})
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"

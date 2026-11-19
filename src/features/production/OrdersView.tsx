@@ -83,6 +83,19 @@ function PlanOrderDialog() {
               </Field>
             </div>
 
+            {selectedSpecId && (() => {
+              const matched = specs.find((s) => s.id === selectedSpecId);
+              if (!matched) return null;
+              const estFabric = Math.round(matched.standardConsumptionMeters * Number(qty) * 10) / 10;
+              return (
+                <div className="rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">Fabric Consumption Estimate:</p>
+                  <p>Standard rate: <span className="font-semibold">{matched.standardConsumptionMeters} m</span> per piece</p>
+                  <p>Total raw fabric required: <span className="font-semibold text-primary">{estFabric} m</span> ({matched.category})</p>
+                </div>
+              );
+            })()}
+
             <p className="text-xs text-muted-foreground pt-1">
               Note: Factory managers approve planned orders before fabric can be issued at Station 2.
             </p>

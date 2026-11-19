@@ -654,6 +654,10 @@ function handleBindGarmentTag(
     subjectId: garmentCode,
     checkpoint: "S3",
   });
+  const cutCount = s.garments.filter((g) => g.orderId === order.id).length;
+  if (cutCount >= order.plannedQty) {
+    closeTasks(s, order.id, ["cut"]);
+  }
   consumeContext(s, ctx);
   const outcome: ScanOutcome = {
     uid,
@@ -1362,7 +1366,8 @@ export function recordCuttingOutput(
   );
   const cutId = nextId(s, "cut", "CUT");
   s.counters["garment"] = (s.counters["garment"] ?? 0) + 1;
-  const garmentId = `SHIRT-${String(s.counters["garment"]).padStart(3, "0")}`;
+  const prefix = order.styleCode.startsWith("WT-TR") ? "TROUSER" : "SHIRT";
+  const garmentId = `${prefix}-${String(s.counters["garment"]).padStart(3, "0")}`;
   const label = `PS-${order.id.split("-")[1]}-${String.fromCharCode(64 + s.cuttingOutputs.filter((c) => c.orderId === order.id).length + 1)}`;
   s.cuttingOutputs.push({
     id: cutId,
@@ -1401,6 +1406,10 @@ export function recordCuttingOutput(
     subjectId: garmentId,
     checkpoint: "S3",
   });
+  const cutCount = s.garments.filter((g) => g.orderId === order.id).length;
+  if (cutCount >= order.plannedQty) {
+    closeTasks(s, order.id, ["cut"]);
+  }
   audit(
     s,
     actor,
