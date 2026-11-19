@@ -122,12 +122,16 @@ export const can = {
   },
   /** Inspector: prepare QC context (choose Pass/Fail before scanning). */
   prepareQcContext: (u: StaffUser) => is(u, "Q"),
-  /** Inspector only, and only after a passing reinspection. Repair operators can never release. */
-  releaseHold: (u: StaffUser, g: Garment, latest?: Inspection, repairPerformerId?: string) => {
+  /** Independent inspector: inspector cannot approve their own repair. */
+  approveReinspection: (u: StaffUser, reworkCase?: ReworkCase | null) =>
+    is(u, "Q") && (!reworkCase?.repairedBy || reworkCase.repairedBy !== u.id),
+  /** Inspector only, and only after a passing reinspection. Repair operators and repair performers can never release. */
+  releaseHold: (u: StaffUser, g: Garment, latest?: Inspection, reworkCase?: ReworkCase | null | string) => {
     if (!is(u, "Q") || !g.hold || latest?.kind !== "reinspection" || latest.status !== "passed") {
       return false;
     }
-    if (repairPerformerId && u.id === repairPerformerId) return false;
+    const performerId = typeof reworkCase === "string" ? reworkCase : reworkCase?.repairedBy;
+    if (performerId && u.id === performerId) return false;
     return true;
   },
   assignRework: (u: StaffUser, c: ReworkCase) => is(u, "M") && c.status === "awaiting-assignment",
