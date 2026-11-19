@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, Clock, FileText, Filter, Plus, Search, Send, Truck } from "lucide-react";
 import { paths } from "@/app/paths";
+import { AppLink } from "@/app/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -208,7 +209,7 @@ export function ShipmentsView() {
                           header: "Action",
                           cell: (s) => (
                             <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                              <IdLink href={paths.shipment(s.id)} id="Manifest" />
+                              <AppLink href={paths.shipment(s.id)}>Manifest</AppLink>
                             </Button>
                           ),
                         },

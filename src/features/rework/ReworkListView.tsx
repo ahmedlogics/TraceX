@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { paths } from "@/app/paths";
+import { AppLink } from "@/app/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -200,7 +201,7 @@ export function ReworkListView() {
                           header: "Action",
                           cell: (r) => (
                             <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                              <IdLink href={paths.reworkCase(r.id)} id="Manage" />
+                              <AppLink href={paths.reworkCase(r.id)}>Manage</AppLink>
                             </Button>
                           ),
                         },

@@ -12,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { paths } from "@/app/paths";
+import { AppLink } from "@/app/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -292,7 +293,7 @@ export function QualityView() {
                     <ClipboardCheck className="size-4 text-primary" />
                   </div>
                   <p className="mt-2 text-2xl font-bold">{openFinal}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Garments ready at S6</p>
+                  <p className="text-xs text-muted-foreground mt-1">Garments ready for Final QC</p>
                 </div>
                 <div className="rounded-lg border bg-card p-4 shadow-sm">
                   <div className="flex items-center justify-between text-muted-foreground">
@@ -537,7 +538,7 @@ export function QualityView() {
                               }
                               return (
                                 <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                                  <IdLink href={paths.inspection(i.id)} id="Inspect" />
+                                  <AppLink href={paths.inspection(i.id)}>Inspect</AppLink>
                                 </Button>
                               );
                             },

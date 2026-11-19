@@ -289,7 +289,7 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
                       },
                     },
                     {
-                      header: "S6 Scan Verification",
+                      header: "Dispatch Verification",
                       cell: (g) => {
                         const isVer = verifiedIds.includes(g.id);
                         return isVer ? (
@@ -298,7 +298,7 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic">
-                            Awaiting S6 Scan
+                            Awaiting Dispatch Scan
                           </span>
                         );
                       },
@@ -323,7 +323,7 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
                               )
                             }
                           >
-                            <ScanLine className="size-3.5 mr-1" /> Verify at S6
+                            <ScanLine className="size-3.5 mr-1" /> Verify at Dispatch (S9)
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">Ready</span>
