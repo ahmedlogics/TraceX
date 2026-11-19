@@ -80,7 +80,13 @@ export async function runInTransaction<T>(
     return callback(existingTx);
   }
   const client = getPrismaClient();
-  return client.$transaction(async (tx) => {
-    return callback(tx as PrismaTransactionClient);
-  });
+  return client.$transaction(
+    async (tx) => {
+      return callback(tx as PrismaTransactionClient);
+    },
+    {
+      maxWait: 10000,
+      timeout: 20000,
+    },
+  );
 }

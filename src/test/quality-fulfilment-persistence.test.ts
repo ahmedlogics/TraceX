@@ -90,7 +90,7 @@ function matchesCondition(item: any, cond: any): boolean {
   return Object.entries(cond).every(([k, v]) => {
     if (v === undefined) return true;
     if (v === null) return item[k] === null || item[k] === undefined;
-    if (typeof v === "object") {
+    if (typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
       if ("not" in (v as any)) {
         const notVal = (v as any).not;
         if (notVal === null) return item[k] !== null && item[k] !== undefined;
@@ -98,6 +98,8 @@ function matchesCondition(item: any, cond: any): boolean {
       }
       if ("in" in (v as any)) return ((v as any).in as any[]).includes(item[k]);
       if ("gt" in (v as any)) return item[k] > (v as any).gt;
+      // Handle Prisma compound keys like device_id_version: { device_id, version }
+      return Object.entries(v as any).every(([subK, subV]) => item[subK] === subV);
     }
     return item[k] === v;
   });

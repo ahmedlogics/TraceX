@@ -132,11 +132,14 @@ export function sendError(
   }
 
   const message = err instanceof Error ? err.message : "An unexpected server error occurred";
+  const codeMatch = typeof message === "string" ? message.match(/^(WT_ERR_[A-Z0-9_]+):/) : null;
+  const resolvedCode = codeMatch ? codeMatch[1] : fallbackCode;
+  const cleanMessage = codeMatch ? message.replace(/^(WT_ERR_[A-Z0-9_]+):\s*/, "") : message;
   return res.status(fallbackStatusCode).json({
     success: false,
     error: {
-      code: fallbackCode,
-      message,
+      code: resolvedCode,
+      message: cleanMessage,
     },
     meta: {
       requestId: reqId,

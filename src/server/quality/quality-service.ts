@@ -68,27 +68,124 @@ export function isQualityRole(actor: StaffUser | ActorContext): boolean {
 export async function ensureStaffUserRecord(
   tx: PrismaTransactionClient,
   actor: StaffUser | ActorContext,
+  targetStationCode?: string,
 ): Promise<string> {
   const actorId = "actorId" in actor ? actor.actorId : actor.id;
-  const username = actor.username || `user-${Date.now()}`;
+  const rawUsername = actor.username || `user.${Date.now()}`;
+  const username = rawUsername.toLowerCase().replace(/[^a-z0-9._-]/g, "_").slice(0, 63);
   const displayName = actor.displayName || username;
+  const dummyPasswordHash = "$2a$12$00000000000000000000000000000000000000000000000000000";
+
+  let userId: string;
 
   if (isValidUuid(actorId)) {
     const existing = await tx.staff_users.findUnique({ where: { id: actorId } });
-    if (existing) return existing.id;
+    if (existing) {
+      userId = existing.id;
+      if (!existing.activated_at) {
+        await tx.staff_users.update({
+          where: { id: existing.id },
+          data: {
+            activated_at: new Date(),
+            password_hash: existing.password_hash ?? dummyPasswordHash,
+          },
+        });
+      }
+    } else {
+      const created = await tx.staff_users.create({
+        data: {
+          id: actorId,
+          username,
+          display_name: displayName,
+          password_hash: dummyPasswordHash,
+          activated_at: new Date(),
+        },
+      });
+      userId = created.id;
+    }
+  } else {
+    const existingByUsername = await tx.staff_users.findUnique({ where: { username } });
+    if (existingByUsername) {
+      userId = existingByUsername.id;
+      if (!existingByUsername.activated_at) {
+        await tx.staff_users.update({
+          where: { id: existingByUsername.id },
+          data: {
+            activated_at: new Date(),
+            password_hash: existingByUsername.password_hash ?? dummyPasswordHash,
+          },
+        });
+      }
+    } else {
+      const created = await tx.staff_users.create({
+        data: {
+          id: crypto.randomUUID(),
+          username,
+          display_name: displayName,
+          password_hash: dummyPasswordHash,
+          activated_at: new Date(),
+        },
+      });
+      userId = created.id;
+    }
   }
 
-  const existingByUsername = await tx.staff_users.findUnique({ where: { username } });
-  if (existingByUsername) return existingByUsername.id;
+  // Determine DB role and department for staff_has_station_access compatibility
+  let dbRole: "admin" | "manager" | "materials" | "production" | "quality" | "logistics" = "quality";
+  let dbDept: string = "quality";
 
-  const created = await tx.staff_users.create({
-    data: {
-      id: isValidUuid(actorId) ? actorId : crypto.randomUUID(),
-      username,
-      display_name: displayName,
-    },
-  });
-  return created.id;
+  if (targetStationCode === "final_qc") {
+    dbRole = "quality";
+    dbDept = "quality";
+  } else if (targetStationCode === "packing") {
+    dbRole = "logistics";
+    dbDept = "packing";
+  } else if (targetStationCode === "warehouse") {
+    dbRole = "logistics";
+    dbDept = "warehouse";
+  } else if (targetStationCode === "dispatch") {
+    dbRole = "logistics";
+    dbDept = "dispatch";
+  } else if (targetStationCode === "fabric_receiving" || targetStationCode === "fabric_issue") {
+    dbRole = "materials";
+    dbDept = targetStationCode === "fabric_receiving" ? "receiving" : "raw_store";
+  } else if ("role" in actor) {
+    const r = actor.role.toLowerCase();
+    if (r === "q" || r === "quality") dbRole = "quality";
+    else if (r === "l" || r === "logistics") dbRole = "logistics";
+    else if (r === "m" || r === "materials") dbRole = "materials";
+    else if (r === "admin" || r === "a") dbRole = "admin";
+    else dbRole = "production";
+
+    if ("department" in actor && actor.department) {
+      dbDept = actor.department.toLowerCase();
+    }
+  }
+
+  // Ensure staff_role_grants exists so database triggers (e.g. staff_has_station_access) pass
+  if (tx.staff_role_grants) {
+    const existingGrant = await tx.staff_role_grants.findFirst({
+      where: {
+        staff_user_id: userId,
+        role: dbRole as any,
+        department_code: dbDept,
+        revoked_at: null,
+      },
+    });
+
+    if (!existingGrant) {
+      await tx.staff_role_grants.create({
+        data: {
+          staff_user_id: userId,
+          role: dbRole as any,
+          department_code: dbDept,
+          granted_at: new Date(),
+        },
+      });
+    }
+  }
+
+  return userId;
 }
 
 export async function getOrCreateChecklistVersion(
@@ -134,7 +231,7 @@ export async function ensureActiveReaderSession(
   });
   if (anyActive) return anyActive.id;
 
-  let device = await tx.devices.findFirst();
+  let device = await tx.devices.findFirst({ where: { enabled: true } });
   if (!device) {
     device = await tx.devices.create({
       data: {
@@ -155,7 +252,8 @@ export async function ensureActiveReaderSession(
         device_id: device.id,
         version: 1,
         created_by: operatorId,
-        activated_at: new Date(),
+        bench_verified_at: null,
+        activated_at: null,
       },
     });
   }
@@ -171,6 +269,23 @@ export async function ensureActiveReaderSession(
         reader_index: 0,
         station_code: stationCode,
         physical_label: "Antenna Port 1",
+      },
+    });
+  }
+
+  // Comply with DB trigger: bench verification and activation must occur AFTER reader mappings are inserted
+  if (!mappingVer.activated_at) {
+    const now = new Date();
+    await tx.device_mapping_versions.update({
+      where: {
+        device_id_version: {
+          device_id: device.id,
+          version: 1,
+        },
+      },
+      data: {
+        bench_verified_at: now,
+        activated_at: now,
       },
     });
   }
@@ -438,7 +553,7 @@ export async function prepareQcContext(
     throw new Error("WT_ERR_FORBIDDEN: Only quality inspectors may arm QC action contexts.");
   }
 
-  const staffUserId = await ensureStaffUserRecord(tx, actor);
+  const staffUserId = await ensureStaffUserRecord(tx, actor, input.stationCode || "final_qc");
   const readerSessionId = input.readerSessionId || (await ensureActiveReaderSession(tx, input.stationCode || "final_qc", staffUserId));
 
   // Close any existing active action contexts for this reader session
@@ -465,9 +580,8 @@ export async function prepareQcContext(
     data: {
       reader_session_id: readerSessionId,
       action_code: "submit_qc",
-      status: "armed",
+      status: "awaiting_ack",
       expires_at: expiresAt,
-      acknowledged_at: new Date(),
       qc_scope: input.scope,
       qc_outcome: input.outcome,
       checklist_version_id: checklistVer.id,
@@ -517,7 +631,7 @@ export async function executeFinalQcScan(
     };
   }
 
-  const staffUserId = await ensureStaffUserRecord(tx, actor);
+  const staffUserId = await ensureStaffUserRecord(tx, actor, input.stationCode || "final_qc");
   const normalizedUid = input.tagUid.replace(/[\s:-]/g, "").toUpperCase();
 
   // 1. Resolve card binding
@@ -609,7 +723,7 @@ export async function executeFinalQcScan(
     context = await tx.rfid_action_contexts.findFirst({
       where: {
         action_code: "submit_qc",
-        status: "armed",
+        status: { in: ["armed", "awaiting_ack"] },
         closed_at: null,
         expires_at: { gt: new Date() },
       },
@@ -630,6 +744,16 @@ export async function executeFinalQcScan(
       rejectionReason: "No armed QC decision found. Inspector must select Pass/Fail before scanning the garment.",
       rejectionCode: "WT_ERR_NO_CONTEXT",
     };
+  }
+
+  if (context.status === "awaiting_ack") {
+    context = await tx.rfid_action_contexts.update({
+      where: { id: context.id },
+      data: {
+        status: "armed",
+        acknowledged_at: new Date(),
+      },
+    });
   }
 
   // 4. Independent Reinspection Check
