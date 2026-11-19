@@ -113,9 +113,9 @@ WearTrail/
 │   │   ├── landing/                   # Public landing hero and tracking redirect
 │   │   ├── ledger/                    # Asynchronous blockchain commitment inspector
 │   │   ├── login/                     # Staff authentication entry point
-│   │   ├── material-lots/             # Raw fabric bundle receiving and lot detail
+│   │   ├── materials/                 # Raw fabric bundle receiving, stock movements and lot detail (Member 2)
 │   │   ├── overview/                  # Factory management KPI and status overview
-│   │   ├── production-orders/         # Order planning, specification approval, and detail
+│   │   ├── production/                # Order planning, specification approval, cutting and order detail (Member 2)
 │   │   ├── public-journey/            # Customer journey (/p/:publicId) and technical proof
 │   │   ├── quality/                   # QC inspections queue and inspection detail view
 │   │   ├── reports/                   # Operational throughput and defect reports
@@ -1040,6 +1040,36 @@ To maintain transparent engineering discipline across the team:
 | **Express Domain Endpoints** | `Pending Implementation` | Mock client implements full workflow in browser; server endpoints pending. | Implement Express routes matching `WearTrailClient` interface. | Team Member 2 & 3 (Backend) |
 | **Smart Contract & Ledger Worker** | `Planned` / Schema designed | `ledger_commitments` and outbox tables defined; smart contract absent. | Write Solidity commitment contract; implement Node outbox processor. | Team Member 4 (Ledger) |
 | **Prettier CRLF Line Endings** | `Known Lint Warning` | `npm run lint` reports CRLF warnings in config files on Windows. | Run `npm run format` when repository formatting window is approved. | Team Member 1 (Foundation) |
+
+### 12.4 Member 2: Materials & Production Implementation Updates (19 November 2026)
+
+The following shared contracts and feature enhancements have been completed for Member 2 on branch `basim`:
+
+1. **Unbroken Actual Material Lineage**:
+   - Trace contract enforced: `garment` → `cutting_outputs` (with `issueId` and `lotId`) → `material_stock_movements` (issue movement) → `material_lots`.
+   - Attributed consumption formula normalized across multi-garment cutting runs: `perGarment = Math.round((consumedQty / plannedQty) * 1000) / 1000` to prevent compounding skew across sibling cuts.
+   - Sibling garments from the same lot and cutting batch maintain isolated quality disposition and hold status; a hold on one garment does not stop or contaminate sibling garments.
+
+2. **Product Specifications (`ProductSpecification`)**:
+   - Defined `ProductSpecification` entity in [src/domain/types.ts](src/domain/types.ts) with style code, name, category, standard consumption in meters, size variants, and active status.
+   - Extended `WearTrailClient` in [src/lib/data/client.ts](src/lib/data/client.ts) and mock client with `listProductSpecs()` and `saveProductSpec()`.
+   - Added interactive Product Specifications management tab in [src/features/admin/SettingsView.tsx](src/features/admin/SettingsView.tsx).
+   - Integrated product specifications directly into [src/features/production/OrdersView.tsx](src/features/production/OrdersView.tsx) to autofill style codes and standard consumption during order planning.
+
+3. **Card Reassignment & Damaged Card Handling**:
+   - Implemented `replaceGarmentCard(garmentId, newUid)` in domain engine and client layer.
+   - Deactivates previous RFID binding with timestamped audit log, unbinding old card and activating new UID.
+   - Garment permanent internal UUID, operational code (`WT-SH-xxx`), public tracking reference (`/p/:publicId`), and complete historical ledger events remain intact and continuous.
+
+4. **Member 3 Handoff Integration**:
+   - Added `applyIncomingQCQuantity(lotId, acceptedQty, rejectedQty)` domain engine helper to support incoming QC split clearance between accepted inventory balance and rejected stock.
+
+5. **UI & UX Enhancements**:
+   - `/staff/tasks`: Scoped queue with department filtering, KPI cards, claim/assign workflows, and direct links to workstation stations.
+   - `/staff/material-lots` & `:lotId`: KPI summary cards, stock balance progress bars, active bundle RFID tags with Station 1 status, unit selection (`m`, `kg`, `pcs`), material issue movements table, attributed garment outputs list, and movement timeline.
+   - `/staff/production-orders` & `:orderId`: Specification-linked order planning dialog, approval action, metric cards, separated sections for issued inputs, cutting jobs, and individual garments with raw-to-garment visual provenance map.
+   - `/staff/garments` & `:garmentId`: Multi-stage and quality disposition filters, product specifications display, unbroken lineage banner, and damaged/lost card replacement modal dialog.
+   - Workstation Panels: Enhanced `RoutinePanel` for automatic progression (`stitching` → `finishing` → `final-qc`) and `CuttingPanel` with dynamic issued material querying.
 
 ---
 *WearTrail System Architecture & Project Context — Documented and Verified for Production Integrity.*

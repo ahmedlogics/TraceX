@@ -22,8 +22,8 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
   const qTasks = useWtQuery(["tasks"], (c) => c.listTasks());
 
   const isStitching = stationCode === "stitching";
-  const expectedStage = isStitching ? "cutting" : "stitching";
-  const nextStage = isStitching ? "stitching" : "finishing";
+  const expectedStage = isStitching ? "stitching" : "finishing";
+  const nextStage = isStitching ? "finishing" : "final-qc";
 
   const isAuthorized =
     me.role === "M" ||
@@ -53,8 +53,11 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                     <div className="space-y-4">
                       <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 className="size-4 text-primary" />
-                          <p className="text-sm font-medium">Continuous Routine Reader Active</p>
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                          </span>
+                          <p className="text-sm font-semibold text-foreground">Continuous Routine Reader Active</p>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           No per-shirt form required. Simply present any assembled garment card at
@@ -86,21 +89,38 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                               />
                             </Field>
 
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Button
                                 disabled={pending || !scanUid.trim()}
                                 onClick={() =>
                                   void run(
                                     (c) => c.routineScan(scanUid.trim(), stationCode),
-                                    (outcome) =>
-                                      outcome.resolution === "accepted"
-                                        ? `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) recorded at ${stationData.stationName}.`
-                                        : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+                                    (outcome) => {
+                                      if (outcome.resolution === "accepted") {
+                                        setScanUid("");
+                                        return `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) recorded at ${stationData.stationName}. Advanced to ${nextStage}.`;
+                                      }
+                                      return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                    },
                                   )
                                 }
                               >
-                                <ScanLine className="size-4" /> Record Routine Scan
+                                <ScanLine className="size-4 mr-1.5" /> Record Routine Scan
                               </Button>
+
+                              {queue.find((g) => g.stage === expectedStage && g.rfidUid) && (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() => {
+                                    const next = queue.find((g) => g.stage === expectedStage && g.rfidUid);
+                                    if (next?.rfidUid) setScanUid(next.rfidUid);
+                                  }}
+                                >
+                                  Pre-fill Next ({queue.find((g) => g.stage === expectedStage && g.rfidUid)?.id})
+                                </Button>
+                              )}
                             </div>
                           </div>
                         )}
@@ -134,11 +154,31 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                           cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
                         },
                         {
-                          header: "Product",
-                          cell: (g) => g.productName,
+                          header: "Product & Size",
+                          cell: (g) => (
+                            <div>
+                              <p className="font-medium text-xs sm:text-sm">{g.productName}</p>
+                              {g.size && (
+                                <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
+                                  Size {g.size}
+                                </span>
+                              )}
+                            </div>
+                          ),
                         },
                         {
-                          header: "Stage",
+                          header: "Active RFID Card",
+                          cell: (g) =>
+                            g.rfidUid ? (
+                              <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                {g.rfidUid}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-xs italic">Unbound</span>
+                            ),
+                        },
+                        {
+                          header: "Physical Stage",
                           cell: (g) => <StatusBadge status={g.stage} />,
                         },
                         {
@@ -149,6 +189,45 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                               {g.hold && <HoldBadge />}
                             </div>
                           ),
+                        },
+                        {
+                          header: "Quick Scan",
+                          cell: (g) => {
+                            if (g.stage !== expectedStage) {
+                              return (
+                                <span className="text-xs text-muted-foreground italic">Processed</span>
+                              );
+                            }
+                            if (g.hold) {
+                              return (
+                                <span className="text-xs text-danger font-medium">On Hold</span>
+                              );
+                            }
+                            if (!g.rfidUid) {
+                              return (
+                                <span className="text-xs text-warning font-medium">No Card</span>
+                              );
+                            }
+                            return (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs font-semibold border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-2xs"
+                                disabled={pending || !isAuthorized}
+                                onClick={() =>
+                                  void run(
+                                    (c) => c.routineScan(g.rfidUid!, stationCode),
+                                    (outcome) =>
+                                      outcome.resolution === "accepted"
+                                        ? `Garment ${outcome.garmentCode ?? outcome.subjectId} recorded at ${stationData.stationName}. Advanced to ${nextStage}.`
+                                        : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+                                  )
+                                }
+                              >
+                                <ScanLine className="size-3 mr-1" /> Tap Card
+                              </Button>
+                            );
+                          },
                         },
                       ]}
                     />

@@ -6,13 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/wt/DataTable";
-import { Field, ScopeNote } from "@/components/wt/forms";
+import { Field, FormDialog, NativeSelect, ScopeNote } from "@/components/wt/forms";
 import { fmt, KeyValue, PageHeader, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { departmentLabels, rfidStationLabels } from "@/domain/labels";
 import { can } from "@/domain/permissions";
-import type { CheckpointSetting, Settings } from "@/domain/types";
+import type { CheckpointSetting, ProductSpecification, Settings } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
 
@@ -135,11 +135,185 @@ function BusinessForm({ b, editable }: { b: Settings["business"]; editable: bool
   );
 }
 
+function SpecFormDialog({
+  spec,
+  editable,
+}: {
+  spec?: ProductSpecification | undefined;
+  editable: boolean;
+}) {
+  const { run } = useWtAction();
+  const [name, setName] = useState(spec?.name ?? "");
+  const [styleCode, setStyleCode] = useState(spec?.styleCode ?? "");
+  const [category, setCategory] = useState<"shirt" | "trouser" | "jacket" | "other">(
+    spec?.category ?? "shirt",
+  );
+  const [consumption, setConsumption] = useState(String(spec?.standardConsumptionMeters ?? 1.8));
+  const [sizes, setSizes] = useState(spec?.sizeVariants.join(", ") ?? "S, M, L, XL");
+  const [desc, setDesc] = useState(spec?.description ?? "");
+
+  if (!editable) return null;
+
+  return (
+    <FormDialog
+      trigger={spec ? "Edit spec" : "Add product specification"}
+      triggerVariant={spec ? "outline" : "default"}
+      title={spec ? `Edit ${spec.styleCode}` : "Add Product Specification"}
+      description="Standardize garment model name, style code, and consumption per shirt/trouser."
+      submitLabel="Save specification"
+      onSubmit={async () => {
+        if (!name.trim() || !styleCode.trim()) return false;
+        const sizeVariants = sizes
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const res = await run(
+          (c) =>
+            c.saveProductSpec({
+              id: spec?.id ?? "",
+              name: name.trim(),
+              styleCode: styleCode.trim(),
+              category,
+              standardConsumptionMeters: Number(consumption) || 1.8,
+              sizeVariants: sizeVariants.length > 0 ? sizeVariants : ["M"],
+              active: true,
+              description: desc.trim() || undefined,
+            }),
+          `Specification ${styleCode} saved.`,
+        );
+        return !!res;
+      }}
+    >
+      <Field label="Model / product name" htmlFor="sp-name">
+        <Input id="sp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Linen camp-collar shirt" />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Style code" htmlFor="sp-code">
+          <Input id="sp-code" value={styleCode} onChange={(e) => setStyleCode(e.target.value)} placeholder="e.g. WT-SH-320" />
+        </Field>
+        <Field label="Category" htmlFor="sp-cat">
+          <NativeSelect
+            id="sp-cat"
+            value={category}
+            onChange={(v) => setCategory(v as any)}
+            options={[
+              { value: "shirt", label: "Shirt" },
+              { value: "trouser", label: "Trouser" },
+              { value: "jacket", label: "Jacket" },
+              { value: "other", label: "Other" },
+            ]}
+          />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Standard consumption (m)" htmlFor="sp-cons">
+          <Input
+            id="sp-cons"
+            type="number"
+            step="0.05"
+            min="0.1"
+            value={consumption}
+            onChange={(e) => setConsumption(e.target.value)}
+          />
+        </Field>
+        <Field label="Size variants (comma-separated)" htmlFor="sp-sizes">
+          <Input id="sp-sizes" value={sizes} onChange={(e) => setSizes(e.target.value)} placeholder="S, M, L, XL" />
+        </Field>
+      </div>
+      <Field label="Description / notes" htmlFor="sp-desc">
+        <Input id="sp-desc" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Optional style notes" />
+      </Field>
+    </FormDialog>
+  );
+}
+
+function ProductSpecsSection({ editable }: { editable: boolean }) {
+  const qSpecs = useWtQuery(["product-specs"], (c) => c.listProductSpecs());
+
+  return (
+    <Section
+      title="Approved Product Specifications"
+      description="Standard digital specifications for factory styles. Orders reference these specifications to set product names and standard material consumption."
+      actions={<SpecFormDialog editable={editable} />}
+    >
+      <Loadable query={qSpecs}>
+        {(specs) => (
+          <div className="space-y-4">
+            <DataTable
+              rows={specs}
+              rowKey={(sp) => sp.id}
+              empty="No product specifications configured yet."
+              columns={[
+                {
+                  header: "Style Code",
+                  cell: (sp) => (
+                    <div>
+                      <span className="wt-id font-mono font-bold text-xs">{sp.styleCode}</span>
+                      <p className="text-[11px] text-muted-foreground">{sp.id} · v{sp.version}</p>
+                    </div>
+                  ),
+                },
+                {
+                  header: "Product Model Name",
+                  cell: (sp) => (
+                    <div>
+                      <p className="font-semibold text-foreground text-xs sm:text-sm">{sp.name}</p>
+                      {sp.description && <p className="text-[11px] text-muted-foreground">{sp.description}</p>}
+                    </div>
+                  ),
+                },
+                {
+                  header: "Category",
+                  cell: (sp) => (
+                    <span className="capitalize text-xs font-medium bg-muted px-2 py-0.5 rounded">
+                      {sp.category}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Standard Consumption",
+                  cell: (sp) => (
+                    <span className="tabular-nums font-semibold text-xs">
+                      {sp.standardConsumptionMeters} m / garment
+                    </span>
+                  ),
+                },
+                {
+                  header: "Sizes",
+                  cell: (sp) => (
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {sp.sizeVariants.join(", ")}
+                    </span>
+                  ),
+                },
+                {
+                  header: "Status",
+                  cell: (sp) => (
+                    <StatusBadge
+                      status={sp.active ? "Active" : "Archived"}
+                      tone={sp.active ? "success" : "neutral"}
+                    />
+                  ),
+                },
+                {
+                  header: "Actions",
+                  cell: (sp) => <SpecFormDialog spec={sp} editable={editable} />,
+                },
+              ]}
+            />
+          </div>
+        )}
+      </Loadable>
+    </Section>
+  );
+}
+
 export function SettingsView() {
   const me = useMe();
   const q = useWtQuery(["settings"], (c) => c.getSettings());
   const deviceEditable = can.editDeviceSettings(me);
   const businessEditable = can.editBusinessSettings(me);
+  const productionEditable = me.role === "A" || me.role === "M" || me.role === "P";
 
   return (
     <>
@@ -149,12 +323,22 @@ export function SettingsView() {
       />
       <Loadable query={q}>
         {(s) => (
-          <Tabs defaultValue={deviceEditable ? "rfid" : "business"}>
+          <Tabs defaultValue={deviceEditable ? "rfid" : "production"}>
             <TabsList className="mb-4">
               <TabsTrigger value="rfid">Nine-Reader RFID Topology</TabsTrigger>
+              <TabsTrigger value="production">Product Specifications</TabsTrigger>
               <TabsTrigger value="device">Bridge & Hardware Health</TabsTrigger>
-              <TabsTrigger value="business">Business</TabsTrigger>
+              <TabsTrigger value="business">Business Rules</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="production" className="space-y-4">
+              {!productionEditable && (
+                <ScopeNote>
+                  Read-only. Product specifications configuration belongs to production management and engineering.
+                </ScopeNote>
+              )}
+              <ProductSpecsSection editable={productionEditable} />
+            </TabsContent>
 
             <TabsContent value="rfid" className="space-y-4">
               {!deviceEditable && (

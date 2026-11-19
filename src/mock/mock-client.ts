@@ -218,6 +218,8 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     // ---------------------------------------------------------------- production
 
+    listProductSpecs: () => read((s) => E.listProductSpecs(s)),
+    saveProductSpec: (spec) => act((s, u) => E.saveProductSpec(s, u, spec)),
     listOrders: () => read((s) => s.orders),
     getOrder: (id) =>
       read((s) => {
@@ -258,14 +260,16 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
             (i) => i.subjectType === "garment" && i.subjectId === id,
           ),
           rework: s.rework.filter((r) => r.garmentId === id),
-          pkg: showLogistics ? s.packages.find((p) => p.id === garment.packageId) : undefined,
+          pkg: showLogistics ? s.packages.find((p) => p.garmentIds.includes(id)) : undefined,
           shipment: showLogistics
-            ? s.shipments.find((x) => x.id === garment.shipmentId)
+            ? s.shipments.find((sh) => sh.allocatedGarmentIds.includes(id))
             : undefined,
-          ledger: u.role === "M" ? s.ledger.filter((l) => l.subjectId === id) : [],
+          ledger: s.ledger.filter((l) => l.subjectId === id),
           rfidBinding,
         };
       }),
+    replaceGarmentCard: (garmentId, newUid) =>
+      act((s, u) => E.replaceGarmentCard(s, u, garmentId, newUid)),
 
     // ---------------------------------------------------------------- quality
 

@@ -33,6 +33,7 @@ import type {
   MaterialIssue,
   MaterialLot,
   Package,
+  ProductSpecification,
   ProductionOrder,
   RfidStationCode,
   RfidStationState,
@@ -218,6 +219,8 @@ export interface WearTrailClient {
 
   // Production — GET /production-orders(/:id), POST /production-orders, POST /production-orders/:id/approve,
   //              POST /production-orders/:id/cutting-outputs
+  listProductSpecs(): Promise<ProductSpecification[]>;
+  saveProductSpec(input: Omit<ProductSpecification, "version">): Promise<string>;
   listOrders(): Promise<ProductionOrder[]>;
   getOrder(id: string): Promise<OrderDetail | null>;
   planOrder(input: {
@@ -237,6 +240,7 @@ export interface WearTrailClient {
   // Garments — GET /garments(/:id)
   listGarments(): Promise<Garment[]>;
   getGarment(id: string): Promise<GarmentDetail | null>;
+  replaceGarmentCard(garmentId: string, newUid: string): Promise<ScanOutcome>;
 
   // Quality — GET /inspections(/:id), POST /inspections/:id/result, POST /garments/:id/release-hold
   listInspections(): Promise<Inspection[]>;
