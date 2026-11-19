@@ -743,11 +743,15 @@ export async function inviteStaffUser(
       },
     });
 
+    const grantRole = roleMap[input.role] ?? "production";
+    const grantDept =
+      grantRole === "admin" || grantRole === "manager" ? null : (input.department ?? "receiving");
+
     await tx.staff_role_grants.create({
       data: {
         staff_user_id: newUser.id,
-        role: roleMap[input.role] ?? "production",
-        department_code: input.department,
+        role: grantRole,
+        department_code: grantDept,
         granted_by: actor.id,
       },
     });
@@ -817,11 +821,15 @@ export async function updateStaffUserScope(
     });
 
     // Create new grant
+    const grantRole = roleMap[input.role] ?? "production";
+    const grantDept =
+      grantRole === "admin" || grantRole === "manager" ? null : (input.department ?? "receiving");
+
     await tx.staff_role_grants.create({
       data: {
         staff_user_id: input.userId,
-        role: roleMap[input.role] ?? "production",
-        department_code: input.department,
+        role: grantRole,
+        department_code: grantDept,
         granted_by: actor.id,
       },
     });

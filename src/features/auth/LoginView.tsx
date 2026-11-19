@@ -112,7 +112,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                     setUsername(e.target.value);
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="e.g. admin"
+                  placeholder="e.g. admin.demo"
                   className="pl-9"
                   autoComplete="username"
                   disabled={isSubmitting}
@@ -169,6 +169,25 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
             >
               {isSubmitting ? "Signing in…" : "Sign In"}
             </Button>
+
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground mt-3">
+              <div className="flex items-center justify-between">
+                <span>Default staff account:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsername("admin.demo");
+                    setPassword("weartrail123!");
+                  }}
+                  className="font-medium text-primary hover:underline cursor-pointer"
+                >
+                  Fill credentials
+                </button>
+              </div>
+              <div className="mt-1 font-mono text-[11px] text-foreground/80">
+                admin.demo · weartrail123!
+              </div>
+            </div>
           </form>
         </section>
       </div>

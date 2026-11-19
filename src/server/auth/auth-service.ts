@@ -334,7 +334,7 @@ export async function bootstrapInitialAdmin(
       data: {
         staff_user_id: user.id,
         role: "admin",
-        department_code: "receiving",
+        department_code: null,
       },
     });
   }

@@ -132,7 +132,7 @@ export async function ensureStaffUserRecord(
 
   // Determine DB role and department for staff_has_station_access compatibility
   let dbRole: "admin" | "manager" | "materials" | "production" | "quality" | "logistics" = "quality";
-  let dbDept: string = "quality";
+  let dbDept: string | null = "quality";
 
   if (targetStationCode === "final_qc") {
     dbRole = "quality";
@@ -154,10 +154,13 @@ export async function ensureStaffUserRecord(
     if (r === "q" || r === "quality") dbRole = "quality";
     else if (r === "l" || r === "logistics") dbRole = "logistics";
     else if (r === "m" || r === "materials") dbRole = "materials";
+    else if (r === "manager") dbRole = "manager";
     else if (r === "admin" || r === "a") dbRole = "admin";
     else dbRole = "production";
 
-    if ("department" in actor && actor.department) {
+    if (dbRole === "admin" || dbRole === "manager") {
+      dbDept = null;
+    } else if ("department" in actor && actor.department) {
       dbDept = actor.department.toLowerCase();
     }
   }

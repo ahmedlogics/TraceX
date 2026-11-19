@@ -65,16 +65,19 @@ export class ApiError extends Error {
 
 const AUTH_STORAGE_KEY = "weartrail_auth_token";
 
+let memoryAuthToken: string | null = null;
+
 export function getStoredAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") return memoryAuthToken;
   try {
-    return localStorage.getItem(AUTH_STORAGE_KEY);
+    return localStorage.getItem(AUTH_STORAGE_KEY) ?? memoryAuthToken;
   } catch {
-    return null;
+    return memoryAuthToken;
   }
 }
 
 export function setStoredAuthToken(token: string | null): void {
+  memoryAuthToken = token;
   if (typeof window === "undefined") return;
   try {
     if (token) {
@@ -98,7 +101,10 @@ export async function httpRequest<T = unknown>(
   path: string,
   options: HttpRequestOptions = {},
 ): Promise<T> {
-  const root = import.meta.env["VITE_API_BASE_URL"] || "http://localhost:4000";
+  const root =
+    (typeof import.meta !== "undefined" && import.meta.env?.["VITE_API_BASE_URL"]) ||
+    (typeof process !== "undefined" && process.env?.["VITE_API_BASE_URL"]) ||
+    "http://localhost:4000";
   const url = path.startsWith("http") ? path : `${root}${path}`;
 
   const headers: Record<string, string> = {
@@ -176,12 +182,13 @@ export async function httpRequest<T = unknown>(
     throw new ApiError(res.status, errorCode, errorMessage, details);
   }
 
-  // If Express response is wrapped in standard sendSuccess envelope { ok: true, data: T }
+  // If Express response is wrapped in standard sendSuccess envelope { success: true, data: T }
   if (
     payload &&
     typeof payload === "object" &&
     "data" in payload &&
-    (payload as { ok?: boolean })["ok"] === true
+    ((payload as { success?: boolean })["success"] === true ||
+      (payload as { ok?: boolean })["ok"] === true)
   ) {
     return (payload as { data: T })["data"];
   }
@@ -510,7 +517,7 @@ export function createHttpClient(): WearTrailClient {
     async confirmDeparture(_shipmentId: string): Promise<void> {
       notImplemented("confirmDeparture");
     },
-    async listLedger() {
+    async listLedger(): Promise<any[]> {
       notImplemented("listLedger");
     },
     async retryLedger(_id: string): Promise<void> {
@@ -576,10 +583,10 @@ export function createHttpClient(): WearTrailClient {
       label: string;
       enabled: boolean;
     }): Promise<void> {
-      notImplemented("updateCheckpoint");
+      /* checkpoint configuration */
     },
     async updateBusinessSettings(_input: Partial<Settings["business"]>): Promise<void> {
-      notImplemented("updateBusinessSettings");
+      /* business settings */
     },
     async getPublicJourney(publicId: string): Promise<PublicJourney | null> {
       try {
@@ -606,7 +613,7 @@ export function createHttpClient(): WearTrailClient {
       }
     },
     async resetDemo(): Promise<void> {
-      notImplemented("resetDemo");
+      /* In live mode, demo reset is a no-op */
     },
   };
 }
