@@ -4,6 +4,7 @@ import { requestIdMiddleware } from "./middleware/requestId";
 import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandlerMiddleware, notFoundMiddleware } from "./middleware/errorHandler";
 import { healthRouter } from "./routes/health";
+import { rfidRouter } from "./routes/rfid";
 import { qualityRouter } from "./routes/quality";
 import { fulfilmentRouter } from "./routes/fulfilment";
 
@@ -28,7 +29,8 @@ export function createExpressApp(): Express {
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
-  // 5. Domain API routers
+  // 5. Authenticated RFID Ingestion & Domain API routers
+  app.use("/api/rfid", rfidRouter);
   app.use("/api/quality", qualityRouter);
   app.use("/api/fulfilment", fulfilmentRouter);
 

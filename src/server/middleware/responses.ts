@@ -32,6 +32,10 @@ export class ApiError extends Error {
   public readonly errorCode: string;
   public readonly details?: unknown;
 
+  public get code(): string {
+    return this.errorCode;
+  }
+
   constructor(
     statusCode: number,
     errorCode: string,
@@ -68,6 +72,10 @@ export class ApiError extends Error {
 
   static unprocessable(message: string, details?: unknown, code = "WT_ERR_UNPROCESSABLE"): ApiError {
     return new ApiError(422, code, message, details);
+  }
+
+  static notImplemented(message = "Not implemented", details?: unknown, code = "WT_ERR_NOT_IMPLEMENTED"): ApiError {
+    return new ApiError(501, code, message, details);
   }
 
   static internal(message = "Internal server error", details?: unknown, code = "WT_ERR_INTERNAL"): ApiError {
