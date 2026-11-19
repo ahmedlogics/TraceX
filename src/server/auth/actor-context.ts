@@ -5,18 +5,29 @@
  * Implements token/cookie extraction, session evaluation against database/mock records,
  * session revocation/suspension checks, and route authorization guards for Express/Node.
  */
-import type { ActorContext, StaffCapabilityGrant } from "@/domain/actor";
+import type { RequestHandler } from "express";
+import type { PrismaClient } from "@prisma/client";
+import type { ActorContext as DomainActorContext, StaffCapabilityGrant } from "@/domain/actor";
 import { createActorContext, hasDepartment, hasGrant, hasRole } from "@/domain/actor";
 import type { Department, Role, StaffUser } from "@/domain/types";
+import { resolveSession, toServerActorContext } from "./auth-service";
+
+/**
+ * Minimal request interface for session token extraction.
+ */
+export interface SessionRequestLike {
+  headers: Record<string, string | string[] | undefined>;
+  cookies?: Record<string, string> | undefined;
+}
 
 /**
  * Express-compatible request interface.
  */
 export interface RequestLike {
   headers: Record<string, string | string[] | undefined>;
-  cookies?: Record<string, string>;
-  actor?: ActorContext;
-  sessionToken?: string;
+  cookies?: Record<string, string> | undefined;
+  actor?: DomainActorContext | undefined;
+  sessionToken?: string | undefined;
 }
 
 /**
@@ -38,14 +49,14 @@ export interface StaffSessionRecord {
   tokenHash: string;
   createdAt: Date;
   expiresAt: Date;
-  revokedAt?: Date | null;
+  revokedAt?: Date | null | undefined;
   lastActiveAt: Date;
 }
 
 /**
  * Token extractor: extracts bearer token from Authorization header or secure cookie.
  */
-export function extractSessionToken(req: RequestLike): string | null {
+export function extractSessionToken(req: SessionRequestLike): string | null {
   const authHeader = req.headers["authorization"] ?? req.headers["Authorization"];
   const authStr = Array.isArray(authHeader) ? authHeader[0] : authHeader;
   if (authStr && authStr.startsWith("Bearer ")) {
@@ -53,6 +64,14 @@ export function extractSessionToken(req: RequestLike): string | null {
   }
   if (req.cookies && req.cookies["weartrail_session"]) {
     return req.cookies["weartrail_session"];
+  }
+  const cookieHeader = req.headers["cookie"] ?? req.headers["Cookie"];
+  const cookieStr = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
+  if (cookieStr) {
+    const match = cookieStr.match(/(?:^|;\s*)weartrail_session=([^;]+)/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]);
+    }
   }
   return null;
 }
@@ -62,7 +81,7 @@ export function extractSessionToken(req: RequestLike): string | null {
  * Re-evaluates session validity on every request so suspensions/revocations take immediate effect.
  */
 export function createAuthMiddleware(
-  lookupUser: (userId: string) => Promise<StaffUser | null>,
+  _lookupUser: (userId: string) => Promise<StaffUser | null>,
   lookupSession: (
     token: string,
   ) => Promise<{ session: StaffSessionRecord; user: StaffUser } | null>,
@@ -176,5 +195,46 @@ export function requireGrant(grant: StaffCapabilityGrant) {
       return;
     }
     next();
+  };
+}
+
+/**
+ * Direct Prisma-backed auth middleware for Express routes.
+ * Resolves session against PostgreSQL staff_sessions table and re-verifies user status.
+ */
+export function createPrismaAuthMiddleware(prisma: PrismaClient): RequestHandler {
+  return async (req, res, next): Promise<void> => {
+    try {
+      const token = extractSessionToken(req as unknown as RequestLike);
+      if (!token) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "WT_ERR_UNAUTHORIZED",
+            message: "Authentication required. No session token provided.",
+          },
+        });
+        return;
+      }
+
+      const resolved = await resolveSession(prisma, token);
+      if (!resolved) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: "WT_ERR_INVALID_SESSION",
+            message: "Session token is invalid, expired, or revoked.",
+          },
+        });
+        return;
+      }
+
+      req.actor = toServerActorContext(resolved.user, resolved.sessionId);
+      (req as unknown as { staffUser?: unknown }).staffUser = resolved.user;
+      (req as unknown as { sessionToken?: string }).sessionToken = token;
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }

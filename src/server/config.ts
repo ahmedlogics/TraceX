@@ -11,7 +11,7 @@ const ServerConfigSchema = z.object({
   bodyLimit: z.string().default("1mb"),
   corsAllowedOrigins: z
     .string()
-    .default("http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173")
+    .default("http://localhost:3000,http://localhost:5173,http://localhost:8080,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:8080")
     .transform((val) =>
       val
         .split(",")

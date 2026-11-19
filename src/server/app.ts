@@ -5,6 +5,9 @@ import { createCorsMiddleware } from "./middleware/cors";
 import { errorHandlerMiddleware, notFoundMiddleware } from "./middleware/errorHandler";
 import { healthRouter } from "./routes/health";
 import { rfidRouter } from "./routes/rfid";
+import { authRouter } from "./routes/auth";
+import { publicRouter } from "./routes/public";
+import { staffRouter } from "./routes/staff";
 
 /**
  * Creates and configures the WearTrail Express application.
@@ -27,10 +30,19 @@ export function createExpressApp(): Express {
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
-  // 5. Authenticated RFID Ingestion routes
+  // 5. Staff Authentication & ActorContext (Milestone 1)
+  app.use("/api/auth", authRouter);
+
+  // 6. Authenticated RFID Ingestion routes (Ahmed's Backend Live)
   app.use("/api/rfid", rfidRouter);
 
-  // 6. Catch unmapped routes
+  // 7. Public Customer Journey & Technical Proof (Milestone 4 - Anonymous)
+  app.use("/api/public", publicRouter);
+
+  // 8. Staff Operations, Dashboard, Audit & Reports (Milestone 5 - Protected)
+  app.use("/api/staff", staffRouter);
+
+  // 9. Catch unmapped routes
   app.use(notFoundMiddleware);
 
   // 7. Central error handler
