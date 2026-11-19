@@ -345,30 +345,43 @@ export function createHttpClient(): WearTrailClient {
     async handOverTask(): Promise<void> {
       notImplemented("handOverTask");
     },
-    async getRfidStationData(_stationCode: RfidStationCode): Promise<RfidStationData> {
-      notImplemented("getRfidStationData");
+    async getRfidStationData(stationCode: RfidStationCode): Promise<RfidStationData> {
+      return await req<RfidStationData>(`/api/rfid/station/${stationCode}`, { method: "GET" });
     },
     async prepareActionContext(
-      _stationCode: RfidStationCode,
-      _kind: ActionContextKind,
-      _payload: ActionContextPayload,
+      stationCode: RfidStationCode,
+      kind: ActionContextKind,
+      payload: ActionContextPayload,
     ): Promise<string> {
-      notImplemented("prepareActionContext");
+      const res = await req<{ contextId: string }>("/api/rfid/contexts", {
+        method: "POST",
+        body: { stationCode, kind, payload },
+      });
+      return res.contextId;
     },
-    async acknowledgeContext(_contextId: string): Promise<void> {
-      notImplemented("acknowledgeContext");
+    async acknowledgeContext(contextId: string): Promise<void> {
+      await req(`/api/rfid/contexts/${contextId}/ack`, { method: "PUT" });
     },
-    async cancelContext(_contextId: string): Promise<void> {
-      notImplemented("cancelContext");
+    async cancelContext(contextId: string): Promise<void> {
+      await req(`/api/rfid/contexts/${contextId}`, { method: "DELETE" });
     },
-    async resolveRfidScan(_uid: string): Promise<ScanOutcome> {
-      notImplemented("resolveRfidScan");
+    async resolveRfidScan(uid: string): Promise<ScanOutcome> {
+      return await req<ScanOutcome>("/api/rfid/ui-scan", {
+        method: "POST",
+        body: { uid },
+      });
     },
-    async routineScan(_uid: string, _stationCode: "stitching" | "finishing"): Promise<ScanOutcome> {
-      notImplemented("routineScan");
+    async routineScan(uid: string, stationCode: "stitching" | "finishing"): Promise<ScanOutcome> {
+      return await req<ScanOutcome>("/api/rfid/routine-scan", {
+        method: "POST",
+        body: { uid, stationCode },
+      });
     },
-    async simulateRfidScan(_uid: string): Promise<ScanOutcome> {
-      notImplemented("simulateRfidScan");
+    async simulateRfidScan(uid: string): Promise<ScanOutcome> {
+      return await req<ScanOutcome>("/api/rfid/ui-scan", {
+        method: "POST",
+        body: { uid },
+      });
     },
     async listLots(): Promise<MaterialLot[]> {
       notImplemented("listLots");

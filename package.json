@@ -24,6 +24,8 @@
     "blockchain:deploy:local": "npm --prefix packages/blockchain run deploy:local",
     "blockchain:register": "npm --prefix packages/blockchain run register:deployment",
     "ledger:worker": "tsx scripts/ledger-worker.ts",
+    "hardware:provision": "tsx scripts/provision-hardware-device.ts",
+    "hardware:session": "tsx scripts/manage-reader-session.ts",
     "bootstrap:staff": "tsx scripts/bootstrap-staff.ts",
     "bootstrap:simulator": "tsx scripts/bootstrap-simulator.ts",
     "simulate:scan": "tsx scripts/simulate-scan.ts"

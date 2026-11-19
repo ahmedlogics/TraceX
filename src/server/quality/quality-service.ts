@@ -495,6 +495,7 @@ export async function executeIncomingQc(
       answers: answersJson,
       notes: input.notes ?? null,
       defect_reason: input.result === "fail" ? (input.defectReason ?? null) : null,
+      created_at: new Date(),
       submitted_at: new Date(),
     },
   });
@@ -810,6 +811,7 @@ export async function executeFinalQcScan(
       answers: context.answers ?? {},
       notes: context.notes ?? null,
       defect_reason: context.qc_outcome === "fail" ? (context.defect_reason ?? null) : null,
+      created_at: new Date(),
       submitted_at: new Date(),
     },
   });

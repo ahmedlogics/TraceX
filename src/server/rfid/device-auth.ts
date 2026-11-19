@@ -98,7 +98,7 @@ export async function authenticateDevice(
     );
   }
 
-  if (credential.device_id !== claimedDeviceId) {
+  if (claimedDeviceId && credential.device_id !== claimedDeviceId) {
     throw ApiError.forbidden(
       `Claimed device identity '${claimedDeviceId}' does not match authenticated credential identity '${credential.device_id}'.`,
       {

@@ -24,6 +24,10 @@ dist-ssr
 .env.test
 !.env.example
 
+# Hardware Firmware local credentials
+firmware/**/config.h
+!firmware/**/config.example.h
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

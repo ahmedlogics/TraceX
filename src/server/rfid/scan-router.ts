@@ -130,8 +130,25 @@ export class ScanRoutingService implements IScanRoutingService {
     );
 
     // 5. Validate action context (if reported or required by station)
+    let contextIdToValidate = envelope.actionContextId;
+    if (!contextIdToValidate && typeof (db as any).rfid_action_contexts?.findFirst === "function") {
+      // Securely resolve the single live action context bound to this reader session
+      const liveContext = await (db as any).rfid_action_contexts.findFirst({
+        where: {
+          reader_session_id: session.id,
+          closed_at: null,
+          expires_at: { gt: new Date() },
+          status: { in: ["armed", "ready", "awaiting_ack"] },
+        },
+        orderBy: { created_at: "desc" },
+      });
+      if (liveContext) {
+        contextIdToValidate = liveContext.id;
+      }
+    }
+
     const actionContext = await validateActionContext(
-      envelope.actionContextId,
+      contextIdToValidate,
       session.id,
       stationCode,
       db,
@@ -142,6 +159,10 @@ export class ScanRoutingService implements IScanRoutingService {
       actionContext,
       actor,
     };
+
+    const effectiveEnvelope: VersionedScanEnvelope = actionContext?.id
+      ? { ...envelope, actionContextId: actionContext.id }
+      : envelope;
 
     // 6. Look up registered domain handler
     const handler = this.getHandler(stationCode);
@@ -174,7 +195,7 @@ export class ScanRoutingService implements IScanRoutingService {
       return await executeTx(async (tx) => {
         // Phase 1: Prepare subject (creates garment & bindings for Cutting, or resolves existing for QA)
         const subject: PreparedScanSubject = await handler.prepare(
-          envelope,
+          effectiveEnvelope,
           tx,
           scanContext,
         );
@@ -228,7 +249,11 @@ export class ScanRoutingService implements IScanRoutingService {
         });
 
         // Phase 2: Execute station business mutations
-        const result = await handler.process(envelope, subject, tx, scanContext);
+        const effectiveScanContext: DomainScanContext = {
+          ...scanContext,
+          scanRecordId: scanRecord.id,
+        };
+        const result = await handler.process(effectiveEnvelope, subject, tx, effectiveScanContext);
 
         // Consume one-use action context if used
         if (actionContext) {

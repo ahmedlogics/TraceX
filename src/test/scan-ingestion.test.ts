@@ -226,6 +226,17 @@ function createIsolatedMockDb() {
     rfid_action_contexts: {
       findUnique: async ({ where }: any) =>
         store.rfid_action_contexts.find((c) => c.id === where.id) ?? null,
+      findFirst: async ({ where }: any) => {
+        return (
+          store.rfid_action_contexts.find((c) => {
+            if (where.id && c.id !== where.id) return false;
+            if (where.reader_session_id && c.reader_session_id !== where.reader_session_id) return false;
+            if (where.closed_at === null && c.closed_at !== null) return false;
+            if (where.status && where.status.in && !where.status.in.includes(c.status)) return false;
+            return true;
+          }) ?? null
+        );
+      },
       update: async ({ where, data }: any) => {
         const ctx = store.rfid_action_contexts.find((c) => c.id === where.id);
         if (ctx) Object.assign(ctx, data);

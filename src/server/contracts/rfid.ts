@@ -177,6 +177,7 @@ export interface DomainScanContext {
   readonly session: ReaderSessionContract;
   readonly actionContext?: ActionContextContract | null;
   readonly actor: ActorContext;
+  readonly scanRecordId?: string | undefined;
 }
 
 /**
