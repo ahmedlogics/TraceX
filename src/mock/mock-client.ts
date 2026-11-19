@@ -268,6 +268,7 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
         };
       }),
     submitInspection: (input) => act((s, u) => E.submitInspection(s, u, input)),
+    submitIncomingQc: (input) => act((s, u) => E.submitIncomingQc(s, u, input)),
     releaseHold: (gid) => act((s, u) => E.releaseHold(s, u, gid)),
 
     // ---------------------------------------------------------------- rework
@@ -304,6 +305,8 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
         openShipments: s.shipments.filter((x) => x.status !== "departed"),
       })),
     packGarment: (gid) => act((s, u) => E.packGarment(s, u, gid)),
+    createPackage: () => act((s, u) => E.createPackage(s, u)),
+    sealPackage: (packageId) => act((s, u) => E.sealPackage(s, u, packageId)),
     receiveStock: (gid) => act((s, u) => E.receiveStock(s, u, gid)),
     allocateStock: (gid, sid) => act((s, u) => E.allocateStock(s, u, gid, sid)),
     listShipments: () => read((s) => s.shipments),
@@ -323,6 +326,8 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
       }),
     planShipment: (input) => act((s, u) => E.planShipment(s, u, input)),
     updateShipmentPlan: (input) => act((s, u) => E.updateShipmentPlan(s, u, input)),
+    verifyGarmentDispatch: (shipmentId, garmentId) =>
+      act((s, u) => E.verifyGarmentDispatch(s, u, shipmentId, garmentId)),
     confirmDeparture: (id) => act((s, u) => E.confirmDeparture(s, u, id)),
 
     // ---------------------------------------------------------------- ledger / audit / reports

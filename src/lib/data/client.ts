@@ -237,6 +237,17 @@ export interface WearTrailClient {
     result: "pass" | "fail";
     defectReason?: string | undefined;
   }): Promise<void>;
+  submitIncomingQc(input: {
+    lotId: string;
+    inspectionId: string;
+    acceptedQty: number;
+    heldQty: number;
+    rejectedQty: number;
+    checklist: ChecklistItem[];
+    notes: string;
+    result: "pass" | "fail";
+    defectReason?: string | undefined;
+  }): Promise<void>;
   releaseHold(garmentId: string): Promise<void>;
 
   // Rework — GET /rework(/:id), POST /rework/:id/assign, POST /rework/:id/complete
@@ -248,6 +259,8 @@ export interface WearTrailClient {
   // Fulfilment & shipments
   getFulfilment(): Promise<FulfilmentData>;
   packGarment(garmentId: string): Promise<string>;
+  createPackage(): Promise<string>;
+  sealPackage(packageId: string): Promise<void>;
   receiveStock(garmentId: string): Promise<void>;
   allocateStock(garmentId: string, shipmentId: string): Promise<void>;
   listShipments(): Promise<Shipment[]>;
@@ -262,6 +275,7 @@ export interface WearTrailClient {
     garmentIds: string[];
     markPlanned: boolean;
   }): Promise<void>;
+  verifyGarmentDispatch(shipmentId: string, garmentId: string): Promise<void>;
   confirmDeparture(shipmentId: string): Promise<void>;
 
   // Ledger, audit, reports

@@ -249,6 +249,9 @@ export interface MaterialLot {
   receivedBy: string;
   status: LotStatus;
   incomingInspectionId?: string | undefined;
+  acceptedQty?: number | undefined;
+  heldQty?: number | undefined;
+  rejectedQty?: number | undefined;
   /** Active RFID card UID, if bound. */
   rfidUid?: RfidUid | undefined;
 }
@@ -426,6 +429,8 @@ export interface Package {
   status: PackageStatus;
   packedBy: string;
   createdAt: string;
+  sealedAt?: string | undefined;
+  binId?: string | undefined;
 }
 
 export type ShipmentStatus = "draft" | "planned" | "departed";
@@ -437,6 +442,7 @@ export interface Shipment {
   status: ShipmentStatus;
   garmentIds: string[];
   allocatedGarmentIds: string[];
+  verifiedGarmentIds?: string[] | undefined;
   plannedBy: string;
   plannedDate: string;
   departedAt?: string | undefined;

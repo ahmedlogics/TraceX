@@ -1,13 +1,17 @@
 import { useState } from "react";
 import {
   AlertTriangle,
+  Boxes,
   CheckCircle2,
   Package as PkgIcon,
   Radio,
   ScanLine,
+  ShieldAlert,
+  ShieldCheck,
   Truck,
   Warehouse,
 } from "lucide-react";
+import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
@@ -15,12 +19,18 @@ import { Field, NativeSelect, ScopeNote } from "@/components/wt/forms";
 import { IdLink, KeyValue, Section } from "@/components/wt/layout";
 import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
+import type { ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
-import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
 
-const defaultBins = ["BIN-A1", "BIN-A2", "BIN-B1", "BIN-B2", "BIN-BULK-1"];
+const defaultBins = [
+  { id: "BIN-A1", label: "Bin A1 — Standard Hang" },
+  { id: "BIN-A2", label: "Bin A2 — Standard Fold" },
+  { id: "BIN-B1", label: "Bin B1 — Trousers" },
+  { id: "BIN-B2", label: "Bin B2 — Outerwear" },
+  { id: "BIN-BULK-1", label: "Bulk Staging Bin 1" },
+];
 
 export function LogisticsPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
@@ -34,9 +44,11 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
   const [selectedBinId, setSelectedBinId] = useState("BIN-A1");
   const [selectedShipmentId, setSelectedShipmentId] = useState("");
   const [scanUid, setScanUid] = useState("04A7B8C9"); // default demo card UID
+  const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
 
   const activeCtx = stationData.activeContext;
   const isCtxForThisStation = activeCtx && activeCtx.stationCode === stationCode;
+  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
 
   // Department authorization checks
   const isAuthorized =
@@ -62,37 +74,80 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
 
             return (
               <div className="space-y-6">
+                {/* Persistent Feedback Banner */}
+                {lastOutcome && (
+                  <div
+                    className={`rounded-lg border p-4 shadow-sm transition-all ${
+                      lastOutcome.resolution === "accepted"
+                        ? "border-success/40 bg-success/10 text-success-foreground"
+                        : "border-destructive/40 bg-destructive/10 text-destructive"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {lastOutcome.resolution === "accepted" ? (
+                        <ShieldCheck className="size-5 text-success shrink-0 mt-0.5" />
+                      ) : (
+                        <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
+                      )}
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold">
+                          {lastOutcome.resolution === "accepted"
+                            ? `Logistics Operation Confirmed: ${lastOutcome.garmentCode ?? lastOutcome.subjectId}`
+                            : "Logistics Scan Rejected"}
+                        </p>
+                        <p className="text-xs opacity-90">
+                          {lastOutcome.resolution === "accepted"
+                            ? `Garment: ${lastOutcome.productName ?? "Garment"}. Operation recorded and confirmed at Station ${stationData.stationName}.`
+                            : (lastOutcome.rejectReason ??
+                              `Station rule failed: ${lastOutcome.resolution}`)}
+                        </p>
+                        <div className="flex items-center gap-2 pt-1 text-[11px] font-mono text-muted-foreground">
+                          <span>Card UID: {lastOutcome.uid}</span>
+                          <span>·</span>
+                          <span>Station: {stationData.stationName}</span>
+                          <span>·</span>
+                          <span>Time: {new Date(lastOutcome.at).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid gap-6 lg:grid-cols-2">
                   <Section
                     title={
                       stationCode === "packing"
-                        ? "Package Destination"
+                        ? "1. Packaging Destination"
                         : stationCode === "warehouse"
-                          ? "Warehouse Location Bin"
-                          : "Shipment Manifest"
+                          ? "1. Warehouse Location Bin"
+                          : "1. Outbound Shipment Manifest"
                     }
                     description={
                       stationCode === "packing"
-                        ? "Select an open destination package before scanning garments into it."
+                        ? "Select an open destination carton before scanning garments into it."
                         : stationCode === "warehouse"
                           ? "Select the destination storage bin before scanning finished goods."
-                          : "Select the approved shipment before scanning manifest garments."
+                          : "Select the target shipment before scanning manifest garments."
                     }
                   >
                     <div className="space-y-4">
                       {stationCode === "packing" && (
                         <>
                           {openPackages.length === 0 ? (
-                            <EmptyState title="No open packages available" />
+                            <EmptyState title="No open packages available">
+                              <p className="text-xs">
+                                Create a new package from the Fulfilment page first.
+                              </p>
+                            </EmptyState>
                           ) : (
-                            <Field label="Destination Package" htmlFor="log-pkg">
+                            <Field label="Destination Carton" htmlFor="log-pkg">
                               <NativeSelect
                                 id="log-pkg"
                                 value={packageId}
                                 onChange={(v) => setSelectedPackageId(v)}
                                 options={openPackages.map((p) => ({
                                   value: p.id,
-                                  label: `${p.id} (${p.garmentIds.length} garments · ${p.status})`,
+                                  label: `${p.id} (${p.garmentIds.length} items · ${p.status})`,
                                 }))}
                               />
                             </Field>
@@ -103,15 +158,15 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                                 items={[
                                   {
                                     label: "Package ID",
-                                    value: <span className="wt-id">{currentPkg.id}</span>,
+                                    value: <span className="wt-id font-mono">{currentPkg.id}</span>,
                                   },
                                   {
                                     label: "Status",
                                     value: <StatusBadge status={currentPkg.status} />,
                                   },
                                   {
-                                    label: "Current Garment Count",
-                                    value: currentPkg.garmentIds.length,
+                                    label: "Current Items",
+                                    value: `${currentPkg.garmentIds.length} garments packed`,
                                   },
                                 ]}
                               />
@@ -121,12 +176,15 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                       )}
 
                       {stationCode === "warehouse" && (
-                        <Field label="Warehouse Bin Location" htmlFor="log-bin">
+                        <Field label="Target Storage Bin" htmlFor="log-bin">
                           <NativeSelect
                             id="log-bin"
                             value={selectedBinId}
                             onChange={(v) => setSelectedBinId(v)}
-                            options={defaultBins.map((b) => ({ value: b, label: b }))}
+                            options={defaultBins.map((b) => ({
+                              value: b.id,
+                              label: `${b.id} — ${b.label}`,
+                            }))}
                           />
                         </Field>
                       )}
@@ -134,16 +192,16 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                       {stationCode === "dispatch" && (
                         <>
                           {activeShipments.length === 0 ? (
-                            <EmptyState title="No planned shipments awaiting dispatch" />
+                            <EmptyState title="No active shipments awaiting dispatch" />
                           ) : (
-                            <Field label="Target Shipment" htmlFor="log-shp">
+                            <Field label="Target Shipment Manifest" htmlFor="log-shp">
                               <NativeSelect
                                 id="log-shp"
                                 value={shipmentId}
                                 onChange={(v) => setSelectedShipmentId(v)}
                                 options={activeShipments.map((s) => ({
                                   value: s.id,
-                                  label: `${s.id} &rarr; ${s.destination} (${s.garmentIds.length} planned · ${s.status})`,
+                                  label: `${s.id} → ${s.destination} (${s.garmentIds.length} planned · ${s.status})`,
                                 }))}
                               />
                             </Field>
@@ -156,7 +214,7 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                                   { label: "Carrier", value: currentShipment.carrier },
                                   { label: "Planned Date", value: currentShipment.plannedDate },
                                   {
-                                    label: "Allocated Garments",
+                                    label: "Allocated",
                                     value: `${currentShipment.allocatedGarmentIds.length} / ${currentShipment.garmentIds.length}`,
                                   },
                                 ]}
@@ -168,8 +226,8 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
 
                       {!isAuthorized && (
                         <ScopeNote>
-                          Only {stationCode} staff or managers can prepare and confirm {stationCode}{" "}
-                          operations.
+                          Only {stationCode} department staff or managers can prepare and confirm{" "}
+                          {stationCode} operations.
                         </ScopeNote>
                       )}
 
@@ -213,7 +271,7 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                               }
                             }}
                           >
-                            <Radio className="size-4" /> Prepare: Scan Garment
+                            <Radio className="size-4 mr-1.5" /> Prepare Action: Scan Garment
                           </Button>
                         </div>
                       )}
@@ -221,12 +279,12 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                   </Section>
 
                   <Section
-                    title="Reader Action & Scan Lifecycle"
+                    title="2. Reader Action & Scan Lifecycle"
                     description={`Present garment RFID card at Station ${stationData.stationName}.`}
                   >
                     <div className="space-y-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">Lifecycle state:</span>
+                        <span className="text-sm font-medium">Lifecycle State:</span>
                         {isCtxForThisStation ? (
                           <StatusBadge
                             status={activeCtx.status}
@@ -246,10 +304,10 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                       </div>
 
                       {isCtxForThisStation && activeCtx.status === "awaiting_ack" && (
-                        <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 space-y-3">
+                        <div className="rounded-lg border border-warning/40 bg-warning/10 p-4 space-y-3">
                           <p className="text-sm font-medium text-warning-foreground">
-                            Context <span className="wt-id">{activeCtx.id}</span> created. Awaiting
-                            reader board acknowledgement.
+                            Context <span className="wt-id font-mono text-xs">{activeCtx.id}</span>{" "}
+                            created. Awaiting reader board acknowledgement.
                           </p>
                           <div className="flex flex-wrap gap-2">
                             <Button
@@ -272,14 +330,14 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                                 void run((c) => c.cancelContext(activeCtx.id), "Context cancelled.")
                               }
                             >
-                              Cancel context
+                              Cancel Context
                             </Button>
                           </div>
                         </div>
                       )}
 
                       {isCtxForThisStation && activeCtx.status === "ready" && (
-                        <div className="rounded-lg border border-success/40 bg-success-soft p-4 space-y-3">
+                        <div className="rounded-lg border border-success/40 bg-success/10 p-4 space-y-3">
                           <p className="text-sm font-medium text-success-foreground">
                             Ready to scan! Present garment RFID card at Station{" "}
                             {stationData.stationName}.
@@ -299,7 +357,11 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                                 disabled={pending || !scanUid.trim()}
                                 onClick={() =>
                                   void run(
-                                    (c) => c.resolveRfidScan(scanUid.trim()),
+                                    async (c) => {
+                                      const outcome = await c.resolveRfidScan(scanUid.trim());
+                                      setLocalLastOutcome(outcome);
+                                      return outcome;
+                                    },
                                     (outcome) =>
                                       outcome.resolution === "accepted"
                                         ? `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) confirmed at ${stationData.stationName}!`
@@ -307,7 +369,7 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                                   )
                                 }
                               >
-                                <ScanLine className="size-4" /> Simulate RFID Scan
+                                <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
                               </Button>
                               <Button
                                 variant="outline"
@@ -328,10 +390,10 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                       )}
 
                       {!isCtxForThisStation && (
-                        <p className="text-sm text-muted-foreground">
-                          No pending action context. Click &ldquo;Prepare: Scan Garment&rdquo;
-                          above.
-                        </p>
+                        <div className="rounded-lg border bg-muted/20 p-4 text-xs text-muted-foreground">
+                          No pending action context armed. Click &ldquo;Prepare Action: Scan
+                          Garment&rdquo; above.
+                        </div>
                       )}
                     </div>
                   </Section>
@@ -363,17 +425,31 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                         cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
                       },
                       { header: "Product", cell: (g) => g.productName },
+                      {
+                        header: "RFID Card",
+                        cell: (g) =>
+                          g.rfidUid ? (
+                            <span className="font-mono text-xs text-success">{g.rfidUid}</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ),
+                      },
                       { header: "Stage", cell: (g) => <StatusBadge status={g.stage} /> },
                       {
                         header: "Quality",
                         cell: (g) => (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <StatusBadge status={g.disposition} />
                             {g.hold && <HoldBadge />}
                           </div>
                         ),
                       },
-                      { header: "Package", cell: (g) => g.packageId ?? "—" },
+                      {
+                        header: "Package Carton",
+                        cell: (g) => (
+                          <span className="wt-id font-mono text-xs">{g.packageId ?? "—"}</span>
+                        ),
+                      },
                     ]}
                   />
                 </Section>

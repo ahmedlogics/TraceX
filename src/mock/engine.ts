@@ -712,6 +712,16 @@ function handleSubmitQc(
     );
   const g = s.garments.find((x) => x.id === binding.subjectId);
   if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  // Stage validation: must be finishing or final-qc/rework
+  if (g.stage !== "finishing" && g.stage !== "final-qc" && g.stage !== "rework") {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_stage",
+      `Garment ${g.id} is at stage '${g.stage}', expected 'finishing' or 'final-qc'.`,
+      ctx.id,
+    );
+  }
   // Find the open inspection for this garment
   const insp = s.inspections
     .filter((i) => i.subjectType === "garment" && i.subjectId === g.id && i.status === "open")
@@ -724,6 +734,21 @@ function handleSubmitQc(
       `No open inspection found for ${g.id}. Inspection may already be submitted.`,
       ctx.id,
     );
+  // Independent inspection rule: inspector cannot be the repair performer
+  if (insp.kind === "reinspection") {
+    const rc = s.rework.find(
+      (r) => r.reinspectionId === insp.id || (r.garmentId === g.id && r.status === "repaired"),
+    );
+    if (rc?.repairedBy && rc.repairedBy === actor.id) {
+      return rejectScan(
+        s,
+        uid,
+        "rejected_business_rule",
+        "Independent QC Violation: Inspector cannot approve their own repair. Another authorized quality inspector must perform the reinspection.",
+        ctx.id,
+      );
+    }
+  }
   if (payload.result === "pass" && !payload.checklist.every((c) => c.checked)) {
     return rejectScan(
       s,
@@ -1033,6 +1058,12 @@ function handleDispatchGarment(
       `${g.id} is at stage '${g.stage}', not 'allocated'.`,
       ctx.id,
     );
+  if (!sh.verifiedGarmentIds) {
+    sh.verifiedGarmentIds = [];
+  }
+  if (!sh.verifiedGarmentIds.includes(g.id)) {
+    sh.verifiedGarmentIds.push(g.id);
+  }
   consumeContext(s, ctx);
   const outcome: ScanOutcome = {
     uid,
@@ -1589,6 +1620,19 @@ export function submitInspection(
     "forbidden",
     "Only the quality inspector can submit results. Managers have read-only access.",
   );
+  if (insp.kind === "reinspection") {
+    const rc = s.rework.find(
+      (r) =>
+        r.reinspectionId === insp.id || (r.garmentId === insp.subjectId && r.status === "repaired"),
+    );
+    if (rc?.repairedBy && rc.repairedBy === actor.id) {
+      ensure(
+        false,
+        "forbidden",
+        "Independent QC Violation: Inspector cannot approve their own repair. Another authorized quality inspector must perform the reinspection.",
+      );
+    }
+  }
   if (input.result === "pass")
     ensure(
       input.checklist.every((c) => c.checked),
@@ -1607,6 +1651,17 @@ export function submitInspection(
   if (insp.subjectType === "lot") {
     const lot = findOrThrow(s.lots, insp.subjectId, "Lot");
     lot.status = input.result === "pass" ? "accepted" : "rejected";
+    if (input.result === "pass") {
+      lot.acceptedQty = lot.receivedQty;
+      lot.balanceQty = lot.receivedQty;
+      lot.heldQty = 0;
+      lot.rejectedQty = 0;
+    } else {
+      lot.acceptedQty = 0;
+      lot.balanceQty = 0;
+      lot.heldQty = 0;
+      lot.rejectedQty = lot.receivedQty;
+    }
     closeTasks(s, lot.id, ["incoming-qc"]);
     audit(
       s,
@@ -1693,19 +1748,91 @@ export function submitInspection(
   );
 }
 
+export function submitIncomingQc(
+  s: DemoState,
+  actor: StaffUser,
+  input: {
+    lotId: string;
+    inspectionId: string;
+    acceptedQty: number;
+    heldQty: number;
+    rejectedQty: number;
+    checklist: ChecklistItem[];
+    notes: string;
+    result: "pass" | "fail";
+    defectReason?: string | undefined;
+  },
+) {
+  ensure(
+    actor.role === "Q" || actor.department === "quality",
+    "forbidden",
+    "Only quality inspectors may approve incoming inspections. Materials staff cannot approve their own incoming QC.",
+  );
+  const lot = findOrThrow(s.lots, input.lotId, "Lot");
+  const insp = findOrThrow(s.inspections, input.inspectionId, "Inspection");
+  ensure(
+    input.acceptedQty + input.heldQty + input.rejectedQty === lot.receivedQty,
+    "invalid",
+    `Evaluated quantities (${input.acceptedQty + input.heldQty + input.rejectedQty}) must equal received lot quantity (${lot.receivedQty}).`,
+  );
+  if (input.result === "pass") {
+    ensure(
+      input.checklist.every((c) => c.checked),
+      "invalid",
+      "Complete every checklist item before passing.",
+    );
+    ensure(
+      input.acceptedQty > 0,
+      "invalid",
+      "Passing inspection requires an accepted quantity > 0.",
+    );
+  } else {
+    ensure(input.defectReason?.trim(), "invalid", "Enter a defect reason for a failed result.");
+  }
+  insp.checklist = input.checklist;
+  insp.notes = input.notes;
+  insp.status = input.result === "pass" ? "passed" : "failed";
+  insp.defectReason = input.result === "fail" ? input.defectReason?.trim() : undefined;
+  insp.submittedAt = now();
+  insp.submittedBy = actor.id;
+
+  lot.acceptedQty = input.acceptedQty;
+  lot.heldQty = input.heldQty;
+  lot.rejectedQty = input.rejectedQty;
+  lot.balanceQty = input.acceptedQty; // Only accepted quantity is issuable
+  lot.status = input.result === "pass" ? "accepted" : "rejected";
+  closeTasks(s, lot.id, ["incoming-qc"]);
+  audit(
+    s,
+    actor,
+    "quality",
+    `Incoming inspection ${input.result === "pass" ? "passed" : "failed"}`,
+    "lot",
+    lot.id,
+    `${input.acceptedQty}m accepted, ${input.heldQty}m held, ${input.rejectedQty}m rejected`,
+  );
+}
+
 export function releaseHold(s: DemoState, actor: StaffUser, garmentId: string) {
   const g = getGarment(s, garmentId);
   const latest = latestGarmentInspection(s, g.id);
+  const caseId = g.hold?.reworkCaseId;
+  const rc = caseId ? s.rework.find((r) => r.id === caseId) : undefined;
+  if (rc?.repairedBy && rc.repairedBy === actor.id) {
+    ensure(
+      false,
+      "forbidden",
+      "Independent QC Violation: Inspector cannot release a hold on their own repair.",
+    );
+  }
   ensure(
-    can.releaseHold(actor, g, latest),
+    can.releaseHold(actor, g, latest, rc),
     "forbidden",
     "Only the quality inspector can release a hold, and only after a passing reinspection.",
   );
-  const caseId = g.hold?.reworkCaseId;
   g.hold = null;
   g.disposition = "released";
   g.stage = "packing";
-  const rc = caseId ? s.rework.find((r) => r.id === caseId) : undefined;
   if (rc) {
     rc.status = "closed";
     rc.history.push({
@@ -1805,6 +1932,61 @@ export function completeRework(s: DemoState, actor: StaffUser, caseId: string, n
 }
 
 // ---------------------------------------------------------------- fulfilment
+
+export function createPackage(s: DemoState, actor: StaffUser): string {
+  ensure(can.packGarment(actor), "forbidden", "Only packing staff can create packages.");
+  const id = nextId(s, "package", "PKG");
+  s.packages.push({
+    id,
+    garmentIds: [],
+    status: "open",
+    packedBy: actor.id,
+    createdAt: now(),
+  });
+  audit(s, actor, "logistics", "Package created", "package", id);
+  return id;
+}
+
+export function sealPackage(s: DemoState, actor: StaffUser, packageId: string): void {
+  ensure(
+    can.packGarment(actor) || can.receiveStock(actor),
+    "forbidden",
+    "Unauthorized to seal package.",
+  );
+  const pkg = findOrThrow(s.packages, packageId, "Package");
+  ensure(pkg.garmentIds.length > 0, "invalid", "Cannot seal an empty package.");
+  pkg.status = "sealed";
+  pkg.sealedAt = now();
+  audit(s, actor, "logistics", "Package sealed", "package", pkg.id);
+}
+
+export function verifyGarmentDispatch(
+  s: DemoState,
+  actor: StaffUser,
+  shipmentId: string,
+  garmentId: string,
+): void {
+  ensure(
+    can.confirmDeparture(actor),
+    "forbidden",
+    "Only dispatch staff can verify manifest garments.",
+  );
+  const sh = findOrThrow(s.shipments, shipmentId, "Shipment");
+  const g = findOrThrow(s.garments, garmentId, "Garment");
+  ensure(sh.garmentIds.includes(g.id), "invalid", `${g.id} is not on manifest for ${sh.id}.`);
+  ensure(sh.allocatedGarmentIds.includes(g.id), "invalid", `${g.id} is not allocated to ${sh.id}.`);
+  ensure(!g.hold, "conflict", `${g.id} is on quality hold and cannot be verified.`);
+  ensure(
+    g.disposition === "passed" || g.disposition === "released",
+    "conflict",
+    `${g.id} has not passed QC.`,
+  );
+  if (!sh.verifiedGarmentIds) sh.verifiedGarmentIds = [];
+  if (!sh.verifiedGarmentIds.includes(g.id)) {
+    sh.verifiedGarmentIds.push(g.id);
+  }
+  audit(s, actor, "logistics", "Garment verified on manifest", "garment", g.id, sh.id);
+}
 
 export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
   ensure(can.packGarment(actor), "forbidden", "Only packing staff can add garments to a package.");
@@ -1977,14 +2159,16 @@ export function shipmentEligibility(s: DemoState, sh: Shipment): EligibilityChec
       detail: `Stage: ${g.stage}`,
     });
   });
+  const verifiedIds = sh.verifiedGarmentIds ?? [];
+  const allVerified = garments.length > 0 && garments.every((g) => verifiedIds.includes(g.id));
   checks.push({
-    label: "Dispatch presentation observed at S6",
-    ok: !!dispatchTask?.observation,
-    detail: dispatchTask
-      ? dispatchTask.observation
+    label: "Dispatch presentation / RFID scan verified at S6",
+    ok: allVerified || !!dispatchTask?.observation,
+    detail: allVerified
+      ? `All ${garments.length} garments verified`
+      : dispatchTask?.observation
         ? `Observed ${dispatchTask.observation.at}`
-        : `Waiting on ${dispatchTask.id}`
-      : "No dispatch task",
+        : `${garments.filter((g) => !verifiedIds.includes(g.id)).length} garment(s) unverified`,
   });
   return checks;
 }

@@ -841,7 +841,13 @@ flowchart LR
 - **Milestone 1: Frontend & Mock Baseline (`COMPLETED`):**
   - Implemented 9-station RFID shell and dedicated feature panels.
   - Implemented pure domain engine ([src/mock/engine.ts](src/mock/engine.ts)) with `DEMO_STATE_VERSION = 5`.
-  - Verified 12 Vitest unit and integration tests passing.
+  - Verified 21 Vitest unit and integration tests passing across 3 test suites.
+- **Member 3: Quality, Rework & Fulfilment Implementation (`COMPLETED` on `feature/quality-fulfilment`):**
+  - **Domain DTOs & Contracts:** Created [src/domain/quality-fulfilment-types.ts](src/domain/quality-fulfilment-types.ts) with `IncomingQcInput`, `ChecklistVersion`, `FulfilmentEligibilityResult`, `checkFulfilmentEligibility()`, and `checkIndependentInspection()`.
+  - **Modular Express/Prisma Services:** Implemented transaction-scoped business logic in [src/server/quality/quality-service.ts](src/server/quality/quality-service.ts) (`executeIncomingQc`, `assertIndependentInspector`, `validateFinalQcScan`) and [src/server/fulfilment/fulfilment-service.ts](src/server/fulfilment/fulfilment-service.ts) (`validatePackingOperation`, `validateWarehouseReceipt`, `validateShipmentDeparture`).
+  - **State Engine & Client:** Updated [src/mock/engine.ts](src/mock/engine.ts), [src/lib/data/client.ts](src/lib/data/client.ts), and [src/mock/mock-client.ts](src/mock/mock-client.ts) supporting lot-level incoming QC balancing, result-first Final QC card binding, atomic hold and rework creation on failure, independent inspector enforcement (`WT_ERR_INDEPENDENT_QC`), package creation and sealing, warehouse bin tracking, and S6 manifest scan verification.
+  - **Departure Gate:** Authoritative server-side re-verification before actual departure; any late hold acquired after shipment planning immediately blocks departure.
+  - **Staff UI/UX Polish:** Revamped `/staff/quality`, `/staff/quality/inspections/:inspectionId`, `/staff/rework`, `/staff/rework/:caseId`, `/staff/fulfilment`, `/staff/shipments`, `/staff/shipments/:shipmentId`, `QAPanel.tsx`, and `LogisticsPanel.tsx` with KPI summary cards, tabbed filter queues, visible blocking reasons, durable station banners, and clean data tables.
 - **Milestone 2: Database Foundation & Express API (`IN PROGRESS`):**
   - **Prisma 7 Foundation (COMPLETED):** Configured Prisma 7 (`7.10.1`) with `@prisma/adapter-pg` driver adapter targeting private `supplyease` schema, singleton connection pool with graceful shutdown in [src/server/db/](src/server/db/), typed transaction client, `.env.example`, `.env` ignore rules, and [scripts/check-db-connection.ts](scripts/check-db-connection.ts).
   - **Introspection & Baseline (PENDING CREDENTIALS):** Run `npm run db:pull` once credentials are populated in local `.env`, verify models, and register initial baseline migration.
@@ -862,7 +868,7 @@ flowchart LR
 # 1. Install dependencies from lockfile
 npm install
 
-# 2. Run unit and behavioral test suite (12 tests)
+# 2. Run unit and behavioral test suite (21 tests)
 npm test
 
 # 3. Typecheck codebase with zero emit
