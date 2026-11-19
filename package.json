@@ -22,7 +22,8 @@
     "blockchain:test": "npm --prefix packages/blockchain run test",
     "blockchain:node": "npm --prefix packages/blockchain run node",
     "blockchain:deploy:local": "npm --prefix packages/blockchain run deploy:local",
-    "blockchain:register": "npm --prefix packages/blockchain run register:deployment"
+    "blockchain:register": "npm --prefix packages/blockchain run register:deployment",
+    "ledger:worker": "tsx scripts/ledger-worker.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -70,6 +71,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.6.1",
     "embla-carousel-react": "^8.6.0",
+    "ethers": "^6.17.0",
     "express": "^5.3.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",

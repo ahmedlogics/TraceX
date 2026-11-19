@@ -40,3 +40,10 @@ export function validateRequest(schemas: RequestValidationSchemas) {
     }
   };
 }
+
+/**
+ * Convenience middleware for validating only the request body.
+ */
+export function validateBody(schema: ZodSchema) {
+  return validateRequest({ body: schema });
+}
