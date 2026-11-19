@@ -8,6 +8,8 @@ import { materialsRouter } from "./routes/materials";
 import { productionRouter } from "./routes/production";
 import { tasksRouter } from "./routes/tasks";
 import { rfidRouter } from "./routes/rfid";
+import { qualityRouter } from "./routes/quality";
+import { fulfilmentRouter } from "./routes/fulfilment";
 import { registerMember2ScanHandlers } from "./rfid/domain-handlers";
 
 /**
@@ -39,11 +41,13 @@ export function createExpressApp(): Express {
   app.use("/api/materials", materialsRouter);
   app.use("/api/production", productionRouter);
   app.use("/api/tasks", tasksRouter);
+  app.use("/api/quality", qualityRouter);
+  app.use("/api/fulfilment", fulfilmentRouter);
 
-  // 6. Catch unmapped routes
+  // 7. Catch unmapped routes
   app.use(notFoundMiddleware);
 
-  // 7. Central error handler
+  // 8. Central error handler
   app.use(errorHandlerMiddleware);
 
   return app;

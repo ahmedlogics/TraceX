@@ -33,6 +33,12 @@ export { requestIdMiddleware } from "./middleware/requestId";
 export { createCorsMiddleware } from "./middleware/cors";
 export { errorHandlerMiddleware, notFoundMiddleware } from "./middleware/errorHandler";
 
+// Domain Services & Routers
+export * from "./quality/quality-service";
+export * from "./fulfilment/fulfilment-service";
+export { qualityRouter } from "./routes/quality";
+export { fulfilmentRouter } from "./routes/fulfilment";
+
 // Contracts for Teammates
 export * from "./contracts";
 
