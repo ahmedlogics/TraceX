@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 import dotenv from "dotenv";
 import pg from "pg";
 import type { DatabasePoolOptions } from "./types";
@@ -26,11 +27,15 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
 
   if (!globalThis.__wt_pg_pool) {
     const maxVal = process.env["DB_POOL_MAX"];
+    const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
+    const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
+
     globalThis.__wt_pg_pool = new pg.Pool({
       connectionString,
       max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
       connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 10000,
+      ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
     });
 
     globalThis.__wt_pg_pool.on("error", (err) => {

@@ -17,3 +17,4 @@ export interface DatabasePoolOptions {
   idleTimeoutMillis?: number;
   connectionTimeoutMillis?: number;
 }
+

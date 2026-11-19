@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 import dotenv from "dotenv";
 import pg from "pg";
 
@@ -34,9 +35,13 @@ async function runCheck() {
     process.exit(1);
   }
 
+  const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
+  const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
+
   const pool = new pg.Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10000,
+    ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
   });
 
   try {
@@ -76,6 +81,12 @@ async function runCheck() {
         console.log(`- Tables in supplyease: ${tableCount}`);
       }
 
+      console.log("\nTesting Prisma Client ORM query on 'supplyease' schema...");
+      const { prisma, disconnectPrisma } = await import("../src/server/db/client");
+      const stationCount = await prisma.rfid_stations.count();
+      console.log(`- Prisma Client query SUCCESS: ${stationCount} stations found in rfid_stations.`);
+      await disconnectPrisma();
+
       console.log("\nSanitized check completed with zero errors.");
     } finally {
       client.release();
@@ -99,3 +110,4 @@ runCheck().catch((e) => {
   console.error("Fatal error during check:", (e as Error).message);
   process.exit(1);
 });
+
