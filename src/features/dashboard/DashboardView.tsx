@@ -55,62 +55,37 @@ export function DashboardView() {
       {/* Quick Navigation Shortcuts */}
       <div className="flex flex-wrap gap-2 pt-0.5">
         {canAccessRoute(me, "materialLots") && (
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="h-8 text-xs gap-1.5 rounded-full border-purple-500/30 bg-[#160E24] text-purple-200 hover:bg-purple-900/50 hover:text-white"
-          >
+          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.lots}>
-              <Layers className="size-3.5 text-purple-400" /> Fabric Lots
+              <Layers className="size-3.5 text-primary" /> Fabric Lots
             </AppLink>
           </Button>
         )}
         {canAccessRoute(me, "productionOrders") && (
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="h-8 text-xs gap-1.5 rounded-full border-purple-500/30 bg-[#160E24] text-purple-200 hover:bg-purple-900/50 hover:text-white"
-          >
+          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.orders}>
-              <Scissors className="size-3.5 text-purple-400" /> Orders
+              <Scissors className="size-3.5 text-primary" /> Orders
             </AppLink>
           </Button>
         )}
         {canAccessRoute(me, "quality") && (
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="h-8 text-xs gap-1.5 rounded-full border-purple-500/30 bg-[#160E24] text-purple-200 hover:bg-purple-900/50 hover:text-white"
-          >
+          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.quality}>
-              <ShieldCheck className="size-3.5 text-purple-400" /> Quality
+              <ShieldCheck className="size-3.5 text-primary" /> Quality
             </AppLink>
           </Button>
         )}
         {canAccessRoute(me, "fulfilment") && (
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="h-8 text-xs gap-1.5 rounded-full border-purple-500/30 bg-[#160E24] text-purple-200 hover:bg-purple-900/50 hover:text-white"
-          >
+          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.fulfilment}>
-              <Package className="size-3.5 text-purple-400" /> Fulfilment
+              <Package className="size-3.5 text-primary" /> Fulfilment
             </AppLink>
           </Button>
         )}
         {canAccessRoute(me, "shipments") && (
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-            className="h-8 text-xs gap-1.5 rounded-full border-purple-500/30 bg-[#160E24] text-purple-200 hover:bg-purple-900/50 hover:text-white"
-          >
+          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.shipments}>
-              <Truck className="size-3.5 text-purple-400" /> Shipments
+              <Truck className="size-3.5 text-primary" /> Shipments
             </AppLink>
           </Button>
         )}
@@ -145,19 +120,19 @@ export function DashboardView() {
                 {d.assigned.length === 0 ? (
                   <EmptyState title="No pending tasks in your scope right now" />
                 ) : (
-                  <ul className="divide-y divide-purple-800/30 rounded-xl border border-purple-500/20 bg-[#120B1C]/90 overflow-hidden">
+                  <ul className="divide-y rounded-lg border bg-card">
                     {d.assigned.map((t) => (
                       <li
                         key={t.id}
-                        className="flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors hover:bg-purple-900/30"
+                        className="flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors hover:bg-muted/30"
                       >
                         <div className="min-w-0 space-y-0.5">
-                          <p className="text-sm font-medium text-white">{t.title}</p>
-                          <p className="text-xs text-purple-300/70">
-                            <span className="wt-id font-semibold text-purple-200">{t.id}</span> ·{" "}
+                          <p className="text-sm font-medium text-foreground">{t.title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            <span className="wt-id font-semibold">{t.id}</span> ·{" "}
                             <SubjectLink user={me} type={t.subjectType} id={t.subjectId} />
                             {t.checkpoint && (
-                              <span className="ml-1 rounded border border-purple-700/40 bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-mono text-purple-300">
+                              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono">
                                 {t.checkpoint}
                               </span>
                             )}

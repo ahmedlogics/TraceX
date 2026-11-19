@@ -120,9 +120,9 @@ export function AccountView() {
               {grants.map((grant) => (
                 <span
                   key={grant}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-950/50 px-3 py-1 text-xs font-mono text-purple-200"
+                  className="inline-flex items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 py-1 text-xs font-mono text-foreground"
                 >
-                  <ShieldCheck className="size-3.5 text-purple-400" aria-hidden />
+                  <ShieldCheck className="size-3.5 text-primary" aria-hidden />
                   {grant}
                 </span>
               ))}
