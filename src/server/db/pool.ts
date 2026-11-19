@@ -26,8 +26,18 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
 
   if (!globalThis.__wt_pg_pool) {
     const maxVal = process.env["DB_POOL_MAX"];
+    const needsSsl =
+      connectionString.includes("sslmode=require") ||
+      connectionString.includes("supabase.co") ||
+      connectionString.includes("pooler.supabase.com");
+
+    const cleanUrl = needsSsl
+      ? connectionString.replace(/([?&])sslmode=[^&]+(&|$)/, "$1").replace(/[?&]$/, "")
+      : connectionString;
+
     globalThis.__wt_pg_pool = new pg.Pool({
-      connectionString,
+      connectionString: cleanUrl,
+      ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
       max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
       connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 10000,

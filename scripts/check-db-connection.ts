@@ -34,8 +34,11 @@ async function runCheck() {
     process.exit(1);
   }
 
+  // Strip sslmode from URI query so pg.Pool honors ssl: { rejectUnauthorized: false }
+  const cleanUrl = databaseUrl.replace(/([?&])sslmode=[^&]+(&|$)/, "$1").replace(/[?&]$/, "");
   const pool = new pg.Pool({
-    connectionString: databaseUrl,
+    connectionString: cleanUrl,
+    ssl: { rejectUnauthorized: false },
     connectionTimeoutMillis: 10000,
   });
 
