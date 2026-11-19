@@ -43,6 +43,9 @@ async function runCheck() {
   const pool = new pg.Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10000,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   });
 
   try {

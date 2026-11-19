@@ -63,8 +63,18 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       {/* Public Footer */}
       <footer className="relative z-10 border-t border-purple-500/15 bg-[#140D1E]/60 mt-12">
         <div className="mx-auto flex max-w-2xl flex-col sm:flex-row items-center justify-between gap-3 px-4 py-6 text-xs text-purple-300/60">
-          <p>WearTrail · Public garment traceability</p>
-          <p>Read-only provenance · No login or wallet required</p>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-purple-200/90">WearTrail</span>
+            <span>· Public garment traceability</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="inline-flex items-center gap-1 text-purple-300/70 hover:text-purple-100 transition-colors cursor-pointer select-none"
+            aria-label="Scroll back to top of page"
+          >
+            Back to top ↑
+          </button>
         </div>
       </footer>
     </div>
