@@ -1,40 +1,21 @@
 import { useState, type FormEvent } from "react";
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, RotateCcw, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, User } from "lucide-react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
-import { useAuthenticate, useCurrentUser, useSignIn, useSignOut } from "@/app/auth";
+import { useAuthenticate, useCurrentUser, useSignOut } from "@/app/auth";
 import { AppLink, useAppNavigate } from "@/app/navigation";
 import { paths } from "@/app/paths";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/wt/Logo";
 import { Field } from "@/components/wt/forms";
-import { StatusBadge } from "@/components/wt/StatusBadge";
-import { LoadingState } from "@/components/wt/states";
-import { departmentLabels, roleLabels } from "@/domain/labels";
-import { useClient } from "@/lib/data/provider";
-import { errorMessage, useWtQuery } from "@/lib/data/hooks";
+import { roleLabels } from "@/domain/labels";
+import { errorMessage } from "@/lib/data/hooks";
 
 export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
-  const accounts = useWtQuery(["demo-accounts"], (c) => c.listDemoAccounts());
   const me = useCurrentUser();
-  const signIn = useSignIn();
   const authenticate = useAuthenticate();
   const signOut = useSignOut();
   const navigate = useAppNavigate();
-  const client = useClient();
-  const qc = useQueryClient();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -75,22 +56,6 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
     }
   };
 
-  const pickDemoAccount = async (id: string, name: string) => {
-    try {
-      await signIn(id);
-      toast.success(`Switched to: ${name}`);
-      await navigate(target, { replace: true });
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  };
-
-  const reset = async () => {
-    await client.resetDemo();
-    qc.clear();
-    toast.success("Demo environment reset to starting state.");
-  };
-
   return (
     <div className="flex min-h-screen flex-col justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-md space-y-6">
@@ -100,6 +65,9 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
             <Logo height={36} />
           </AppLink>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">Staff Sign In</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Enter your credentials to access the verified staff workspace.
+          </p>
         </div>
 
         {/* Active Session Notification (if already signed in) */}
@@ -144,7 +112,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                     setUsername(e.target.value);
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="e.g. admin.demo"
+                  placeholder="e.g. admin"
                   className="pl-9"
                   autoComplete="username"
                   disabled={isSubmitting}
@@ -203,107 +171,6 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
             </Button>
           </form>
         </section>
-
-        {/* Isolated Developer Testing Utilities (available only for local testing, collapsed by default) */}
-        {import.meta.env.DEV && (
-          <details className="group rounded-xl border border-dashed border-border bg-muted/30 p-4 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground/80 hover:text-foreground flex items-center justify-between select-none">
-              <span>Developer Test Environment</span>
-              <span className="text-[11px] font-mono text-muted-foreground group-open:hidden">
-                (Click to expand quick switch)
-              </span>
-            </summary>
-
-            <div className="mt-4 space-y-4 pt-3 border-t">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-muted-foreground">
-                  Quick-switch staff profiles for local testing:
-                </p>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-                      <RotateCcw className="size-3" /> Reset demo
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Reset simulated data?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Restores in-memory state (lots, orders, rework cases, shipments,
-                        credentials) to baseline seeds.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => void reset()}>Reset</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-
-              {accounts.isPending ? (
-                <LoadingState label="Loading accounts…" />
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {(accounts.data ?? []).map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => void pickDemoAccount(u.id, u.username)}
-                      disabled={u.status !== "active"}
-                      className="flex items-start gap-2.5 rounded-lg border bg-card p-2.5 text-left transition-colors hover:border-primary hover:bg-accent/40 disabled:opacity-50 cursor-pointer"
-                    >
-                      <span className="wt-id mt-0.5 rounded bg-muted px-1.5 py-0.5 font-bold text-foreground">
-                        {u.role}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="wt-id font-semibold text-foreground truncate">
-                            {u.username}
-                          </span>
-                          {u.status !== "active" && <StatusBadge status={u.status} />}
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {roleLabels[u.role]} · {departmentLabels[u.department]}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="pt-2 border-t text-[11px] text-muted-foreground space-y-1">
-                <p>
-                  Default prototype password for demo accounts:{" "}
-                  <code className="font-mono font-semibold text-foreground">weartrail123!</code>
-                </p>
-                <p>
-                  Test activation/reset tokens:{" "}
-                  <AppLink
-                    className="underline hover:text-foreground"
-                    href={paths.credentials("demo-valid-token")}
-                  >
-                    valid
-                  </AppLink>
-                  {" · "}
-                  <AppLink
-                    className="underline hover:text-foreground"
-                    href={paths.credentials("demo-expired-token")}
-                  >
-                    expired
-                  </AppLink>
-                  {" · "}
-                  <AppLink
-                    className="underline hover:text-foreground"
-                    href={paths.credentials("demo-used-token")}
-                  >
-                    used
-                  </AppLink>
-                </p>
-              </div>
-            </div>
-          </details>
-        )}
       </div>
     </div>
   );

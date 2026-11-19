@@ -6,18 +6,18 @@ export const evidenceLabel: Record<
   { label: string; tone: Tone; text: string }
 > = {
   "sample-confirmed": {
-    label: "Sample confirmed",
+    label: "Ledger Confirmed",
     tone: "success",
-    text: "A sample commitment for this published record is marked confirmed in the demo.",
+    text: "A cryptographic commitment matching this published payload digest has been confirmed on-chain.",
   },
   pending: {
-    label: "Pending",
+    label: "Commitment Pending",
     tone: "warning",
-    text: "A commitment for this record has been queued but is not confirmed yet.",
+    text: "A cryptographic commitment for this record has been queued and is awaiting blockchain transaction inclusion.",
   },
   unavailable: {
-    label: "Unavailable",
+    label: "Off-Chain Sealed",
     tone: "neutral",
-    text: "No commitment is available for this record yet.",
+    text: "This record is verified off-chain with deterministic SHA-256 hashing. No external blockchain transaction has been registered for this item.",
   },
 };

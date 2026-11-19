@@ -10,6 +10,9 @@ import { tasksRouter } from "./routes/tasks";
 import { rfidRouter } from "./routes/rfid";
 import { qualityRouter } from "./routes/quality";
 import { fulfilmentRouter } from "./routes/fulfilment";
+import { authRouter } from "./routes/auth";
+import { publicRouter } from "./routes/public";
+import { staffRouter } from "./routes/staff";
 import { registerMember2ScanHandlers } from "./rfid/domain-handlers";
 import { registerMember3ScanHandlers } from "./rfid/quality-fulfilment-handlers";
 
@@ -34,19 +37,28 @@ export function createExpressApp(): Express {
   app.use("/", healthRouter);
   app.use("/api", healthRouter);
 
-  // 5. Authenticated RFID Ingestion routes & Domain Handlers
+  // 5. Staff Authentication & ActorContext (Member 4)
+  app.use("/api/auth", authRouter);
+
+  // 6. Public Customer Journey & Technical Proof (Member 4 - Anonymous)
+  app.use("/api/public", publicRouter);
+
+  // 7. Authenticated RFID Ingestion routes & Domain Handlers (Members 1, 2, 3)
   registerMember2ScanHandlers();
   registerMember3ScanHandlers();
   app.use("/api/rfid", rfidRouter);
 
-  // 6. Domain Routers
+  // 8. Domain Routers (Members 2 & 3)
   app.use("/api/materials", materialsRouter);
   app.use("/api/production", productionRouter);
   app.use("/api/tasks", tasksRouter);
   app.use("/api/quality", qualityRouter);
   app.use("/api/fulfilment", fulfilmentRouter);
 
-  // 7. Catch unmapped routes
+  // 9. Staff Operations, Dashboard, Audit & Reports (Member 4 - Protected)
+  app.use("/api/staff", staffRouter);
+
+  // 10. Catch unmapped routes
   app.use(notFoundMiddleware);
 
   // 8. Central error handler
