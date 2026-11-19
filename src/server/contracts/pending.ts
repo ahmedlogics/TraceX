@@ -56,11 +56,11 @@ export const pendingSubjectRevisionService: ISubjectRevisionService = {
 };
 
 /**
- * Pending Ledger Outbox Service stub (Pending Member 4 integration).
+ * Pending Ledger Outbox Service stub (Pending Member 1 implementation).
  */
 export const pendingLedgerOutboxService: ILedgerOutboxService = {
   queueCommitment: async () => {
-    throw new PendingImplementationError("LedgerOutbox", "Member 4", "Milestone 4");
+    throw new PendingImplementationError("LedgerOutbox", "Member 1", "Milestone 4");
   },
 };
 

@@ -38,20 +38,22 @@ export interface EnqueuedCommitmentResult {
  * from deployment ID, scope, and entity ID.
  */
 export function computeCommitmentId(
-  scope: "event" | "public_journey",
+  scope: "event" | "public_journey" | "trace_event" | "public_payload" | string,
   deploymentId: string,
   entityId: string,
 ): Buffer {
+  const normalizedScope =
+    scope === "trace_event" || scope === "event" ? "event" : "public_journey";
   return crypto
     .createHash("sha256")
-    .update(`${deploymentId}:${scope}:${entityId}`, "utf8")
+    .update(`${deploymentId}:${normalizedScope}:${entityId}`, "utf8")
     .digest();
 }
 
 /**
  * Resolves the active ledger deployment from the database.
- * Supports explicit configuration via LEDGER_DEPLOYMENT_ID or LEDGER_DEPLOYMENT_CODE,
- * falling back to the latest registered deployment.
+ * Supports explicit configuration via LEDGER_DEPLOYMENT_ID, LEDGER_DEPLOYMENT_CODE,
+ * or LEDGER_CHAIN_ID / CHAIN_ID, falling back to the latest registered deployment.
  * Throws WT_ERR_NO_LEDGER_DEPLOYMENT if none is registered.
  */
 export async function getActiveLedgerDeployment(
@@ -59,12 +61,18 @@ export async function getActiveLedgerDeployment(
 ): Promise<ledger_deployments> {
   const envId = process.env["LEDGER_DEPLOYMENT_ID"];
   const envCode = process.env["LEDGER_DEPLOYMENT_CODE"];
+  const envChainId = process.env["LEDGER_CHAIN_ID"] || process.env["CHAIN_ID"];
 
   let deployment: ledger_deployments | null = null;
   if (envId) {
     deployment = await db.ledger_deployments.findUnique({ where: { id: envId } });
   } else if (envCode) {
     deployment = await db.ledger_deployments.findUnique({ where: { code: envCode } });
+  } else if (envChainId) {
+    deployment = await db.ledger_deployments.findFirst({
+      where: { chain_id: Number(envChainId) },
+      orderBy: { registered_at: "desc" },
+    });
   }
 
   if (!deployment) {

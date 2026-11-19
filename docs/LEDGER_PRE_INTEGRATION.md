@@ -246,16 +246,46 @@ The ledger subsystem relies on the following environment variables:
 
 ---
 
-## 6. Remaining Dependencies for Later Worker (Member 4 / Background Service)
+## 6. Real Ledger Outbox Worker & Evidence Service (Member 1 Implementation)
 
-Now that the transactional commitment ingestion and outbox enqueueing are in place, the remaining ledger deliverables are:
+Member 1 has delivered the production-ready outbox worker daemon and server-side evidence subsystem:
 
-1. **Ledger Outbox Worker (`scripts/ledger-worker.ts`):**
-   - Periodically queries `supplyease.ledger_outbox` for `status = 'pending'`.
-   - Acquires lease locks using `SELECT ... FOR UPDATE SKIP LOCKED` or status transition to `'processing'`.
-   - Submits single or batch commitments to `WearTrailCommitmentStore.recordCommitment` or `recordCommitmentBatch`.
-   - On success: updates `ledger_outbox` (`status = 'published'`, `on_chain_tx_hash`, `block_number`, `published_at`).
-   - On revert or network error: increments `attempt_count`, logs `last_error`, applies exponential backoff to `next_attempt_at`.
-2. **Public Journey Proof Explorer Linkage:**
-   - [PublicProofView.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/public/PublicProofView.tsx) reads `supplyease.ledger_commitments` and `public_payload_versions` via the HTTP client.
-   - Verifies against on-chain status via `WearTrailCommitmentStore.getCommitment(commitmentId)`.
+### A. Worker Daemon Implementation (`src/server/ledger/outbox-worker.ts`)
+- **Durable Database-Backed Job Leasing:** Bounded batches (`batchSize: 10`, configurable) leased using atomic database transactions with lease tokens and expiration timestamps. Automatically recovers orphaned jobs after worker termination or restart.
+- **Outside-Transaction Blockchain RPC:** All network calls to Ethereum RPC are performed outside PostgreSQL transactions. RPC outages leave work safely pending with exponential backoff without rolling back factory database mutations.
+- **Privacy Enforcement:** Submits strictly opaque 32-byte commitment IDs and 32-byte payload SHA-256 hashes. Zero private nonces, internal defect notes, or worker identities are sent to the smart contract.
+- **Signer Concurrency & Nonce Manager (`src/server/ledger/signer-nonce-manager.ts`):** Serializes transaction dispatches per signer account, prevents nonce collisions across concurrent operations, and resynchronizes with the pending transaction count upon network failure.
+- **Uncertain Broadcast Reconciliation:** Checks `hasCommitment` and `getTransactionReceipt` on startup or crash recovery before resubmitting. Identical on-chain commitments succeed idempotently; conflicting hashes fail permanently with `WT_ERR_ONCHAIN_HASH_CONFLICT`.
+- **Confirmation Policy:** Waits for configured block confirmations (default: 1). Only marks commitments confirmed when mined receipts succeed with `status === 1`.
+- **Graceful Shutdown:** Handles `SIGINT` and `SIGTERM` signals, completing in-flight batches and safely releasing held leases.
+
+### B. Daemon Startup Command & Environment Variables
+Run the worker daemon:
+```bash
+# Start the outbox worker daemon
+npm run ledger:worker
+# Alternatively
+npx tsx scripts/ledger-worker.ts
+```
+
+#### Required Environment Variables
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | Yes | - | PostgreSQL connection URL with `supplyease` schema. |
+| `LEDGER_RPC_URL` | Optional | `http://127.0.0.1:8545` | Ethereum JSON-RPC provider endpoint. |
+| `LEDGER_SIGNER_KEY` | Optional | Local Hardhat #0 key | 0x-prefixed 32-byte private key for authorized writer. |
+| `LEDGER_DEPLOYMENT_ID`| Optional | Latest in DB | Specific deployment UUID to bind commitments to. |
+| `CONFIRMATION_BLOCKS` | Optional | `1` | Number of mined blocks required before confirming. |
+| `WORKER_POLL_INTERVAL_MS`| Optional | `2000` | Polling interval in milliseconds. |
+| `WORKER_BATCH_SIZE` | Optional | `10` | Maximum number of jobs leased per cycle. |
+| `LEASE_DURATION_SECONDS` | Optional | `60` | Lease timeout duration in seconds before recovery. |
+
+### C. Server-Side Evidence & Diagnostics Service (`src/server/ledger/evidence-service.ts`)
+Exposes dedicated methods for operational monitoring and Member 4's consumer:
+- `ledgerEvidenceService.getCommitmentEvidence(id, { allowPrivate })`: Full evidence for staff audit; strictly strips private fields unless explicitly permitted.
+- `ledgerEvidenceService.getPublicJourneyEvidence(publicPayloadId)`: Dedicated public evidence lookup for Member 4's `/p/:publicId.proof` view. Strictly returns on-chain commitment ID, payload SHA-256, contract address, chain ID, transaction hash, block number, and confirmation timestamp. Zero private nonces or internal defect details are exposed.
+- `ledgerEvidenceService.getLedgerDiagnostics()`: Aggregate outbox status counts (`pending`, `submitted`, `confirmed`, `failed`, `activeLeases`) for monitoring dashboards.
+
+### D. Remaining Integration Dependencies
+1. **Member 4 Public Proof View Integration:** Connect [src/features/public/PublicProofView.tsx](file:///C:/Users/mahme/Documents/supply chain project/WearTrail/src/features/public/PublicProofView.tsx) to query `ledgerEvidenceService.getPublicJourneyEvidence()` via Express endpoint or client method.
+2. **Member 2 & 3 Domain Handlers:** Continue implementing domain handlers that invoke `createInternalCommitment` inside their transaction scope.
