@@ -13,7 +13,10 @@ export function createCorsMiddleware() {
         return callback(null, true);
       }
 
-      const isAllowed = serverConfig.corsAllowedOrigins.includes(origin);
+      const isAllowed =
+        serverConfig.corsAllowedOrigins.includes(origin) ||
+        (serverConfig.nodeEnv === "development" &&
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
       if (isAllowed) {
         return callback(null, true);
       }

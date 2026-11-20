@@ -8,7 +8,7 @@ export const healthRouter = Router();
  * Liveness probe: reports whether the Express process is running and receiving traffic.
  * Does not check external dependencies.
  */
-healthRouter.get("/healthz", (_req, res) => {
+healthRouter.get(["/healthz", "/health"], (_req, res) => {
   return sendSuccess(res, {
     status: "ok",
     uptimeSeconds: Math.floor(process.uptime()),
