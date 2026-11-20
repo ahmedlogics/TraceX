@@ -8,7 +8,6 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     pool: "threads",
-    testTimeout: 30000,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     testTimeout: 30000,
