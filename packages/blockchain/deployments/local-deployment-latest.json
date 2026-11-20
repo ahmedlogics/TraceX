@@ -1,20 +1,20 @@
 {
-  "id": "adc79f3d-79dc-4bd2-a105-d1298c3a41a4",
-  "code": "local-hardhat-20261119220046-1c094d99",
+  "id": "1a0a85d2-8b89-4967-8cda-f2d46e042e43",
+  "code": "local-hardhat-20261120032145-43b95286",
   "chain_id": 31337,
   "network_name": "hardhat-local",
-  "contract_address": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-  "deployment_tx_hash": "0x1c094d99ba4fa2e1f19944fb3f219269866ec39ca09abab50f358e8ef69a7819",
+  "contract_address": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+  "deployment_tx_hash": "0x43b95286c5720124e50b32f5e616813677484bd02f45b4935f1bd34bc11f3a0a",
   "protocol_version": 1,
-  "block_number": 1,
-  "block_hash": "0x725ddbf8369c2754170ece4d2d1c235b599d30e3f6df186276c7c4010ed31ff3",
-  "registered_at": "2026-11-19T22:00:46.628Z",
+  "block_number": 10,
+  "block_hash": "0xdda3a37882de0e8034d49bf7d6c1660c4c549cf840d5bc666feaafec4631436a",
+  "registered_at": "2026-11-20T03:21:45.720Z",
   "deployer_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   "verification": {
     "bytecode_verified": true,
     "round_trip_verified": true,
     "idempotency_verified": true,
-    "test_commitment_id": "0xfa126c8b7008ed17eb4a1ffedde1e02a68595c1d370d78ca0475a08b96ea0a83",
+    "test_commitment_id": "0xffaf708902a502620bff64ab5c01fb3edab3c84ebc3bcf6c6dabfb93ed773f16",
     "test_payload_hash": "0x37bbd20c07fb044cfc7838eb23238a0febba149f9448dc15f616e6e2f3fadbac"
   }
 }

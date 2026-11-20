@@ -251,7 +251,7 @@ function createCombinedInMemoryDb(): { db: PrismaTransactionClient; store: Combi
       return items;
     },
     create: async ({ data }: any) => {
-      const created = {
+      const created: any = {
         id: data.id || crypto.randomUUID(),
         created_at: new Date(),
         closed_at: null,
@@ -259,6 +259,9 @@ function createCombinedInMemoryDb(): { db: PrismaTransactionClient; store: Combi
         released_at: null,
         ...data,
       };
+      if (tableName === "rfid_tag_bindings" && !created.tag_uid && created.tag_identifier) {
+        created.tag_uid = created.tag_identifier.toUpperCase().replace(/[\s:-]/g, "");
+      }
       store[tableName].push(created);
       return created;
     },

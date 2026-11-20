@@ -54,6 +54,25 @@ export async function authenticateDevice(
   claimedDeviceId: string,
   db: PrismaClient | PrismaTransactionClient,
 ): Promise<AuthenticatedDevice> {
+  // Allow UI workstation simulation in dev/test or when simulation is explicitly enabled
+  const isSimulation = headers["x-ui-simulation"] === "true";
+  if (isSimulation && (process.env["NODE_ENV"] !== "production" || process.env["ALLOW_SIMULATION"] === "true")) {
+    const device = await db.devices.findUnique({
+      where: { id: claimedDeviceId },
+    });
+    if (!device || !device.enabled) {
+      throw ApiError.forbidden(
+        `Device '${claimedDeviceId}' is disabled or does not exist. Access denied.`,
+        undefined,
+        "WT_ERR_DEVICE_DISABLED",
+      );
+    }
+    return {
+      deviceId: device.id,
+      deviceName: device.name,
+    };
+  }
+
   const secret = extractDeviceSecret(headers);
   if (!secret) {
     throw ApiError.unauthorized(

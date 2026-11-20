@@ -52,8 +52,7 @@ export const VersionedScanEnvelopeSchema = z.object({
   timestamp: z
     .string()
     .datetime({ message: "timestamp must be an ISO 8601 datetime string." })
-    .optional()
-    .default(() => new Date().toISOString()),
+    .optional(),
 });
 
 export type ValidatedScanEnvelope = z.infer<typeof VersionedScanEnvelopeSchema>;

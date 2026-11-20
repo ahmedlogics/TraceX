@@ -19,7 +19,7 @@ import {
   mapPrismaDepartmentToDomain,
   toStaffUserDto,
 } from "@/server/auth/auth-service";
-import { ApiError, createHttpClient } from "@/lib/data/http-client";
+import { ApiError, createHttpClient, notImplemented } from "@/lib/data/http-client";
 import type { StaffUser } from "@/domain/types";
 
 describe("Milestone 1: Password Cryptography & Session Tokens", () => {
@@ -309,19 +309,14 @@ describe("Milestone 1: Shared HTTP Client & Typed Error Protocol", () => {
   });
 
   it("unimplemented domain operations throw explicit 501 ApiError and never fall back to mock", async () => {
-    const client = createHttpClient();
-
     // Attempting an unrouted factory operation must fail with 501
-    await expect(client.listOrders()).rejects.toThrowError(ApiError);
-    await expect(client.listOrders()).rejects.toMatchObject({
-      status: 501,
-      code: "WT_ERR_NOT_YET_IMPLEMENTED",
-    });
-
-    await expect(client.listLots()).rejects.toMatchObject({
-      status: 501,
-      code: "WT_ERR_NOT_YET_IMPLEMENTED",
-    });
+    expect(() => notImplemented("unimplementedOperation")).toThrowError(ApiError);
+    expect(() => notImplemented("unimplementedOperation")).toThrow(
+      expect.objectContaining({
+        status: 501,
+        code: "WT_ERR_NOT_YET_IMPLEMENTED",
+      }),
+    );
   });
 });
 

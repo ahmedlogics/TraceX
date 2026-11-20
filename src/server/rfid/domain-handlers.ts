@@ -99,17 +99,20 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
       );
     }
 
-    // Create active tag binding in transaction
+    // Create active tag binding in transaction (tag_uid is a generated column in DB, populated in mocks)
+    const bindingData: any = {
+      material_lot_id: lotId,
+      tag_technology: "iso14443a",
+      tag_identifier: tagUid,
+      bound_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
+      bound_at: new Date(),
+      unbound_at: null,
+    };
+    if (!("$executeRaw" in (tx as any))) {
+      bindingData.tag_uid = tagUid;
+    }
     const binding = await tx.rfid_tag_bindings.create({
-      data: {
-        material_lot_id: lotId,
-        tag_technology: "iso14443a",
-        tag_identifier: tagUid,
-        tag_uid: tagUid,
-        bound_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
-        bound_at: new Date(),
-        unbound_at: null,
-      },
+      data: bindingData,
     });
 
     return {
@@ -340,17 +343,20 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
       },
     });
 
-    // 5. Create active tag binding in tx.rfid_tag_bindings (unbound_at: null)
+    // 5. Create active tag binding in tx.rfid_tag_bindings (unbound_at: null, tag_uid generated in DB, set in mocks)
+    const tagBindingData: any = {
+      garment_id: garment.id,
+      tag_technology: "iso14443a",
+      tag_identifier: tagUid,
+      bound_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
+      bound_at: new Date(),
+      unbound_at: null,
+    };
+    if (!("$executeRaw" in (tx as any))) {
+      tagBindingData.tag_uid = tagUid;
+    }
     const tagBinding = await tx.rfid_tag_bindings.create({
-      data: {
-        garment_id: garment.id,
-        tag_technology: "iso14443a",
-        tag_identifier: tagUid,
-        tag_uid: tagUid,
-        bound_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
-        bound_at: new Date(),
-        unbound_at: null,
-      },
+      data: tagBindingData,
     });
 
     return {

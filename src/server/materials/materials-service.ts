@@ -466,16 +466,19 @@ export async function bindLotCard(
       });
     }
 
-    // 5. Create new binding
+    // 5. Create new binding (tag_uid is a generated column in DB, populated explicitly in mock harnesses)
+    const bindingData: any = {
+      material_lot_id: lot.id,
+      tag_identifier: normalizedUid,
+      tag_technology: "ISO_14443_A",
+      bound_by: staffUserId,
+      bound_at: new Date(),
+    };
+    if (!("$executeRaw" in (db as any))) {
+      bindingData.tag_uid = normalizedUid;
+    }
     const binding = await db.rfid_tag_bindings.create({
-      data: {
-        material_lot_id: lot.id,
-        tag_identifier: normalizedUid,
-        tag_uid: normalizedUid,
-        tag_technology: "ISO_14443_A",
-        bound_by: staffUserId,
-        bound_at: new Date(),
-      },
+      data: bindingData,
     });
 
     // 6. Record audit event

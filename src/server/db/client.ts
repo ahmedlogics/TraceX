@@ -85,8 +85,8 @@ export async function runInTransaction<T>(
       return callback(tx as PrismaTransactionClient);
     },
     {
-      maxWait: 10000,
-      timeout: 20000,
+      maxWait: 15000,
+      timeout: 30000,
     },
   );
 }

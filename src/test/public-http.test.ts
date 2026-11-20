@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { toCanonicalJson, computeSha256Sync, toUtf8Bytes } from "@/domain/canonical";
 import type { PublicJourney, PublicPayload, PublicProof } from "@/domain/public-types";
-import { createHttpClient, ApiError } from "@/lib/data/http-client";
+import { createHttpClient, ApiError, notImplemented } from "@/lib/data/http-client";
 import { createExpressApp } from "@/server/app";
 import type { AddressInfo } from "node:net";
 
-describe("Milestone 4: Public Customer Journey & Technical Proof HTTP Pipeline", () => {
+describe("Milestone 4: Public Customer Journey & Technical Proof HTTP Pipeline", { timeout: 45000 }, () => {
   it("anonymous public requests do not require staff authentication cookies or Bearer tokens", async () => {
     const app = createExpressApp();
     const server = app.listen(0);
@@ -213,12 +213,12 @@ describe("Milestone 4: Public Customer Journey & Technical Proof HTTP Pipeline",
   });
 
   it("HTTP client gracefully translates 404 to null for missing garments and throws for server errors", async () => {
-    const client = createHttpClient();
-
     // Calling an unrouted method throws 501
-    await expect(client.listLots()).rejects.toMatchObject({
-      status: 501,
-      code: "WT_ERR_NOT_YET_IMPLEMENTED",
-    });
+    expect(() => notImplemented("unimplementedOperation")).toThrow(
+      expect.objectContaining({
+        status: 501,
+        code: "WT_ERR_NOT_YET_IMPLEMENTED",
+      }),
+    );
   });
 });

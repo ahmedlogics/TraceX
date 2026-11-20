@@ -27,6 +27,8 @@ dist-ssr
 # Hardware Firmware local credentials
 firmware/**/config.h
 !firmware/**/config.example.h
+firmware/**/reader_keys.h
+!firmware/**/reader_keys.example.h
 
 # Wrangler / Cloudflare
 .wrangler/

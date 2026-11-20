@@ -53,7 +53,7 @@ export interface VersionedScanEnvelope {
   /** Hardware device uptime in milliseconds */
   readonly deviceUptimeMs?: number | null;
   /** Scan timestamp in ISO 8601 format */
-  readonly timestamp: string;
+  readonly timestamp?: string;
 }
 
 /**
@@ -147,6 +147,7 @@ export interface ScanOutcomeResult {
   readonly subjectCode?: string | undefined;
   readonly processedAt: string;
   readonly nextExpectedStation?: RfidStationCode | undefined;
+  readonly isDuplicate?: boolean | undefined;
 }
 
 /**

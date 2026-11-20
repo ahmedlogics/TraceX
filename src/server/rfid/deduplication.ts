@@ -89,6 +89,7 @@ export function existingScanToOutcome(scan: rfid_scans): ScanOutcomeResult {
     outcomeCode: scan.outcome_code,
     stationCode: (scan.station_code ?? "cutting") as RfidStationCode,
     processedAt: scan.received_at.toISOString(),
+    isDuplicate: true,
   };
 
   if (scan.outcome_message) {

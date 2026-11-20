@@ -172,6 +172,7 @@ export async function resolveReaderSession(
     include: {
       staff_users: true,
     },
+    orderBy: { opened_at: "desc" },
   });
 
   if (!sessionRecord) {

@@ -8,6 +8,7 @@ import { scanRoutingService } from "../rfid/scan-router";
 import { isOperatorAuthorizedForStation } from "../rfid/session-resolver";
 import { createPrismaAuthMiddleware } from "../auth/actor-context";
 import { authenticateDevice, extractDeviceSecret } from "../rfid/device-auth";
+import { getOrCreateChecklistVersion } from "../quality/quality-service";
 import type {
   RfidStationCode,
   VersionedScanEnvelope,
@@ -114,6 +115,7 @@ rfidRouter.get(
           closed_at: null,
           expires_at: { gt: new Date() },
         },
+        orderBy: { opened_at: "desc" },
       });
 
       if (!session) {
@@ -211,6 +213,7 @@ rfidRouter.get(
           closed_at: null,
           expires_at: { gt: new Date() },
         },
+        orderBy: { opened_at: "desc" },
       });
 
       // Fallback: any active session for this station
@@ -338,6 +341,7 @@ rfidRouter.post(
           closed_at: null,
           expires_at: { gt: new Date() },
         },
+        orderBy: { opened_at: "desc" },
       });
 
       if (!session) {
@@ -380,7 +384,7 @@ rfidRouter.post(
             station_code: stationCode,
             staff_session_id: staffSession.id,
             operator_id: user.id,
-            expires_at: new Date(Date.now() + 8 * 3600 * 1000), // 8 hour workstation session
+            expires_at: staffSession.expires_at,
           },
         });
       }
@@ -408,13 +412,19 @@ rfidRouter.post(
       // Context valid for 5 minutes
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
+      const qcScope = p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as "incoming" | "final" | "reinspection") : null;
+      let checklistVersionId: string | null = null;
+      if (qcScope) {
+        const chk = await getOrCreateChecklistVersion(prisma as any, qcScope, user.id);
+        checklistVersionId = chk.id;
+      }
+
       const context = await prisma.rfid_action_contexts.create({
         data: {
           reader_session_id: session.id,
           action_code: kind,
-          status: "armed",
+          status: "awaiting_ack",
           expires_at: expiresAt,
-          acknowledged_at: new Date(),
           cutting_job_id: p["cuttingJobId"] ? String(p["cuttingJobId"]) : null,
           cutting_input_id: p["cuttingInputId"] ? String(p["cuttingInputId"]) : null,
           source_selection_id: p["sourceSelectionId"] ? String(p["sourceSelectionId"]) : null,
@@ -422,7 +432,8 @@ rfidRouter.post(
           package_id: p["packageId"] ? String(p["packageId"]) : null,
           shipment_id: p["shipmentId"] ? String(p["shipmentId"]) : null,
           warehouse_bin_id: p["binId"] || p["warehouseBinId"] ? String(p["binId"] || p["warehouseBinId"]) : null,
-          qc_scope: p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as any) : null,
+          qc_scope: qcScope,
+          checklist_version_id: checklistVersionId,
           qc_outcome: p["outcome"] || p["qcOutcome"] ? (String(p["outcome"] || p["qcOutcome"]) as any) : null,
           defect_reason: p["defectReason"] ? String(p["defectReason"]) : null,
           notes: p["notes"] ? String(p["notes"]) : null,
@@ -430,12 +441,21 @@ rfidRouter.post(
         },
       });
 
+      // Transition to armed (satisfies trigger: a new context must await board acknowledgement before arming)
+      const armedContext = await prisma.rfid_action_contexts.update({
+        where: { id: context.id },
+        data: {
+          status: "armed",
+          acknowledged_at: new Date(),
+        },
+      });
+
       sendSuccess(
         res,
         {
-          contextId: context.id,
-          status: context.status,
-          expiresAt: context.expires_at.toISOString(),
+          contextId: armedContext.id,
+          status: armedContext.status,
+          expiresAt: armedContext.expires_at.toISOString(),
         },
         201,
       );
@@ -525,8 +545,18 @@ rfidRouter.post(
   prismaAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Simulation is restricted to development/test environments
+      if (process.env["NODE_ENV"] === "production" && process.env["ALLOW_SIMULATION"] !== "true") {
+        throw ApiError.forbidden("UI RFID simulation is restricted to non-production environments.");
+      }
+
       const user = getStaffUser(req);
-      const { uid, stationCode } = req.body as { uid?: string; stationCode?: RfidStationCode };
+      const { uid, stationCode, scanId: suppliedScanId, actionContextId: suppliedContextId } = req.body as {
+        uid?: string;
+        stationCode?: RfidStationCode;
+        scanId?: string;
+        actionContextId?: string | null;
+      };
 
       if (!uid) throw ApiError.badRequest("RFID UID is required.");
 
@@ -547,27 +577,26 @@ rfidRouter.post(
         );
       }
 
-      // Find active context if armed
-      const activeContext = await prisma.rfid_action_contexts.findFirst({
-        where: {
-          reader_session_id: session.id,
-          closed_at: null,
-          expires_at: { gt: new Date() },
-          status: { in: ["armed", "awaiting_ack"] },
-        },
-      });
+      // Stable retry identity: preserve client scanId or generate deterministic uuid
+      const stableScanId =
+        suppliedScanId ||
+        (req.headers["x-scan-id"] as string | undefined) ||
+        crypto.randomUUID();
+
+      // Action context: use explicit client-supplied context; never silently inherit unrelated contexts
+      const effectiveContextId = suppliedContextId || null;
 
       // Construct simulated envelope matching this active reader
       const envelope: VersionedScanEnvelope = {
         version: "v1",
         deviceId: session.device_id,
-        scanId: crypto.randomUUID(),
-        bootId: `ui-boot-${Date.now().toString(36)}`,
+        scanId: stableScanId,
+        bootId: `ui-${crypto.randomUUID()}`,
         sequence: 1,
         readerIndex: session.reader_index,
         mappingVersion: session.mapping_version,
         tagUid: uid,
-        actionContextId: activeContext?.id ?? null,
+        actionContextId: effectiveContextId,
         deviceUptimeMs: 50000,
         timestamp: new Date().toISOString(),
       };
@@ -577,8 +606,11 @@ rfidRouter.post(
         where: { device_id: session.device_id, revoked_at: null },
       });
 
-      // Dispatch through scan routing service
-      const headers = cred ? { "x-device-id": session.device_id } : {};
+      // Dispatch through scan routing service with simulation flag for workstation UI
+      const headers = {
+        "x-device-id": session.device_id,
+        "x-ui-simulation": "true",
+      };
       const result = await scanRoutingService.dispatchScan(envelope, headers, prisma);
       sendSuccess(res, result, 200);
     } catch (err) {

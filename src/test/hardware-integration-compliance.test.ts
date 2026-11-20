@@ -195,6 +195,7 @@ function createHardwareMockDb() {
           if (where.closed_at === null && c.closed_at !== null) return false;
           if (where.status?.in && !where.status.in.includes(c.status)) return false;
           if (where.status?.notIn && where.status.notIn.includes(c.status)) return false;
+          if (where.created_at?.lte && c.created_at > where.created_at.lte) return false;
           return true;
         }) ?? null;
       },
@@ -599,6 +600,285 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
       } catch (err: any) {
         expect(err.errorCode).toBe("WT_ERR_CONTEXT_REQUIRED");
       }
+    });
+
+    it("prevents delayed queued scans from consuming contexts armed after the scan occurred", async () => {
+      const op = mockDb._store.staff_users.find((u: any) => u.role === "quality");
+      const session = {
+        id: "sess-qc-queued-race",
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 1,
+        reader_index: 2,
+        station_code: "final_qc",
+        operator_id: op.id,
+        staff_users: op,
+        opened_at: new Date(Date.now() - 3600000),
+        expires_at: new Date(Date.now() + 3600000),
+        closed_at: null,
+      };
+      mockDb._store.reader_sessions.push(session);
+
+      // Context was armed at T = now (e.g. 10:00:00)
+      const armedContext = {
+        id: "ctx-qc-armed-recently",
+        reader_session_id: session.id,
+        action_code: "submit_qc",
+        status: "armed",
+        created_at: new Date(),
+        expires_at: new Date(Date.now() + 300000),
+        closed_at: null,
+        qc_scope: "final",
+        qc_outcome: "pass",
+        answers: { seams: true },
+        defect_reason: null,
+        notes: "Passed QC",
+      };
+      mockDb._store.rfid_action_contexts.push(armedContext);
+
+      // But the physical scan occurred offline 10 minutes EARLIER (T = now - 600,000ms) with no context
+      const scanTimestamp = new Date(Date.now() - 600000).toISOString();
+      const envelope: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: TEST_DEVICE_ID,
+        scanId: "scan-qc-delayed-queue",
+        bootId: "boot-hw-01",
+        sequence: 77,
+        readerIndex: 2,
+        mappingVersion: 1,
+        tagUid: "04A1B2C3D4E5F6",
+        actionContextId: null,
+        timestamp: scanTimestamp,
+      };
+
+      try {
+        await scanRoutingService.dispatchScan(
+          envelope,
+          { authorization: `Bearer ${TEST_DEVICE_SECRET}` },
+          mockDb,
+        );
+        expect.fail("Expected scan to be rejected because context was created after scan");
+      } catch (err: any) {
+        expect(err.errorCode).toBe("WT_ERR_CONTEXT_REQUIRED");
+      }
+
+      // Crucial: The recently armed context must remain untouched and unconsumed!
+      const ctxInDb = mockDb._store.rfid_action_contexts.find((c: any) => c.id === armedContext.id);
+      expect(ctxInDb.status).toBe("armed");
+      expect(ctxInDb.closed_at).toBeNull();
+    });
+
+    it("prevents queued scans from consuming contexts created or armed 1 second or 4 seconds after the scan", async () => {
+      const op = mockDb._store.staff_users.find((u: any) => u.role === "quality");
+      const session = {
+        id: "sess-qc-1s-4s-race",
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 1,
+        reader_index: 2,
+        station_code: "final_qc",
+        operator_id: op.id,
+        staff_users: op,
+        opened_at: new Date(Date.now() - 3600000),
+        expires_at: new Date(Date.now() + 3600000),
+        closed_at: null,
+      };
+      mockDb._store.reader_sessions.push(session);
+
+      const baseTime = Date.now();
+      const scanTime = new Date(baseTime); // T_scan = baseTime
+
+      // Context 1: created/armed 1 second AFTER the scan
+      const ctx1s = {
+        id: "ctx-qc-armed-1s-after",
+        reader_session_id: session.id,
+        action_code: "submit_qc",
+        status: "armed",
+        created_at: new Date(baseTime + 1000), // T_scan + 1s
+        acknowledged_at: new Date(baseTime + 1000),
+        expires_at: new Date(baseTime + 300000),
+        closed_at: null,
+        qc_scope: "final",
+        qc_outcome: "pass",
+        answers: { seams: true },
+      };
+      mockDb._store.rfid_action_contexts.push(ctx1s);
+
+      const env1s: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: TEST_DEVICE_ID,
+        scanId: "scan-qc-1s-test",
+        bootId: "boot-hw-01",
+        sequence: 78,
+        readerIndex: 2,
+        mappingVersion: 1,
+        tagUid: "04A1B2C3D4E5F6",
+        actionContextId: null,
+        timestamp: scanTime.toISOString(),
+      };
+
+      await expect(
+        scanRoutingService.dispatchScan(env1s, { authorization: `Bearer ${TEST_DEVICE_SECRET}` }, mockDb),
+      ).rejects.toMatchObject({ errorCode: "WT_ERR_CONTEXT_REQUIRED" });
+      expect(mockDb._store.rfid_action_contexts.find((c: any) => c.id === ctx1s.id).status).toBe("armed");
+
+      // Context 2: created/armed 4 seconds AFTER the scan
+      const ctx4s = {
+        id: "ctx-qc-armed-4s-after",
+        reader_session_id: session.id,
+        action_code: "submit_qc",
+        status: "armed",
+        created_at: new Date(baseTime + 4000), // T_scan + 4s
+        acknowledged_at: new Date(baseTime + 4000),
+        expires_at: new Date(baseTime + 300000),
+        closed_at: null,
+        qc_scope: "final",
+        qc_outcome: "pass",
+        answers: { seams: true },
+      };
+      mockDb._store.rfid_action_contexts.push(ctx4s);
+
+      const env4s: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: TEST_DEVICE_ID,
+        scanId: "scan-qc-4s-test",
+        bootId: "boot-hw-01",
+        sequence: 79,
+        readerIndex: 2,
+        mappingVersion: 1,
+        tagUid: "04A1B2C3D4E5F6",
+        actionContextId: null,
+        timestamp: scanTime.toISOString(),
+      };
+
+      await expect(
+        scanRoutingService.dispatchScan(env4s, { authorization: `Bearer ${TEST_DEVICE_SECRET}` }, mockDb),
+      ).rejects.toMatchObject({ errorCode: "WT_ERR_CONTEXT_REQUIRED" });
+      expect(mockDb._store.rfid_action_contexts.find((c: any) => c.id === ctx4s.id).status).toBe("armed");
+    });
+
+    it("prevents scans captured without synchronized device time from auto-resolving contexts", async () => {
+      const op = mockDb._store.staff_users.find((u: any) => u.role === "quality");
+      const session = {
+        id: "sess-qc-unsync-race",
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 1,
+        reader_index: 2,
+        station_code: "final_qc",
+        operator_id: op.id,
+        staff_users: op,
+        opened_at: new Date(),
+        expires_at: new Date(Date.now() + 3600000),
+        closed_at: null,
+      };
+      mockDb._store.reader_sessions.push(session);
+
+      const armedCtx = {
+        id: "ctx-qc-armed-unsync",
+        reader_session_id: session.id,
+        action_code: "submit_qc",
+        status: "armed",
+        created_at: new Date(Date.now() - 5000),
+        acknowledged_at: new Date(Date.now() - 5000),
+        expires_at: new Date(Date.now() + 300000),
+        closed_at: null,
+        qc_scope: "final",
+        qc_outcome: "pass",
+        answers: { seams: true },
+      };
+      mockDb._store.rfid_action_contexts.push(armedCtx);
+
+      // Scan envelope captured without synchronized device time (timestamp undefined)
+      const unsyncEnvelope: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: TEST_DEVICE_ID,
+        scanId: "scan-qc-unsync-01",
+        bootId: "boot-hw-01",
+        sequence: 80,
+        readerIndex: 2,
+        mappingVersion: 1,
+        tagUid: "04A1B2C3D4E5F6",
+        actionContextId: null,
+      };
+
+      await expect(
+        scanRoutingService.dispatchScan(unsyncEnvelope, { authorization: `Bearer ${TEST_DEVICE_SECRET}` }, mockDb),
+      ).rejects.toMatchObject({ errorCode: "WT_ERR_CONTEXT_REQUIRED" });
+      expect(mockDb._store.rfid_action_contexts.find((c: any) => c.id === armedCtx.id).status).toBe("armed");
+    });
+
+    it("preserves original envelope and request SHA-256 fingerprint when context auto-resolution occurs", async () => {
+      const op = mockDb._store.staff_users.find((u: any) => u.role === "quality");
+      const session = {
+        id: "sess-qc-preserve-env",
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 1,
+        reader_index: 2,
+        station_code: "final_qc",
+        operator_id: op.id,
+        staff_users: op,
+        opened_at: new Date(),
+        expires_at: new Date(Date.now() + 3600000),
+        closed_at: null,
+      };
+      mockDb._store.reader_sessions.push(session);
+
+      const armedCtx = {
+        id: "ctx-qc-preserve-test",
+        reader_session_id: session.id,
+        action_code: "submit_qc",
+        status: "armed",
+        created_at: new Date(Date.now() - 2000),
+        acknowledged_at: new Date(Date.now() - 2000),
+        expires_at: new Date(Date.now() + 300000),
+        closed_at: null,
+        qc_scope: "final",
+        qc_outcome: "pass",
+        answers: { seams: true },
+      };
+      mockDb._store.rfid_action_contexts.push(armedCtx);
+
+      mockDb._store.rfid_tag_bindings.push({
+        id: "bind-preserve-01",
+        garment_id: "garment-preserve-01",
+        tag_uid: "04A1B2C3D4E5F6",
+        tag_identifier: "04A1B2C3D4E5F6",
+        unbound_at: null,
+      });
+      mockDb._store.garments.push({
+        id: "garment-preserve-01",
+        code: "GAR-PRESERVE-01",
+        stage: "finished",
+        quality_disposition: "awaiting_inspection",
+      });
+
+      const originalEnvelope: VersionedScanEnvelope = {
+        version: "v1",
+        deviceId: TEST_DEVICE_ID,
+        scanId: "scan-qc-preserve-01",
+        bootId: "boot-hw-01",
+        sequence: 81,
+        readerIndex: 2,
+        mappingVersion: 1,
+        tagUid: "04A1B2C3D4E5F6",
+        actionContextId: null,
+        timestamp: new Date().toISOString(),
+      };
+
+      const expectedOriginalFingerprint = computeRequestFingerprint(originalEnvelope);
+
+      const res = await scanRoutingService.dispatchScan(
+        originalEnvelope,
+        { authorization: `Bearer ${TEST_DEVICE_SECRET}` },
+        mockDb,
+      );
+
+      expect(res.outcome).toBe("accepted");
+      // Original envelope in memory must NOT have had its actionContextId mutated
+      expect(originalEnvelope.actionContextId).toBeNull();
+
+      // Persisted scan record must match the original envelope's SHA-256 fingerprint
+      const recordedScan = mockDb._store.rfid_scans.find((s: any) => s.scan_id === originalEnvelope.scanId);
+      expect(recordedScan).toBeDefined();
+      expect(Buffer.from(recordedScan.request_sha256)).toEqual(expectedOriginalFingerprint);
     });
 
     it("rejects an expired action context with WT_ERR_CONTEXT_EXPIRED", async () => {
