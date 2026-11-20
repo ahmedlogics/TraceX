@@ -230,27 +230,27 @@ async function runSimulatorBootstrap() {
       });
 
       if (existingReaderSession) {
-        // Refresh expiration
+        // Close prior session: reader sessions in supplyease are immutable audit records
         await adminPrisma.reader_sessions.update({
           where: { id: existingReaderSession.id },
           data: {
-            expires_at: readerExpiresAt,
-            last_seen_at: new Date(),
-          },
-        });
-      } else {
-        await adminPrisma.reader_sessions.create({
-          data: {
-            device_id: device.id,
-            mapping_version: 1,
-            reader_index: mapping.readerIndex,
-            station_code: mapping.stationCode,
-            staff_session_id: staffSession.id,
-            operator_id: operator.id,
-            expires_at: readerExpiresAt,
+            closed_at: new Date(),
+            close_reason: "Refreshed by simulation bootstrap",
           },
         });
       }
+
+      await adminPrisma.reader_sessions.create({
+        data: {
+          device_id: device.id,
+          mapping_version: 1,
+          reader_index: mapping.readerIndex,
+          station_code: mapping.stationCode,
+          staff_session_id: staffSession.id,
+          operator_id: operator.id,
+          expires_at: readerExpiresAt,
+        },
+      });
       console.log(`✓ Station '${mapping.stationCode.padEnd(16)}' claimed by @${operator.username} (antenna ${mapping.readerIndex})`);
     }
 
