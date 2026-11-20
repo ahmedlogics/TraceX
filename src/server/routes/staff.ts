@@ -102,6 +102,13 @@ staffRouter.get(
   },
 );
 
+let runtimeBusinessSettings = {
+  defaultCarrier: "Authorized Retail Logistics",
+  reinspectionRequiredAfterRework: true,
+  publicJourneyEnabled: true,
+  shipmentCutoff: "16:00",
+};
+
 /**
  * GET /api/staff/settings
  * Device hardware and operational business configuration.
@@ -134,13 +141,190 @@ staffRouter.get(
           mappingVersion: 1,
         },
         checkpoints,
-        business: {
-          defaultCarrier: "Authorized Retail Logistics",
-          reinspectionRequiredAfterRework: true,
-          publicJourneyEnabled: true,
-          shipmentCutoff: "16:00",
+        business: runtimeBusinessSettings,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * PATCH /api/staff/settings/business
+ * Administrator updates operational business settings.
+ */
+staffRouter.patch(
+  "/settings/business",
+  requireRole(["admin"]),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const updates = req.body || {};
+      runtimeBusinessSettings = {
+        ...runtimeBusinessSettings,
+        ...updates,
+      };
+      sendSuccess(res, runtimeBusinessSettings);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * PATCH /api/staff/settings/checkpoints/:sensor
+ * Administrator updates checkpoint station configuration.
+ */
+staffRouter.patch(
+  "/settings/checkpoints/:sensor",
+  requireRole(["admin"]),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sensor = String(req.params["sensor"] || "");
+      const { label, enabled } = req.body || {};
+
+      const match = sensor.match(/^sensor-(\d+)$/i);
+      if (match && match[1] && label) {
+        const pos = Number.parseInt(match[1], 10);
+        await prisma.rfid_stations.updateMany({
+          where: { workflow_position: pos },
+          data: { name: label },
+        });
+      }
+      sendSuccess(res, { updated: true, sensor, label, enabled });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * GET /api/staff/ledger
+ * Real database-backed ledger commitments with outbox and receipt verification.
+ */
+staffRouter.get(
+  "/ledger",
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const commitments = await prisma.ledger_commitments.findMany({
+        include: {
+          ledger_outbox: true,
+          trace_events: true,
+          public_payload_versions: {
+            include: { garments: true },
+          },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      const rows = commitments.map((c) => {
+        let subjectType: "lot" | "order" | "garment" | "shipment" = "garment";
+        let subjectId = c.id.substring(0, 8);
+        let milestone = "event";
+
+        if (c.public_payload_versions) {
+          subjectType = "garment";
+          subjectId = c.public_payload_versions.garments?.code || c.public_payload_versions.garment_id;
+          milestone = `public/v${c.public_payload_versions.version}`;
+        } else if (c.trace_events) {
+          if (c.trace_events.garment_id) subjectType = "garment";
+          else if (c.trace_events.material_lot_id) subjectType = "lot";
+          else if (c.trace_events.production_order_id) subjectType = "order";
+          else if (c.trace_events.shipment_id) subjectType = "shipment";
+
+          subjectId =
+            c.trace_events.garment_id ||
+            c.trace_events.material_lot_id ||
+            c.trace_events.production_order_id ||
+            c.trace_events.shipment_id ||
+            c.trace_events.subject_id ||
+            subjectId;
+          milestone = c.trace_events.event_type || milestone;
+        }
+
+        let status: "pending" | "submitted" | "failed" | "confirmed" = "pending";
+        if (c.ledger_outbox) {
+          const obStatus = c.ledger_outbox.status;
+          if (obStatus === "confirmed") {
+            status = "confirmed";
+          } else if (obStatus === "failed") {
+            status = "failed";
+          } else if (obStatus === "submitted") {
+            status = "submitted";
+          } else {
+            status = "pending";
+          }
+        }
+
+        const digestHex = c.payload_sha256
+          ? "0x" + Buffer.from(c.payload_sha256).toString("hex").substring(0, 16) + "..."
+          : "0x00...";
+
+        return {
+          id: c.id,
+          subjectType,
+          subjectId,
+          milestone,
+          status,
+          digest: digestHex,
+          createdAt: c.created_at.toISOString(),
+          updatedAt: (c.ledger_outbox?.updated_at ?? c.created_at).toISOString(),
+          attempts: c.ledger_outbox?.attempt_count ?? 0,
+          lastError: c.ledger_outbox?.last_error_summary || c.ledger_outbox?.last_error_code || undefined,
+        };
+      });
+
+      sendSuccess(res, rows);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/staff/ledger/:id/retry
+ * Administrator retries an outbox commitment.
+ */
+staffRouter.post(
+  "/ledger/:id/retry",
+  requireRole(["admin"]),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = getStaffUser(req);
+      const commitmentId = String(req.params["id"] || "").trim();
+
+      const commitment = await prisma.ledger_commitments.findUnique({
+        where: { id: commitmentId },
+        include: { ledger_outbox: true },
+      });
+
+      if (!commitment) {
+        throw ApiError.notFound(`Commitment '${commitmentId}' not found.`);
+      }
+
+      await prisma.ledger_outbox.upsert({
+        where: { commitment_id: commitment.id },
+        update: {
+          status: "pending",
+          attempt_count: 0,
+          next_attempt_at: new Date(),
+          retry_requested_by: actor.id,
+          retry_requested_at: new Date(),
+          last_error_code: null,
+          last_error_summary: null,
+          lease_token: null,
+          lease_expires_at: null,
+        },
+        create: {
+          commitment_id: commitment.id,
+          status: "pending",
+          attempt_count: 0,
+          next_attempt_at: new Date(),
+          retry_requested_by: actor.id,
+          retry_requested_at: new Date(),
         },
       });
+
+      sendSuccess(res, { retried: true, commitmentId: commitment.id });
     } catch (err) {
       next(err);
     }

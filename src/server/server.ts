@@ -64,6 +64,12 @@ export function startServer(port: number = serverConfig.port): Promise<Server> {
       });
 
       // Register process shutdown hooks
+      process.on("uncaughtException", (err) => {
+        console.error("[WearTrail Server Uncaught Exception]", err);
+      });
+      process.on("unhandledRejection", (reason) => {
+        console.error("[WearTrail Server Unhandled Rejection]", reason);
+      });
       process.on("SIGTERM", () => {
         void gracefulShutdown("SIGTERM").then(() => process.exit(0));
       });

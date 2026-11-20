@@ -502,6 +502,11 @@ class WearTrailHardware {
       String message = jsonStr(h.body, "message");
 
       if (h.status == 200 || h.status == 201) {
+        if (h.body.indexOf("\"isDuplicate\":true") >= 0 || h.body.indexOf("\"outcome\":\"duplicate\"") >= 0 || outcome == "duplicate") {
+          Serial.println("[PROCESSED]   IDEMPOTENT RETRY: Original scan result returned.");
+          Serial.println("[COMMITTED]   ALREADY COMMITTED.");
+          return OUT_COMMITTED_DUPLICATE;
+        }
         if (h.body.indexOf("\"outcome\":\"accepted\"") >= 0 || outcome == "accepted") {
           Serial.println("[PROCESSED]   ACCEPTED by WearTrail Scan Router.");
           Serial.println("[COMMITTED]   TRANSACTION COMMITTED in PostgreSQL.");
@@ -512,11 +517,6 @@ class WearTrailHardware {
           Serial.println(message.length() ? message : "Operation disallowed");
           Serial.println("[COMMITTED]   REJECTION LOGGED in database. Subject not mutated. Will not retry.");
           return OUT_COMMITTED_REJECTED;
-        }
-        if (h.body.indexOf("\"outcome\":\"duplicate\"") >= 0 || outcome == "duplicate") {
-          Serial.println("[PROCESSED]   IDEMPOTENT RETRY: Original scan result returned.");
-          Serial.println("[COMMITTED]   ALREADY COMMITTED.");
-          return OUT_COMMITTED_DUPLICATE;
         }
       }
 

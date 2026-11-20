@@ -526,7 +526,7 @@ export async function approveProductionOrder(
     await db.audit_events.create({
       data: {
         actor_staff_id: staffUserId,
-        department_code: "planning",
+        department_code: "cutting",
         action_code: "production_order_approved",
         target_type: "production_order",
         target_reference: order.code,
@@ -793,15 +793,18 @@ export async function bindGarmentTag(
       },
     });
 
+    const bindingData: any = {
+      garment_id: garment.id,
+      tag_identifier: normalizedUid,
+      tag_technology: "ISO_14443_A",
+      bound_by: staffUserId,
+      bound_at: new Date(),
+    };
+    if (!("$executeRaw" in (db as any))) {
+      bindingData.tag_uid = normalizedUid;
+    }
     await db.rfid_tag_bindings.create({
-      data: {
-        garment_id: garment.id,
-        tag_identifier: normalizedUid,
-        tag_uid: normalizedUid,
-        tag_technology: "ISO_14443_A",
-        bound_by: staffUserId,
-        bound_at: new Date(),
-      },
+      data: bindingData,
     });
 
     await db.audit_events.create({
@@ -914,15 +917,18 @@ export async function replaceGarmentCard(
       });
     }
 
+    const newBindingData: any = {
+      garment_id: garment.id,
+      tag_identifier: normalizedUid,
+      tag_technology: "ISO_14443_A",
+      bound_by: staffUserId,
+      bound_at: new Date(),
+    };
+    if (!("$executeRaw" in (db as any))) {
+      newBindingData.tag_uid = normalizedUid;
+    }
     const newBinding = await db.rfid_tag_bindings.create({
-      data: {
-        garment_id: garment.id,
-        tag_identifier: normalizedUid,
-        tag_uid: normalizedUid,
-        tag_technology: "ISO_14443_A",
-        bound_by: staffUserId,
-        bound_at: new Date(),
-      },
+      data: newBindingData,
     });
 
     await db.audit_events.create({

@@ -56,7 +56,7 @@ function isValidUuid(id?: string): boolean {
 export function isQualityRole(actor: StaffUser | ActorContext): boolean {
   if ("role" in actor) {
     const r = actor.role.toLowerCase();
-    if (r === "q" || r === "quality" || r === "admin" || r === "a") return true;
+    if (r === "q" || r === "quality" || r === "admin" || r === "a" || r === "m" || r === "manager") return true;
   }
   if ("department" in actor && actor.department) {
     const d = actor.department.toLowerCase();
@@ -432,12 +432,15 @@ export async function executeIncomingQc(
   }
 
   // 2. Quantity balancing check
-  const totalEvaluated = Number(input.acceptedQty) + Number(input.heldQty) + Number(input.rejectedQty);
+  const acceptedQty = Number((input as any).acceptedQty ?? (input as any).acceptedQuantity ?? 0);
+  const heldQty = Number((input as any).heldQty ?? (input as any).heldQuantity ?? 0);
+  const rejectedQty = Number((input as any).rejectedQty ?? (input as any).rejectedQuantity ?? 0);
+  const totalEvaluated = acceptedQty + heldQty + rejectedQty;
   const receivedQty = Number(lot.received_quantity);
 
   if (totalEvaluated !== receivedQty) {
     throw new Error(
-      `WT_ERR_QUANTITY_MISMATCH: Sum of accepted (${input.acceptedQty}), held (${input.heldQty}), and rejected (${input.rejectedQty}) quantities must equal received lot quantity (${receivedQty}).`,
+      `WT_ERR_QUANTITY_MISMATCH: Sum of accepted (${acceptedQty}), held (${heldQty}), and rejected (${rejectedQty}) quantities must equal received lot quantity (${receivedQty}).`,
     );
   }
 
@@ -445,7 +448,7 @@ export async function executeIncomingQc(
   if (input.result === "pass") {
     let allPassed = true;
     if ("checklist" in input && Array.isArray(input.checklist)) {
-      allPassed = input.checklist.every((c: ChecklistItem) => c.checked);
+      allPassed = input.checklist.every((c: any) => Boolean(c.checked ?? c.passed));
     } else if ("answers" in input && input.answers && typeof input.answers === "object") {
       allPassed = Object.values(input.answers).every(Boolean);
     }
@@ -455,7 +458,7 @@ export async function executeIncomingQc(
         "WT_ERR_CHECKLIST_INCOMPLETE: All checklist items must pass for lot acceptance.",
       );
     }
-    if (input.acceptedQty <= 0) {
+    if (acceptedQty <= 0) {
       throw new Error(
         "WT_ERR_INVALID_QUANTITY: Passing inspection requires an accepted quantity > 0.",
       );
@@ -477,7 +480,7 @@ export async function executeIncomingQc(
     "answers" in input && input.answers
       ? input.answers
       : "checklist" in input && Array.isArray(input.checklist)
-        ? Object.fromEntries(input.checklist.map((c: ChecklistItem) => [c.id, c.checked]))
+        ? Object.fromEntries(input.checklist.map((c: any) => [c.id, Boolean(c.checked ?? c.passed)]))
         : {};
 
   const inspection = await tx.inspections.create({
@@ -489,9 +492,9 @@ export async function executeIncomingQc(
       inspector_id: staffUserId,
       outcome: input.result,
       sampled_quantity: totalEvaluated,
-      accepted_quantity: input.acceptedQty,
-      held_quantity: input.heldQty,
-      rejected_quantity: input.rejectedQty,
+      accepted_quantity: acceptedQty,
+      held_quantity: heldQty,
+      rejected_quantity: rejectedQty,
       answers: answersJson,
       notes: input.notes ?? null,
       defect_reason: input.result === "fail" ? (input.defectReason ?? null) : null,
@@ -504,14 +507,14 @@ export async function executeIncomingQc(
 
   // 6. On acceptance: update available accepted quantity and record stock movement
   if (input.result === "pass") {
-    currentAvailable += Number(input.acceptedQty);
+    currentAvailable += acceptedQty;
 
     await tx.material_stock_movements.create({
       data: {
         material_lot_id: lot.id,
         kind: "accepted",
         inspection_id: inspection.id,
-        quantity: input.acceptedQty,
+        quantity: acceptedQty,
         reason: input.notes || "Accepted at incoming QC inspection",
         performed_by: staffUserId,
       },
@@ -532,9 +535,9 @@ export async function executeIncomingQc(
     lotId: lot.id,
     lotCode: lot.code,
     status: input.result === "pass" ? "accepted" : "rejected",
-    acceptedQty: Number(input.acceptedQty),
-    heldQty: Number(input.heldQty),
-    rejectedQty: Number(input.rejectedQty),
+    acceptedQty,
+    heldQty,
+    rejectedQty,
     availableAcceptedQty: currentAvailable,
   };
 }

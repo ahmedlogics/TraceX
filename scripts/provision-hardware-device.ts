@@ -117,8 +117,21 @@ export async function provisionHardwareDevice(customSecret?: string): Promise<{
 
   // 3. Resolve or create device credential secret
   console.log("[2/4] Configuring device credentials...");
+  const firmwareDir = path.resolve(process.cwd(), "firmware", "WearTrailRFID");
+  const configPath = path.join(firmwareDir, "config.h");
+
+  let existingSecretFromConfig: string | undefined;
+  if (fs.existsSync(configPath)) {
+    const existingContent = fs.readFileSync(configPath, "utf8");
+    const secretMatch = existingContent.match(/#define\s+DEVICE_SECRET\s+"([^"]+)"/);
+    if (secretMatch && secretMatch[1] && secretMatch[1] !== "REPLACE_WITH_DEVICE_SECRET") {
+      existingSecretFromConfig = secretMatch[1];
+    }
+  }
+
   const rawSecret =
     customSecret ||
+    existingSecretFromConfig ||
     process.env["HARDWARE_DEVICE_SECRET"] ||
     process.env["TEST_DEVICE_SECRET"] ||
     `wt_dev_secret_${crypto.randomBytes(16).toString("hex")}`;
@@ -288,7 +301,6 @@ export async function provisionHardwareDevice(customSecret?: string): Promise<{
 
   // 5. Generate local firmware config file safely (without printing secrets to stdout)
   console.log("[4/4] Writing local firmware configuration template...");
-  const firmwareDir = path.resolve(process.cwd(), "firmware", "weartrail");
   if (!fs.existsSync(firmwareDir)) {
     fs.mkdirSync(firmwareDir, { recursive: true });
   }
@@ -324,13 +336,12 @@ export async function provisionHardwareDevice(customSecret?: string): Promise<{
 `;
   fs.writeFileSync(examplePath, exampleContent, "utf8");
 
-  const configPath = path.join(firmwareDir, "config.h");
   if (!fs.existsSync(configPath)) {
     const configContent = exampleContent.replace("REPLACE_WITH_DEVICE_SECRET", rawSecret);
     fs.writeFileSync(configPath, configContent, "utf8");
-    console.log(`      Created local 'firmware/weartrail/config.h' (gitignored).`);
+    console.log(`      Created local 'firmware/WearTrailRFID/config.h' (gitignored).`);
   } else {
-    console.log(`      Existing 'firmware/weartrail/config.h' preserved.`);
+    console.log(`      Existing 'firmware/WearTrailRFID/config.h' preserved.`);
   }
 
   console.log("\n==================================================");

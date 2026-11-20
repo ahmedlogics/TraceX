@@ -130,20 +130,36 @@ export class ScanRoutingService implements IScanRoutingService {
     );
 
     // 5. Validate action context (if reported or required by station)
-    let contextIdToValidate = envelope.actionContextId;
-    if (!contextIdToValidate && typeof (db as any).rfid_action_contexts?.findFirst === "function") {
-      // Securely resolve the single live action context bound to this reader session
-      const liveContext = await (db as any).rfid_action_contexts.findFirst({
-        where: {
-          reader_session_id: session.id,
-          closed_at: null,
-          expires_at: { gt: new Date() },
-          status: { in: ["armed", "ready", "awaiting_ack"] },
-        },
-        orderBy: { created_at: "desc" },
-      });
-      if (liveContext) {
-        contextIdToValidate = liveContext.id;
+    let contextIdToValidate = envelope.actionContextId ?? null;
+
+    if (!contextIdToValidate && envelope.timestamp && typeof (db as any).rfid_action_contexts?.findFirst === "function") {
+      const scanTime = new Date(envelope.timestamp);
+
+      // Scoped guard: Auto-resolution is only permitted if the scan has a valid synchronized timestamp.
+      // Unsynchronized scans or scans without timestamps cannot safely auto-resolve server-side contexts.
+      if (!isNaN(scanTime.getTime())) {
+        // Enforce strict causality: A scan cannot consume a context created or acknowledged after the scan occurred.
+        // Context must already have been created at or before scanTime.
+        const liveContext = await (db as any).rfid_action_contexts.findFirst({
+          where: {
+            reader_session_id: session.id,
+            closed_at: null,
+            expires_at: { gt: new Date() },
+            created_at: { lte: scanTime },
+            status: { in: ["armed", "awaiting_ack"] },
+          },
+          orderBy: { created_at: "desc" },
+        });
+
+        if (liveContext) {
+          // If acknowledged_at is recorded, scan must also have occurred at or after acknowledgement
+          const ackTime = liveContext.acknowledged_at ? new Date(liveContext.acknowledged_at) : null;
+          const isAckValid = !ackTime || isNaN(ackTime.getTime()) || ackTime <= scanTime;
+
+          if (isAckValid) {
+            contextIdToValidate = liveContext.id;
+          }
+        }
       }
     }
 
@@ -188,7 +204,8 @@ export class ScanRoutingService implements IScanRoutingService {
     // 7. Atomic transaction orchestration
     const executeTx =
       dbClient && typeof (dbClient as any).$transaction === "function"
-        ? (fn: (tx: PrismaTransactionClient) => Promise<any>) => (dbClient as any).$transaction(fn)
+        ? (fn: (tx: PrismaTransactionClient) => Promise<any>) =>
+            (dbClient as any).$transaction(fn, { maxWait: 15000, timeout: 30000 })
         : (fn: (tx: PrismaTransactionClient) => Promise<any>) => runInTransaction(fn);
 
     try {
@@ -230,7 +247,7 @@ export class ScanRoutingService implements IScanRoutingService {
             reader_index: envelope.readerIndex,
             reported_mapping_version: envelope.mappingVersion,
             tag_uid: normalizeTagUid(envelope.tagUid),
-            reported_context_id: envelope.actionContextId ?? null,
+            reported_context_id: effectiveEnvelope.actionContextId ?? null,
             resolved_context_id: actionContext?.id ?? null,
             reader_session_id: session.id,
             station_code: stationCode,

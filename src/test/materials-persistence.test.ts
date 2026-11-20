@@ -434,7 +434,13 @@ function createMockDb(): { db: PrismaTransactionClient; state: MockDbState } {
         });
       },
       create: async ({ data }: any) => {
-        const item = { id: data.id || `bind-${state.rfid_tag_bindings.length + 1}`, unbound_at: null, unbound_by: null, ...data };
+        const item = {
+          id: data.id || `bind-${state.rfid_tag_bindings.length + 1}`,
+          unbound_at: null,
+          unbound_by: null,
+          tag_uid: data.tag_uid || (data.tag_identifier ? data.tag_identifier.toUpperCase().replace(/[\s:-]/g, "") : undefined),
+          ...data,
+        };
         state.rfid_tag_bindings.push(item);
         return item;
       },

@@ -133,22 +133,28 @@ export async function openReaderSession(options: {
     },
   });
 
-  // 5. Ensure staff_session exists for foreign key
+  // 5. Ensure staff_session exists for foreign key with expires_at >= session.expires_at
+  const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000);
+  const staffSessionExpiresAt = new Date(Date.now() + Math.max(ttlHours, 24) * 3600 * 1000);
+
   let staffSession = await prisma.staff_sessions.findFirst({
-    where: { staff_user_id: user.id, revoked_at: null },
+    where: {
+      staff_user_id: user.id,
+      revoked_at: null,
+      expires_at: { gte: expiresAt },
+    },
   });
   if (!staffSession) {
     staffSession = await prisma.staff_sessions.create({
       data: {
         staff_user_id: user.id,
         token_digest: new Uint8Array(32),
-        expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+        expires_at: staffSessionExpiresAt,
       },
     });
   }
 
   // 6. Create active reader session
-  const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000);
   const session = await prisma.reader_sessions.create({
     data: {
       device_id: device.id,

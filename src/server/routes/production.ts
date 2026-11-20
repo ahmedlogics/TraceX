@@ -120,6 +120,54 @@ productionRouter.post(
   },
 );
 
+// POST /api/production/orders/:id/cutting-outputs — record cutting output (dashboard fallback)
+productionRouter.post(
+  "/orders/:id/cutting-outputs",
+  requireAuthenticatedActor,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orderId = req.params["id"] as string;
+      const { issueId, fabricUsed, size, tagUid } = req.body as {
+        issueId: string;
+        fabricUsed?: number;
+        size?: string;
+        tagUid?: string;
+      };
+
+      // Generate a valid 14-hex uppercase UID if none supplied
+      const effectiveUid = tagUid
+        ? String(tagUid).trim().toUpperCase()
+        : "E0" + Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+
+      const sourceResult = await confirmCuttingSource(
+        {
+          orderId,
+          issueId,
+          consumedQty: Number(fabricUsed || 1),
+          tagUid: undefined,
+        },
+        req.actor,
+      );
+
+      const bindResult = await bindGarmentTag(
+        {
+          orderId,
+          cuttingJobId: sourceResult.cuttingJobId,
+          cuttingSourceSelectionId: sourceResult.cuttingInputId,
+          size: size || "M",
+          tagUid: effectiveUid,
+          fabricUsed: Number(fabricUsed || 1),
+        },
+        req.actor,
+      );
+
+      sendSuccess(res, bindResult.garmentCode, 201);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // POST /api/production/cutting/select-source — lock confirmed cutting source
 productionRouter.post(
   "/cutting/select-source",

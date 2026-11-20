@@ -196,7 +196,7 @@ export async function httpRequest<T = unknown>(
   return payload as T;
 }
 
-function notImplemented(methodName: string): never {
+export function notImplemented(methodName: string): never {
   throw new ApiError(
     501,
     "WT_ERR_NOT_YET_IMPLEMENTED",
@@ -319,31 +319,39 @@ export function createHttpClient(): WearTrailClient {
       return await req<DashboardData>("/api/staff/dashboard", { method: "GET" });
     },
     async listTasks(): Promise<Task[]> {
-      notImplemented("listTasks");
+      return await req<Task[]>("/api/tasks", { method: "GET" });
     },
-    async claimTask(_taskId: string): Promise<void> {
-      notImplemented("claimTask");
+    async claimTask(taskId: string): Promise<void> {
+      await req(`/api/tasks/${encodeURIComponent(taskId)}/claim`, { method: "POST" });
     },
-    async assignTask(_taskId: string, _userId: string): Promise<void> {
-      notImplemented("assignTask");
+    async assignTask(taskId: string, userId: string): Promise<void> {
+      await req(`/api/tasks/${encodeURIComponent(taskId)}/assign`, {
+        method: "POST",
+        body: { userId },
+      });
     },
     async getWorkstation(): Promise<WorkstationData> {
-      notImplemented("getWorkstation");
+      return {
+        session: { armed: false, needsClear: false, log: [] },
+        tasks: [],
+        selected: undefined,
+        subjectLabel: "Retired IR Workflow",
+      };
     },
     async selectWorkstationTask(_taskId: string): Promise<void> {
-      notImplemented("selectWorkstationTask");
+      // Retired IR checkpoint workflow
     },
     async armCheckpoint(): Promise<void> {
-      notImplemented("armCheckpoint");
+      // Retired IR checkpoint workflow
     },
     async simulateTrigger(_sensor: SensorId): Promise<TriggerOutcome> {
-      notImplemented("simulateTrigger");
+      return "ignored-unarmed";
     },
     async clearCheckpoint(): Promise<void> {
-      notImplemented("clearCheckpoint");
+      // Retired IR checkpoint workflow
     },
     async handOverTask(): Promise<void> {
-      notImplemented("handOverTask");
+      // Retired IR checkpoint workflow
     },
     async getRfidStationData(stationCode: RfidStationCode): Promise<RfidStationData> {
       return await req<RfidStationData>(`/api/rfid/station/${stationCode}`, { method: "GET" });
@@ -384,78 +392,152 @@ export function createHttpClient(): WearTrailClient {
       });
     },
     async listLots(): Promise<MaterialLot[]> {
-      notImplemented("listLots");
+      return await req<MaterialLot[]>("/api/materials/lots", { method: "GET" });
     },
-    async getLot(_id: string): Promise<LotDetail | null> {
-      notImplemented("getLot");
+    async getLot(id: string): Promise<LotDetail | null> {
+      try {
+        return await req<LotDetail>(`/api/materials/lots/${encodeURIComponent(id)}`, { method: "GET" });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
     },
-    async receiveLot(_input: {
+    async receiveLot(input: {
       material: string;
       supplierRef: string;
       qty: number;
       unit?: "m" | "kg" | "pcs";
     }): Promise<string> {
-      notImplemented("receiveLot");
+      const res = await req<{ lotId?: string; lotCode?: string; id?: string }>("/api/materials/lots", {
+        method: "POST",
+        body: {
+          materialName: input.material,
+          supplierRef: input.supplierRef,
+          quantity: input.qty,
+          unit: input.unit || "m",
+        },
+      });
+      return res.lotCode || res.lotId || res.id || String(res);
     },
-    async issueMaterial(_input: { lotId: string; orderId: string; qty: number }): Promise<string> {
-      notImplemented("issueMaterial");
+    async issueMaterial(input: { lotId: string; orderId: string; qty: number }): Promise<string> {
+      const res = await req<{ issueId?: string; id?: string }>(
+        `/api/materials/lots/${encodeURIComponent(input.lotId)}/issues`,
+        {
+          method: "POST",
+          body: {
+            orderId: input.orderId,
+            quantity: input.qty,
+          },
+        },
+      );
+      return res.issueId || res.id || String(res);
     },
     async listProductSpecs(): Promise<ProductSpecification[]> {
-      notImplemented("listProductSpecs");
+      return await req<ProductSpecification[]>("/api/production/specs", { method: "GET" });
     },
-    async saveProductSpec(_input: Omit<ProductSpecification, "version">): Promise<string> {
-      notImplemented("saveProductSpec");
+    async saveProductSpec(input: Omit<ProductSpecification, "version">): Promise<string> {
+      const res = await req<{ specId?: string; id?: string }>("/api/production/specs", {
+        method: "POST",
+        body: input,
+      });
+      return res.specId || res.id || String(res);
     },
     async listOrders(): Promise<ProductionOrder[]> {
-      notImplemented("listOrders");
+      return await req<ProductionOrder[]>("/api/production/orders", { method: "GET" });
     },
-    async getOrder(_id: string): Promise<OrderDetail | null> {
-      notImplemented("getOrder");
+    async getOrder(id: string): Promise<OrderDetail | null> {
+      try {
+        return await req<OrderDetail>(`/api/production/orders/${encodeURIComponent(id)}`, { method: "GET" });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
     },
-    async planOrder(_input: {
+    async planOrder(input: {
       product: string;
       styleCode: string;
       qty: number;
       dueDate: string;
     }): Promise<string> {
-      notImplemented("planOrder");
+      const res = await req<{ orderId?: string; code?: string; id?: string }>(
+        "/api/production/orders",
+        {
+          method: "POST",
+          body: {
+            product: input.product,
+            styleCode: input.styleCode,
+            qty: input.qty,
+            dueDate: input.dueDate,
+          },
+        },
+      );
+      return res.code || res.orderId || res.id || String(res);
     },
-    async approveOrder(_orderId: string): Promise<void> {
-      notImplemented("approveOrder");
+    async approveOrder(orderId: string): Promise<void> {
+      await req(`/api/production/orders/${encodeURIComponent(orderId)}/approve`, { method: "POST" });
     },
-    async recordCuttingOutput(_input: {
+    async recordCuttingOutput(input: {
       orderId: string;
       issueId: string;
       fabricUsed: number;
       size: string;
     }): Promise<string> {
-      notImplemented("recordCuttingOutput");
+      const res = await req<string | { garmentCode?: string; id?: string }>(
+        `/api/production/orders/${encodeURIComponent(input.orderId)}/cutting-outputs`,
+        {
+          method: "POST",
+          body: input,
+        },
+      );
+      if (typeof res === "string") return res;
+      return res.garmentCode || res.id || String(res);
     },
     async listGarments(): Promise<Garment[]> {
-      notImplemented("listGarments");
+      return await req<Garment[]>("/api/production/garments", { method: "GET" });
     },
-    async getGarment(_id: string): Promise<GarmentDetail | null> {
-      notImplemented("getGarment");
+    async getGarment(id: string): Promise<GarmentDetail | null> {
+      try {
+        return await req<GarmentDetail>(`/api/production/garments/${encodeURIComponent(id)}`, { method: "GET" });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
     },
-    async replaceGarmentCard(_garmentId: string, _newUid: string): Promise<ScanOutcome> {
-      notImplemented("replaceGarmentCard");
+    async replaceGarmentCard(garmentId: string, newUid: string): Promise<ScanOutcome> {
+      return await req<ScanOutcome>(`/api/production/garments/${encodeURIComponent(garmentId)}/replace-card`, {
+        method: "POST",
+        body: { newUid },
+      });
     },
     async listInspections(): Promise<Inspection[]> {
-      notImplemented("listInspections");
+      return await req<Inspection[]>("/api/quality/inspections", { method: "GET" });
     },
-    async getInspection(_id: string): Promise<InspectionDetail | null> {
-      notImplemented("getInspection");
+    async getInspection(id: string): Promise<InspectionDetail | null> {
+      try {
+        return await req<InspectionDetail>(`/api/quality/inspections/${encodeURIComponent(id)}`, { method: "GET" });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
     },
-    async submitInspection(_input: {
+    async submitInspection(input: {
       inspectionId: string;
       checklist: ChecklistItem[];
       notes: string;
       result: "pass" | "fail";
       defectReason?: string | undefined;
     }): Promise<void> {
-      notImplemented("submitInspection");
+      await req(`/api/quality/inspections/${encodeURIComponent(input.inspectionId)}/result`, {
+        method: "POST",
+        body: {
+          checklist: input.checklist,
+          notes: input.notes,
+          result: input.result,
+          defectReason: input.defectReason,
+        },
+      });
     },
-    async submitIncomingQc(_input: {
+    async submitIncomingQc(input: {
       lotId: string;
       inspectionId: string;
       acceptedQty: number;
@@ -466,75 +548,143 @@ export function createHttpClient(): WearTrailClient {
       result: "pass" | "fail";
       defectReason?: string | undefined;
     }): Promise<void> {
-      notImplemented("submitIncomingQc");
+      await req("/api/quality/incoming-qc", {
+        method: "POST",
+        body: {
+          lotId: input.lotId,
+          inspectionId: input.inspectionId,
+          acceptedQuantity: input.acceptedQty,
+          heldQuantity: input.heldQty,
+          rejectedQuantity: input.rejectedQty,
+          checklist: input.checklist,
+          notes: input.notes,
+          result: input.result,
+          defectReason: input.defectReason,
+        },
+      });
     },
-    async releaseHold(_garmentId: string): Promise<void> {
-      notImplemented("releaseHold");
+    async releaseHold(garmentId: string): Promise<void> {
+      await req(`/api/quality/garments/${encodeURIComponent(garmentId)}/release-hold`, {
+        method: "POST",
+        body: {},
+      });
     },
     async listRework(): Promise<ReworkCase[]> {
-      notImplemented("listRework");
+      return await req<ReworkCase[]>("/api/quality/rework", { method: "GET" });
     },
-    async getRework(_id: string): Promise<ReworkDetail | null> {
-      notImplemented("getRework");
+    async getRework(id: string): Promise<ReworkDetail | null> {
+      try {
+        return await req<ReworkDetail>(`/api/quality/rework/${encodeURIComponent(id)}`, { method: "GET" });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
     },
-    async assignRework(_caseId: string, _department: Department): Promise<void> {
-      notImplemented("assignRework");
+    async assignRework(caseId: string, department: Department): Promise<void> {
+      await req(`/api/quality/rework/${encodeURIComponent(caseId)}/assign`, {
+        method: "POST",
+        body: { departmentCode: department },
+      });
     },
-    async completeRework(_caseId: string, _note: string): Promise<void> {
-      notImplemented("completeRework");
+    async completeRework(caseId: string, note: string): Promise<void> {
+      await req(`/api/quality/rework/${encodeURIComponent(caseId)}/complete`, {
+        method: "POST",
+        body: { note },
+      });
     },
     async getFulfilment(): Promise<FulfilmentData> {
-      notImplemented("getFulfilment");
+      return await req<FulfilmentData>("/api/fulfilment", { method: "GET" });
     },
-    async packGarment(_garmentId: string): Promise<string> {
-      notImplemented("packGarment");
+    async packGarment(garmentId: string): Promise<string> {
+      const res = await req<{ packageId?: string; id?: string }>("/api/fulfilment/pack", {
+        method: "POST",
+        body: { garmentId },
+      });
+      return res.packageId || res.id || String(res);
     },
     async createPackage(): Promise<string> {
-      notImplemented("createPackage");
+      const res = await req<{ packageId?: string; id?: string }>("/api/fulfilment/packages", {
+        method: "POST",
+        body: {},
+      });
+      return res.packageId || res.id || String(res);
     },
-    async sealPackage(_packageId: string): Promise<void> {
-      notImplemented("sealPackage");
+    async sealPackage(packageId: string): Promise<void> {
+      await req(`/api/fulfilment/packages/${encodeURIComponent(packageId)}/seal`, {
+        method: "POST",
+        body: {},
+      });
     },
-    async receiveStock(_garmentId: string): Promise<void> {
-      notImplemented("receiveStock");
+    async receiveStock(garmentId: string): Promise<void> {
+      await req("/api/fulfilment/receive-stock", {
+        method: "POST",
+        body: { garmentId },
+      });
     },
-    async allocateStock(_garmentId: string, _shipmentId: string): Promise<void> {
-      notImplemented("allocateStock");
+    async allocateStock(garmentId: string, shipmentId: string): Promise<void> {
+      await req(`/api/fulfilment/shipments/${encodeURIComponent(shipmentId)}/allocate`, {
+        method: "POST",
+        body: { garmentId },
+      });
     },
     async listShipments(): Promise<Shipment[]> {
-      notImplemented("listShipments");
+      return await req<Shipment[]>("/api/fulfilment/shipments", { method: "GET" });
     },
-    async getShipment(_id: string): Promise<ShipmentDetail | null> {
-      notImplemented("getShipment");
+    async getShipment(id: string): Promise<ShipmentDetail | null> {
+      try {
+        return await req<ShipmentDetail>(`/api/fulfilment/shipments/${encodeURIComponent(id)}`, { method: "GET" });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
     },
-    async planShipment(_input: {
-      carrier: string;
+    async planShipment(input: {
       destination: string;
+      carrier: string;
       plannedDate: string;
-      garmentIds: string[];
     }): Promise<string> {
-      notImplemented("planShipment");
+      const res = await req<{ shipmentId?: string; id?: string; code?: string }>(
+        "/api/fulfilment/shipments",
+        {
+          method: "POST",
+          body: input,
+        },
+      );
+      return res.shipmentId || res.id || res.code || String(res);
     },
-    async updateShipmentPlan(_input: {
+    async updateShipmentPlan(input: {
       shipmentId: string;
-      carrier?: string;
-      destination?: string;
-      plannedDate?: string;
-      garmentIds?: string[];
+      garmentIds: string[];
+      markPlanned: boolean;
     }): Promise<void> {
-      notImplemented("updateShipmentPlan");
+      await req(`/api/fulfilment/shipments/${encodeURIComponent(input.shipmentId)}/plan`, {
+        method: "POST",
+        body: {
+          garmentIds: input.garmentIds,
+          markPlanned: input.markPlanned,
+        },
+      });
     },
-    async verifyGarmentDispatch(_shipmentId: string, _garmentId: string): Promise<void> {
-      notImplemented("verifyGarmentDispatch");
+    async verifyGarmentDispatch(shipmentId: string, garmentId: string): Promise<void> {
+      await req(`/api/fulfilment/shipments/${encodeURIComponent(shipmentId)}/verify-dispatch`, {
+        method: "POST",
+        body: { garmentId },
+      });
     },
-    async confirmDeparture(_shipmentId: string): Promise<void> {
-      notImplemented("confirmDeparture");
+    async confirmDeparture(shipmentId: string): Promise<void> {
+      await req(`/api/fulfilment/shipments/${encodeURIComponent(shipmentId)}/depart`, {
+        method: "POST",
+        body: {},
+      });
     },
     async listLedger(): Promise<any[]> {
-      notImplemented("listLedger");
+      return await req<any[]>("/api/staff/ledger", { method: "GET" });
     },
-    async retryLedger(_id: string): Promise<void> {
-      notImplemented("retryLedger");
+    async retryLedger(id: string): Promise<void> {
+      await req(`/api/staff/ledger/${encodeURIComponent(id)}/retry`, {
+        method: "POST",
+        body: {},
+      });
     },
     async listAudit(): Promise<AuditEvent[]> {
       return await req<AuditEvent[]>("/api/staff/audit", { method: "GET" });
@@ -591,15 +741,21 @@ export function createHttpClient(): WearTrailClient {
     async getSettings(): Promise<Settings> {
       return await req<Settings>("/api/staff/settings", { method: "GET" });
     },
-    async updateCheckpoint(_input: {
+    async updateCheckpoint(input: {
       sensor: SensorId;
       label: string;
       enabled: boolean;
     }): Promise<void> {
-      /* checkpoint configuration */
+      await req(`/api/staff/settings/checkpoints/${encodeURIComponent(input.sensor)}`, {
+        method: "PATCH",
+        body: input,
+      });
     },
-    async updateBusinessSettings(_input: Partial<Settings["business"]>): Promise<void> {
-      /* business settings */
+    async updateBusinessSettings(input: Partial<Settings["business"]>): Promise<void> {
+      await req("/api/staff/settings/business", {
+        method: "PATCH",
+        body: input,
+      });
     },
     async getPublicJourney(publicId: string): Promise<PublicJourney | null> {
       try {
