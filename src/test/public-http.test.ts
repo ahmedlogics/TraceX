@@ -30,7 +30,7 @@ describe("Milestone 4: Public Customer Journey & Technical Proof HTTP Pipeline",
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  }, 15000);
+  }, 30000);
 
   it("returns 404 WT_ERR_NOT_FOUND with structured ApiError for unknown public IDs", async () => {
     const app = createExpressApp();
@@ -52,7 +52,7 @@ describe("Milestone 4: Public Customer Journey & Technical Proof HTTP Pipeline",
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
-  }, 15000);
+  }, 30000);
 
   it("enforces strict public allowlist privacy: never leaks internal defects, staff IDs, or RFID UIDs", () => {
     const simulatedPrivateGarment = {

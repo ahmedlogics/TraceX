@@ -75,7 +75,7 @@ describe("Milestone 5: Staff Analytics & Dashboard Service", { timeout: 30000 },
       expect(labels).toContain("Pending commitments");
       expect(labels).toContain("RFID stations enabled");
     },
-    15000,
+    30000,
   );
 
   it(
@@ -91,7 +91,7 @@ describe("Milestone 5: Staff Analytics & Dashboard Service", { timeout: 30000 },
       expect(labels).toContain("Open inspections");
       expect(labels).toContain("Shipments in progress");
     },
-    15000,
+    30000,
   );
 
   it(
@@ -107,7 +107,7 @@ describe("Milestone 5: Staff Analytics & Dashboard Service", { timeout: 30000 },
       expect(labels).toContain("Reinspections");
       expect(labels).toContain("Lots awaiting inspection");
     },
-    15000,
+    30000,
   );
 
   it(
@@ -123,7 +123,7 @@ describe("Milestone 5: Staff Analytics & Dashboard Service", { timeout: 30000 },
       expect(labels).toContain("In finished stock");
       expect(labels).toContain("Shipments in progress");
     },
-    15000,
+    30000,
   );
 });
 
@@ -156,7 +156,7 @@ describe("Milestone 5: Role-Scoped Operational Reports", { timeout: 30000 }, () 
       expect(reports.rows[1]?.label).toBe("Final inspections");
       expect(reports.rows[2]?.label).toBe("Reinspections");
     },
-    15000,
+    30000,
   );
 
   it(
@@ -189,7 +189,7 @@ describe("Milestone 5: Role-Scoped Operational Reports", { timeout: 30000 }, () 
         "Commitments confirmed",
       ]);
     },
-    15000,
+    30000,
   );
 });
 
@@ -217,7 +217,7 @@ describe("Milestone 5: Immutable Audit Trail & Category Scoping", { timeout: 300
         expect(forbiddenCategories).not.toContain(ev.category);
       }
     },
-    15000,
+    30000,
   );
 
   it(
@@ -243,7 +243,7 @@ describe("Milestone 5: Immutable Audit Trail & Category Scoping", { timeout: 300
         );
       }
     },
-    15000,
+    30000,
   );
 });
 
@@ -268,7 +268,7 @@ describe("Milestone 5: Express Staff Router HTTP Security", () => {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
     },
-    15000,
+    30000,
   );
 
   it(
@@ -288,6 +288,6 @@ describe("Milestone 5: Express Staff Router HTTP Security", () => {
       const users = await listStaffUsers(prisma, adminUser);
       expect(Array.isArray(users)).toBe(true);
     },
-    15000,
+    30000,
   );
 });

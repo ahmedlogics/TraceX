@@ -84,6 +84,12 @@ interface TestDataStore {
   warehouse_movements: any[];
   shipments: any[];
   shipment_packages: any[];
+  public_payload_versions: any[];
+  public_payload_commitments: any[];
+  public_payload_outbox: any[];
+  trace_events: any[];
+  ledger_commitments: any[];
+  ledger_outbox: any[];
 }
 
 function matchesCondition(item: any, cond: any): boolean {
@@ -131,6 +137,12 @@ function createInMemoryPrismaTx(): PrismaTransactionClient {
     warehouse_movements: [],
     shipments: [],
     shipment_packages: [],
+    public_payload_versions: [],
+    public_payload_commitments: [],
+    public_payload_outbox: [],
+    trace_events: [],
+    ledger_commitments: [],
+    ledger_outbox: [],
   };
 
   const genericModel = (tableName: keyof TestDataStore) => ({
@@ -234,6 +246,12 @@ function createInMemoryPrismaTx(): PrismaTransactionClient {
     warehouse_movements: genericModel("warehouse_movements"),
     shipments: genericModel("shipments"),
     shipment_packages: genericModel("shipment_packages"),
+    public_payload_versions: genericModel("public_payload_versions"),
+    public_payload_commitments: genericModel("public_payload_commitments"),
+    public_payload_outbox: genericModel("public_payload_outbox"),
+    trace_events: genericModel("trace_events"),
+    ledger_commitments: genericModel("ledger_commitments"),
+    ledger_outbox: genericModel("ledger_outbox"),
   };
 
   // Relational queries for rfid_tag_bindings

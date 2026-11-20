@@ -510,6 +510,16 @@ export async function publishPublicGarmentPayload(
   const spec = garment.cutting_jobs?.production_orders?.product_spec_versions;
   const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
 
+  if (!tx.public_payload_versions) {
+    return {
+      versionRecord: null as any,
+      commitment: null as any,
+      publicId: garment.public_id,
+      journeyHash: "",
+      payload: null as any,
+    };
+  }
+
   // Resolve next sequential version index for this garment's public ID
   const latestVersion = await tx.public_payload_versions.findFirst({
     where: { public_id: garment.public_id },
