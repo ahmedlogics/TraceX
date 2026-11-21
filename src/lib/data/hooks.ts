@@ -5,10 +5,19 @@ import type { WearTrailClient } from "./client";
 import { useClient } from "./provider";
 
 /** Read through the client. Keys are namespaced per actor so role switches never share cache. */
-export function useWtQuery<T>(key: readonly unknown[], fn: (c: WearTrailClient) => Promise<T>) {
+export function useWtQuery<T>(
+  key: readonly unknown[],
+  fn: (c: WearTrailClient) => Promise<T>,
+  options?: { refetchInterval?: number },
+) {
   const client = useClient();
   const actor = useSessionUserId();
-  return useQuery({ queryKey: ["wt", actor, ...key], queryFn: () => fn(client), retry: false });
+  return useQuery({
+    queryKey: ["wt", actor, ...key],
+    queryFn: () => fn(client),
+    retry: false,
+    ...(options?.refetchInterval ? { refetchInterval: options.refetchInterval } : {}),
+  });
 }
 
 export function errorMessage(e: unknown) {

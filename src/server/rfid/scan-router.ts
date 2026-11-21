@@ -259,6 +259,7 @@ export class ScanRoutingService implements IScanRoutingService {
                 ? BigInt(envelope.deviceUptimeMs)
                 : null,
             request_sha256: new Uint8Array(requestFingerprint),
+            received_at: new Date(),
             outcome: "accepted",
             outcome_code: "success",
             outcome_message: "Scan accepted and processed",

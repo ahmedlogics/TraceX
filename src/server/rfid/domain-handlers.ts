@@ -30,6 +30,15 @@ function generateGarmentCode(): string {
   return `GAR-${ts}-${rand}`;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function idOrCodeWhere(idOrCode: string) {
+  if (UUID_REGEX.test(idOrCode)) {
+    return { OR: [{ id: idOrCode }, { code: idOrCode }] };
+  }
+  return { code: idOrCode };
+}
+
 /**
  * Station 1: Fabric Receiving Scan Handler.
  * Phase 1: Resolves/validates material lot, verifies card is fresh, creates active rfid_tag_bindings row.
@@ -45,17 +54,13 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
   ): Promise<PreparedScanSubject> {
     const tagUid = normalizeTagUid(envelope.tagUid);
 
-    // Verify tag is not already actively bound
+    // Verify tag binding status
     const activeBinding = await tx.rfid_tag_bindings.findFirst({
-      where: { tag_uid: tagUid, unbound_at: null },
+      where: {
+        OR: [{ tag_uid: tagUid }, { tag_identifier: tagUid }],
+        unbound_at: null,
+      },
     });
-    if (activeBinding) {
-      throw ApiError.badRequest(
-        `Tag UID '${tagUid}' is already actively bound to another entity.`,
-        { tagUid },
-        "WT_ERR_CARD_ALREADY_BOUND",
-      );
-    }
 
     let lotId: string | undefined;
     let lotCode = "FAB-BUNDLE";
@@ -70,7 +75,9 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
           : null;
       if (answers?.["lotId"]) {
         const foundLotId = String(answers["lotId"]);
-        const lot = await tx.material_lots.findFirst({ where: { id: foundLotId } });
+        const lot = await tx.material_lots.findFirst({
+          where: idOrCodeWhere(foundLotId),
+        });
         if (lot) {
           lotId = lot.id;
           lotCode = lot.code;
@@ -99,13 +106,41 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
       );
     }
 
+    if (activeBinding) {
+      if (activeBinding.material_lot_id === lotId) {
+        // Tag is already bound to this exact material lot - accepted verification scan
+        return {
+          kind: "material_lot",
+          subjectId: lotId,
+          subjectCode: lotCode,
+          isNewEnrollment: false,
+          tagUid,
+          tagBindingId: activeBinding.id,
+        };
+      }
+      throw ApiError.badRequest(
+        `Tag UID '${tagUid}' is already actively bound to another entity.`,
+        { tagUid },
+        "WT_ERR_CARD_ALREADY_BOUND",
+      );
+    }
+
+    // Unbind any previous active card on this lot to satisfy PostgreSQL unique constraint
+    await tx.rfid_tag_bindings.updateMany({
+      where: { material_lot_id: lotId, unbound_at: null },
+      data: {
+        unbound_at: new Date(),
+        unbound_by: context?.actor?.actorId ?? null,
+      },
+    });
+
     // Create active tag binding in transaction (tag_uid is a generated column in DB, populated in mocks)
     const bindingData: any = {
       material_lot_id: lotId,
-      tag_technology: "iso14443a",
+      tag_technology: "ISO_14443_A",
       tag_identifier: tagUid,
       bound_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
-      bound_at: new Date(),
+      bound_at: new Date(Date.now() - 5000),
       unbound_at: null,
     };
     if (!("$executeRaw" in (tx as any))) {
@@ -134,8 +169,10 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
     return {
       scanId: envelope.scanId,
       outcome: "accepted",
-      outcomeCode: "bundle_card_bound",
-      outcomeMessage: `Bundle card ${subject.tagUid} bound to lot ${subject.subjectCode}`,
+      outcomeCode: subject.isNewEnrollment ? "bundle_card_bound" : "bundle_card_verified",
+      outcomeMessage: subject.isNewEnrollment
+        ? `Bundle card ${subject.tagUid} bound to lot ${subject.subjectCode}`
+        : `Bundle card ${subject.tagUid} verified for lot ${subject.subjectCode}`,
       stationCode: this.stationCode,
       subjectKind: "material_lot",
       subjectId: subject.subjectId,
@@ -346,10 +383,10 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
     // 5. Create active tag binding in tx.rfid_tag_bindings (unbound_at: null, tag_uid generated in DB, set in mocks)
     const tagBindingData: any = {
       garment_id: garment.id,
-      tag_technology: "iso14443a",
+      tag_technology: "ISO_14443_A",
       tag_identifier: tagUid,
       bound_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
-      bound_at: new Date(),
+      bound_at: new Date(Date.now() - 5000),
       unbound_at: null,
     };
     if (!("$executeRaw" in (tx as any))) {

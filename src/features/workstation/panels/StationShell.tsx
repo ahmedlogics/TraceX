@@ -58,6 +58,7 @@ export function StationShell() {
 
   const qStation = useWtQuery(["rfid-station", stationCode], (c) =>
     c.getRfidStationData(stationCode),
+    { refetchInterval: 3000 },
   );
 
   return (

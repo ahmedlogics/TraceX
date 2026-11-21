@@ -24,6 +24,13 @@ import type {
   RoutineScanResult,
 } from "./production-types";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function idOrCodeWhere(idOrCode: string) {
+  return UUID_REGEX.test(idOrCode)
+    ? { OR: [{ id: idOrCode }, { code: idOrCode }] }
+    : { code: idOrCode };
+}
+
 // ---------------------------------------------------------------- Subject Revision Service (Optimistic Concurrency)
 
 export class SubjectRevisionService implements ISubjectRevisionService {
@@ -253,9 +260,7 @@ export async function getOrderDetail(
 ): Promise<ProductionOrderDetailDTO | null> {
   return runInTransaction(async (db) => {
     const order = await db.production_orders.findFirst({
-      where: {
-        OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }],
-      },
+      where: idOrCodeWhere(orderIdOrCode),
       include: {
         product_spec_versions: {
           include: { staff_users: true },
@@ -484,9 +489,7 @@ export async function approveProductionOrder(
 
   return runInTransaction(async (db) => {
     const order = await db.production_orders.findFirst({
-      where: {
-        OR: [{ id: orderId }, { code: orderId }],
-      },
+      where: idOrCodeWhere(orderId),
     });
 
     if (!order) {
@@ -560,9 +563,7 @@ export async function confirmCuttingSource(
 
   return runInTransaction(async (db) => {
     const order = await db.production_orders.findFirst({
-      where: {
-        OR: [{ id: input.orderId }, { code: input.orderId }],
-      },
+      where: idOrCodeWhere(input.orderId),
     });
     if (!order) {
       throw ApiError.notFound(`Production order '${input.orderId}' not found.`, undefined, "WT_ERR_NOT_FOUND");
@@ -684,9 +685,7 @@ export async function bindGarmentTag(
 
   return runInTransaction(async (db) => {
     const order = await db.production_orders.findFirst({
-      where: {
-        OR: [{ id: input.orderId }, { code: input.orderId }],
-      },
+      where: idOrCodeWhere(input.orderId),
       include: {
         product_spec_versions: true,
       },
@@ -862,9 +861,7 @@ export async function replaceGarmentCard(
 
   return runInTransaction(async (db) => {
     const garment = await db.garments.findFirst({
-      where: {
-        OR: [{ id: input.garmentId }, { code: input.garmentId }],
-      },
+      where: idOrCodeWhere(input.garmentId),
     });
     if (!garment) {
       throw ApiError.notFound(`Garment '${input.garmentId}' not found.`, undefined, "WT_ERR_NOT_FOUND");

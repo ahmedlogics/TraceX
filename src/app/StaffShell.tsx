@@ -14,6 +14,7 @@ import { Logo } from "@/components/wt/Logo";
 import { canAccessRoute } from "@/domain/permissions";
 import { departmentLabels, roleLabels } from "@/domain/labels";
 import type { StaffUser } from "@/domain/types";
+import { getDataMode, setDataMode } from "@/lib/data/provider";
 import { cn } from "@/lib/utils";
 import { useSignOut } from "./auth";
 import { AppLink, useAppNavigate, usePathname } from "./navigation";
@@ -73,6 +74,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
   const [open, setOpen] = useState(false);
   const signOut = useSignOut();
   const navigate = useAppNavigate();
+  const dataMode = getDataMode();
   return (
     <div className="flex min-h-screen w-full">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
@@ -115,6 +117,25 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
             <Logo height={20} />
           </AppLink>
           <div className="ml-auto flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDataMode(dataMode === "live" ? "mock" : "live")}
+              title={`Currently connected to ${dataMode === "live" ? "Live Database (PostgreSQL)" : "Mock Data (Fixtures)"}. Click to toggle.`}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer border",
+                dataMode === "live"
+                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20 dark:text-emerald-400"
+                  : "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20 dark:text-amber-400",
+              )}
+            >
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  dataMode === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500",
+                )}
+              />
+              {dataMode === "live" ? "Live API" : "Mock Mode"}
+            </button>
             <span className="hidden sm:inline-flex">
               <RoleChip user={user} />
             </span>
@@ -135,6 +156,9 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => navigate(paths.account)}>
                   My account
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setDataMode(dataMode === "live" ? "mock" : "live")}>
+                  Switch to {dataMode === "live" ? "Mock Data" : "Live API"}
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => void signOut()}>
                   Switch demo account
