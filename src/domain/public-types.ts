@@ -7,7 +7,15 @@
  */
 
 export type PublicMilestoneKey =
-  "fabric-sourced" | "garment-cut" | "garment-assembled" | "quality-passed" | "dispatched";
+  | "fabric-sourced"
+  | "material-issued"
+  | "garment-cut"
+  | "stitching-completed"
+  | "garment-assembled"
+  | "quality-passed"
+  | "garment-packed"
+  | "warehouse-received"
+  | "dispatched";
 
 export interface PublicMilestone {
   key: PublicMilestoneKey;
@@ -17,6 +25,7 @@ export interface PublicMilestone {
   department: string;
   description: string;
   lotLevel?: boolean | undefined;
+  details?: Record<string, string | number | boolean> | undefined;
 }
 
 export type PublicStatus =
@@ -33,6 +42,37 @@ export interface PublicNotice {
   kind: "hold" | "recall";
   title: string;
   message: string;
+}
+
+export interface PublicBlockchainInfo {
+  networkName?: string | undefined;
+  contractAddress?: string | undefined;
+  transactionHash?: string | undefined;
+  blockNumber?: number | undefined;
+  confirmedAt?: string | undefined;
+}
+
+export interface PublicMaterialInfo {
+  fabricType?: string | undefined;
+  supplierName?: string | undefined;
+  lotReference?: string | undefined;
+  composition?: string | undefined;
+  receivedDate?: string | undefined;
+}
+
+export interface PublicQualityInfo {
+  disposition: "passed" | "released" | "held" | "in-review";
+  inspectionLabel: string;
+  inspectedDate?: string | undefined;
+  certificationNote?: string | undefined;
+}
+
+export interface PublicLogisticsInfo {
+  cartonCode?: string | undefined;
+  packageType?: string | undefined;
+  packagedDate?: string | undefined;
+  warehouseDate?: string | undefined;
+  dispatchedDate?: string | undefined;
 }
 
 export interface PublicJourney {
@@ -52,6 +92,10 @@ export interface PublicJourney {
   advisory?: string | undefined;
   evidence: PublicEvidenceState;
   sampleCommitmentRef?: string | undefined;
+  blockchain?: PublicBlockchainInfo | undefined;
+  materialInfo?: PublicMaterialInfo | undefined;
+  qualityInfo?: PublicQualityInfo | undefined;
+  logisticsInfo?: PublicLogisticsInfo | undefined;
 }
 
 export interface PublicPayload {

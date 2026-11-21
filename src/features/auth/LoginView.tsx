@@ -112,7 +112,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                     setUsername(e.target.value);
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="e.g. admin.demo"
+                  placeholder="e.g. admin.demo, quality.demo"
                   className="pl-9"
                   autoComplete="username"
                   disabled={isSubmitting}
@@ -150,6 +150,19 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                 </button>
               </div>
             </Field>
+
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Staff Demo Credentials:</p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[11px]">
+                <span>• admin.demo</span>
+                <span>• quality.demo</span>
+                <span>• manager.demo</span>
+                <span>• dispatch.demo</span>
+              </div>
+              <p className="pt-1 text-[11px]">
+                Password: <span className="font-mono font-medium text-foreground">weartrail123!</span>
+              </p>
+            </div>
 
             {errorMsg && (
               <div

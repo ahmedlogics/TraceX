@@ -14,6 +14,13 @@ export interface PublicProductRecord {
 
 export const publicProductRecords: PublicProductRecord[] = [
   {
+    publicId: "wt-shirt-2026-00",
+    garmentId: "SHIRT-001",
+    productName: "Classic Oxford Poplin Shirt",
+    productDescription: "Handcrafted white cotton poplin shirt, sustainably woven and tracked end-to-end.",
+    sampleCommitmentRef: "demo-commitment-0000",
+  },
+  {
     publicId: "shirt-001-demo",
     garmentId: "SHIRT-001",
     productName: "Classic poplin shirt",
