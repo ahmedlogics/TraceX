@@ -1249,12 +1249,15 @@ export function authenticateStaff(
   }
 
   s.credentials = s.credentials ?? {};
+  const hasCustomPassword = Boolean(s.credentials[u.id]);
   const storedHash = s.credentials[u.id] ?? hashPassword(DEMO_DEFAULT_PASSWORD);
-  s.credentials[u.id] = storedHash;
+  if (!s.credentials[u.id]) {
+    s.credentials[u.id] = storedHash;
+  }
 
   const valid =
     verifyPassword(passwordInput, storedHash) ||
-    passwordInput === DEMO_DEFAULT_PASSWORD ||
+    (!hasCustomPassword && passwordInput === DEMO_DEFAULT_PASSWORD) ||
     (username.includes("daniyal") && passwordInput.length > 0);
   if (!valid) {
     throw new DemoError("invalid", "Invalid username or password.");
