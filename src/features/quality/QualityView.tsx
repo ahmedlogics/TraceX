@@ -243,7 +243,22 @@ export function QualityView() {
     c.getRfidStationData("final_qc"),
   );
 
-  const isIncomingQC = me.username === "qc.incoming" || me.department === "receiving";
+  const isIncomingQC =
+    me.username?.toLowerCase() === "qc.incoming" ||
+    me.department?.toLowerCase() === "receiving" ||
+    me.department?.toLowerCase() === "raw-store" ||
+    (me.department as string)?.toLowerCase() === "raw_store";
+
+  const availableTabs = useMemo(() => {
+    if (isIncomingQC) {
+      return tabs.filter((t) => t.kind === "incoming");
+    }
+    if (me.role === "Q" && me.department === "quality") {
+      return tabs.filter((t) => t.kind !== "incoming");
+    }
+    return tabs;
+  }, [isIncomingQC, me.role, me.department]);
+
   const [activeTab, setActiveTab] = useState<InspectionKind>(() =>
     isIncomingQC ? "incoming" : "final",
   );
@@ -294,6 +309,65 @@ export function QualityView() {
         {/* KPI Summary Cards */}
         <Loadable query={insp}>
           {(all) => {
+            if (isIncomingQC) {
+              const awaitingLotsCount = (lots.data ?? []).filter(
+                (l) => l.status === "awaiting-inspection",
+              ).length;
+              const acceptedLots = (lots.data ?? []).filter((l) => l.status === "accepted");
+              const rejectedLots = (lots.data ?? []).filter(
+                (l) => l.status === "rejected" || (l.heldQty ?? 0) > 0,
+              );
+              const totalMeters = acceptedLots.reduce(
+                (sum, l) => sum + (Number(l.balanceQty) || 0),
+                0,
+              );
+
+              return (
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Awaiting Inspection
+                      </span>
+                      <Sparkles className="size-4 text-warning" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{awaitingLotsCount}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Fabric lots pending clearance</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Accepted Lots
+                      </span>
+                      <CheckCircle2 className="size-4 text-success" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-success">{acceptedLots.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Cleared for production issue</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Held / Rejected Lots
+                      </span>
+                      <ShieldAlert className="size-4 text-destructive" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-destructive">{rejectedLots.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Blocked material lots</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Approved Fabric
+                      </span>
+                      <ClipboardCheck className="size-4 text-primary" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{Math.round(totalMeters)} m</p>
+                    <p className="text-xs text-muted-foreground mt-1">Cleared stock available</p>
+                  </div>
+                </div>
+              );
+            }
+
             const openFinal = all.filter((i) => i.kind === "final" && i.status === "open").length;
             const openReinsp = all.filter(
               (i) => i.kind === "reinspection" && i.status === "open",
@@ -355,8 +429,8 @@ export function QualityView() {
           }}
         </Loadable>
 
-        {/* Active Holds Banner */}
-        {heldGarments.length > 0 && (
+        {/* Active Garment Holds Banner (Final QA / Managers only) */}
+        {!isIncomingQC && heldGarments.length > 0 && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
@@ -386,8 +460,8 @@ export function QualityView() {
           </div>
         )}
 
-        {/* Workstation RFID Station Panel */}
-        {qRfidStation.data && (
+        {/* Workstation RFID Station Panel (Station 6 Final QA only) */}
+        {!isIncomingQC && qRfidStation.data && (
           <Section
             title="Station 6: RFID Final Inspection Reader (Result-First)"
             description="Examine shirt, select Pass or Fail (with defect code) to arm context, then scan card. Identity resolves automatically."
@@ -417,7 +491,7 @@ export function QualityView() {
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as InspectionKind)}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
                     <TabsList className="flex h-auto flex-wrap">
-                      {tabs.map((t) => {
+                      {availableTabs.map((t) => {
                         const openCount = all.filter(
                           (i) => i.kind === t.kind && i.status === "open",
                         ).length;

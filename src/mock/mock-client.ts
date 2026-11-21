@@ -456,12 +456,31 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
         value: s.orders.filter((o) => o.status === "in-progress").length,
       },
     ],
-    Q: [
-      { label: "Open inspections", value: openInsp.length },
-      { label: "Garments on hold", value: held.length },
-      { label: "Reinspections", value: openInsp.filter((i) => i.kind === "reinspection").length },
-      { label: "Lots awaiting inspection", value: awaitingLots.length },
-    ],
+    Q: (() => {
+      const isIncoming =
+        u.username?.toLowerCase() === "qc.incoming" ||
+        u.department?.toLowerCase() === "receiving" ||
+        u.department?.toLowerCase() === "raw-store";
+
+      if (isIncoming) {
+        return [
+          { label: "My open tasks", value: open.length },
+          { label: "Lots awaiting inspection", value: awaitingLots.length },
+          { label: "Accepted lots", value: s.lots.filter((l) => l.status === "accepted").length },
+          {
+            label: "Held / rejected lots",
+            value: s.lots.filter((l) => l.status === "rejected" || (l.heldQty ?? 0) > 0).length,
+          },
+        ];
+      }
+
+      return [
+        { label: "Open inspections", value: openInsp.length },
+        { label: "Garments on hold", value: held.length },
+        { label: "Reinspections", value: openInsp.filter((i) => i.kind === "reinspection").length },
+        { label: "Lots awaiting inspection", value: awaitingLots.length },
+      ];
+    })(),
     L: [
       { label: "My open tasks", value: open.length },
       {
@@ -477,7 +496,13 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
   };
 
   const alerts: DashboardData["alerts"] = [];
-  if (["M", "Q", "P", "L"].includes(u.role))
+  const isIncomingQc =
+    u.role === "Q" &&
+    (u.username?.toLowerCase() === "qc.incoming" ||
+      u.department?.toLowerCase() === "receiving" ||
+      u.department?.toLowerCase() === "raw-store");
+
+  if (!isIncomingQc && ["M", "Q", "P", "L"].includes(u.role))
     held.forEach((g) =>
       alerts.push({
         tone: "danger",
