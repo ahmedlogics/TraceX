@@ -19,11 +19,11 @@ function generateFreshUid(): string {
 export function ReceivingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
-  const qLots = useWtQuery(["lots"], (c) => c.listLots());
+  const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
   const [selectedLotId, setSelectedLotId] = useState("");
   const [scanUid, setScanUid] = useState("04E1F2A3");
 
-  const isReceivingStaff = me.role === "M" || me.department === "receiving";
+  const isReceivingStaff = me.role === "M" || me.department === "receiving" || me.department === "raw-store";
 
   return (
     <Loadable query={qLots}>

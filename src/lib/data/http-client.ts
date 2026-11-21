@@ -354,7 +354,11 @@ export function createHttpClient(): WearTrailClient {
       // Retired IR checkpoint workflow
     },
     async getRfidStationData(stationCode: RfidStationCode): Promise<RfidStationData> {
-      return await req<RfidStationData>(`/api/rfid/station/${stationCode}`, { method: "GET" });
+      const data = await req<RfidStationData>(`/api/rfid/station/${stationCode}`, { method: "GET" });
+      if (data?.activeContext && (data.activeContext.status as string) === "armed") {
+        data.activeContext.status = "ready";
+      }
+      return data;
     },
     async prepareActionContext(
       stationCode: RfidStationCode,
@@ -392,11 +396,42 @@ export function createHttpClient(): WearTrailClient {
       });
     },
     async listLots(): Promise<MaterialLot[]> {
-      return await req<MaterialLot[]>("/api/materials/lots", { method: "GET" });
+      const raw = await req<any[]>("/api/materials/lots", { method: "GET" });
+      return (raw || []).map((l: any) => ({
+        id: l.code || l.id,
+        material: l.materialName || l.material || "Unknown Material",
+        supplierRef: l.supplierLotRef || l.supplierRef || "—",
+        receivedQty: Number(l.receivedQuantity ?? l.receivedQty ?? 0),
+        balanceQty: Number(l.availableAcceptedQuantity ?? l.balanceQty ?? 0),
+        unit: l.unit || "m",
+        receivedAt: l.receivedAt || new Date().toISOString(),
+        receivedBy: l.receivedByName || l.receivedBy || "Staff",
+        status: l.status || "accepted",
+        rfidUid: l.activeTagUid || l.rfidUid || undefined,
+      }));
     },
     async getLot(id: string): Promise<LotDetail | null> {
       try {
-        return await req<LotDetail>(`/api/materials/lots/${encodeURIComponent(id)}`, { method: "GET" });
+        const raw = await req<any>(`/api/materials/lots/${encodeURIComponent(id)}`, { method: "GET" });
+        if (!raw) return null;
+        const lot: MaterialLot = {
+          id: raw.code || raw.id,
+          material: raw.materialName || raw.material || "Unknown Material",
+          supplierRef: raw.supplierLotRef || raw.supplierRef || "—",
+          receivedQty: Number(raw.receivedQuantity ?? raw.receivedQty ?? 0),
+          balanceQty: Number(raw.availableAcceptedQuantity ?? raw.balanceQty ?? 0),
+          unit: raw.unit || "m",
+          receivedAt: raw.receivedAt || new Date().toISOString(),
+          receivedBy: raw.receivedByName || raw.receivedBy || "Staff",
+          status: raw.status || "accepted",
+          rfidUid: raw.activeTagUid || raw.rfidUid || undefined,
+        };
+        return {
+          lot,
+          issues: raw.issues || [],
+          cuttingOutputs: raw.cuttingOutputs || [],
+          orders: raw.orders || [],
+        };
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null;
         throw err;
@@ -443,7 +478,18 @@ export function createHttpClient(): WearTrailClient {
       return res.specId || res.id || String(res);
     },
     async listOrders(): Promise<ProductionOrder[]> {
-      return await req<ProductionOrder[]>("/api/production/orders", { method: "GET" });
+      const raw = await req<any[]>("/api/production/orders", { method: "GET" });
+      return (raw || []).map((o: any) => ({
+        id: o.code || o.id,
+        product: o.productName || o.product || "Unknown Product",
+        styleCode: o.styleCode || "—",
+        plannedQty: Number(o.plannedQuantity ?? o.plannedQty ?? 0),
+        status: o.status || "draft",
+        dueDate: o.plannedFor || o.dueDate || new Date().toISOString(),
+        plannedBy: o.createdByName || o.plannedBy || "Staff",
+        approvedBy: o.approvedByName || o.approvedBy || undefined,
+        approvedAt: o.approvedAt || undefined,
+      }));
     },
     async getOrder(id: string): Promise<OrderDetail | null> {
       try {
@@ -493,7 +539,19 @@ export function createHttpClient(): WearTrailClient {
       return res.garmentCode || res.id || String(res);
     },
     async listGarments(): Promise<Garment[]> {
-      return await req<Garment[]>("/api/production/garments", { method: "GET" });
+      const raw = await req<any[]>("/api/production/garments", { method: "GET" });
+      return (raw || []).map((g: any) => ({
+        id: g.code || g.id,
+        orderId: g.productionOrderCode || g.productionOrderId || g.orderId || "",
+        publicId: g.publicId || "",
+        productName: g.productName || "Unknown Garment",
+        size: g.sizeLabel || g.size || "M",
+        cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
+        stage: g.stage || "cutting",
+        disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
+        hold: null,
+        rfidUid: g.activeTagUid || g.rfidUid || undefined,
+      }));
     },
     async getGarment(id: string): Promise<GarmentDetail | null> {
       try {

@@ -43,6 +43,13 @@ export function toActorRef(actor?: unknown): ActorRef {
   return { id, role, department, username };
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function idOrCodeWhere(idOrCode: string) {
+  return UUID_REGEX.test(idOrCode)
+    ? { OR: [{ id: idOrCode }, { code: idOrCode }] }
+    : { code: idOrCode };
+}
+
 function isAuthorizedForMaterials(role: string, dept: string): boolean {
   const normRole = role.toLowerCase();
   const normDept = dept.toLowerCase().replace(/[-_]/g, "");
@@ -185,9 +192,7 @@ export async function getLotDetail(
 ): Promise<MaterialLotDetailDTO | null> {
   return runInTransaction(async (db) => {
     const lot = await db.material_lots.findFirst({
-      where: {
-        OR: [{ id: lotIdOrCode }, { code: lotIdOrCode }],
-      },
+      where: idOrCodeWhere(lotIdOrCode),
       include: {
         suppliers: true,
         staff_users: true,
@@ -406,9 +411,7 @@ export async function bindLotCard(
   return runInTransaction(async (db) => {
     // 1. Resolve lot
     const lot = await db.material_lots.findFirst({
-      where: {
-        OR: [{ id: input.lotId }, { code: input.lotId }],
-      },
+      where: idOrCodeWhere(input.lotId),
     });
     if (!lot) {
       throw ApiError.notFound(`Material lot '${input.lotId}' not found.`, undefined, "WT_ERR_NOT_FOUND");
@@ -526,9 +529,7 @@ export async function acceptIncomingStockHelper(
   return runInTransaction(async (db) => {
     // 1. Fetch material lot
     const lot = await db.material_lots.findFirst({
-      where: {
-        OR: [{ id: lotId }, { code: lotId }],
-      },
+      where: idOrCodeWhere(lotId),
     });
 
     if (!lot) {
@@ -614,9 +615,7 @@ export async function issueMaterial(
   return runInTransaction(async (db) => {
     // 1. Fetch lot
     const lot = await db.material_lots.findFirst({
-      where: {
-        OR: [{ id: input.lotId }, { code: input.lotId }],
-      },
+      where: idOrCodeWhere(input.lotId),
     });
     if (!lot) {
       throw ApiError.notFound(`Material lot '${input.lotId}' not found.`, undefined, "WT_ERR_NOT_FOUND");
@@ -624,9 +623,7 @@ export async function issueMaterial(
 
     // 2. Fetch order
     const order = await db.production_orders.findFirst({
-      where: {
-        OR: [{ id: input.orderId }, { code: input.orderId }],
-      },
+      where: idOrCodeWhere(input.orderId),
     });
     if (!order) {
       throw ApiError.notFound(`Production order '${input.orderId}' not found.`, undefined, "WT_ERR_NOT_FOUND");

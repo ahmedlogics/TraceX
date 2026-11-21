@@ -259,7 +259,7 @@ rfidRouter.get(
               shipmentId: ctx.shipment_id ?? undefined,
               binId: ctx.warehouse_bin_id ?? undefined,
             },
-            status: ctx.status as any,
+            status: (ctx.status === "armed" ? "ready" : ctx.status) as any,
             createdAt: ctx.created_at.toISOString(),
             expiresAt: ctx.expires_at.toISOString(),
           };
@@ -303,6 +303,45 @@ rfidRouter.get(
     }
   },
 );
+
+function toDbActionCode(stationCode: RfidStationCode, kind: string): string {
+  const canonicalCodes = [
+    "receive_bundle",
+    "issue_bundle",
+    "select_cutting_source",
+    "bind_garment_tag",
+    "complete_stitching",
+    "complete_finishing",
+    "submit_qc",
+    "pack_garment",
+    "receive_warehouse",
+    "dispatch_garment",
+  ];
+  if (canonicalCodes.includes(kind)) return kind;
+
+  switch (stationCode) {
+    case "fabric_receiving":
+      return "receive_bundle";
+    case "fabric_issue":
+      return "issue_bundle";
+    case "cutting":
+      return kind === "select_cutting_source" ? "select_cutting_source" : "bind_garment_tag";
+    case "stitching":
+      return "complete_stitching";
+    case "finishing":
+      return "complete_finishing";
+    case "final_qc":
+      return "submit_qc";
+    case "packing":
+      return "pack_garment";
+    case "warehouse":
+      return "receive_warehouse";
+    case "dispatch":
+      return "dispatch_garment";
+    default:
+      return kind;
+  }
+}
 
 /**
  * POST /api/rfid/contexts
@@ -362,9 +401,10 @@ rfidRouter.post(
           );
         }
 
-        // Ensure staff_session exists for FK
+        // Ensure active staff_session exists for FK
         let staffSession = await prisma.staff_sessions.findFirst({
-          where: { staff_user_id: user.id, revoked_at: null },
+          where: { staff_user_id: user.id, revoked_at: null, expires_at: { gt: new Date() } },
+          orderBy: { expires_at: "desc" },
         });
         if (!staffSession) {
           staffSession = await prisma.staff_sessions.create({
@@ -408,9 +448,12 @@ rfidRouter.post(
       if (p["lotId"]) (answers as any)["lotId"] = p["lotId"];
       if (p["orderId"] || p["productionOrderId"]) (answers as any)["orderId"] = p["orderId"] || p["productionOrderId"];
       if (p["size"]) (answers as any)["size"] = p["size"];
+      (answers as any)["kind"] = kind;
 
-      // Context valid for 5 minutes
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      // Context valid for at most 5 minutes, strictly bounded by reader session expiry
+      const targetExpiry = new Date(Date.now() + 5 * 60 * 1000);
+      const expiresAt =
+        session.expires_at < targetExpiry ? new Date(session.expires_at.getTime() - 1000) : targetExpiry;
 
       const qcScope = p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as "incoming" | "final" | "reinspection") : null;
       let checklistVersionId: string | null = null;
@@ -419,10 +462,12 @@ rfidRouter.post(
         checklistVersionId = chk.id;
       }
 
+      const dbActionCode = toDbActionCode(stationCode, kind);
+
       const context = await prisma.rfid_action_contexts.create({
         data: {
           reader_session_id: session.id,
-          action_code: kind,
+          action_code: dbActionCode,
           status: "awaiting_ack",
           expires_at: expiresAt,
           cutting_job_id: p["cuttingJobId"] ? String(p["cuttingJobId"]) : null,
@@ -583,8 +628,22 @@ rfidRouter.post(
         (req.headers["x-scan-id"] as string | undefined) ||
         crypto.randomUUID();
 
-      // Action context: use explicit client-supplied context; never silently inherit unrelated contexts
-      const effectiveContextId = suppliedContextId || null;
+      // Action context: use explicit client-supplied context or resolve session's active armed context
+      let effectiveContextId = suppliedContextId || null;
+      if (!effectiveContextId) {
+        const liveCtx = await prisma.rfid_action_contexts.findFirst({
+          where: {
+            reader_session_id: session.id,
+            closed_at: null,
+            expires_at: { gt: new Date() },
+            status: { in: ["armed", "awaiting_ack"] },
+          },
+          orderBy: { created_at: "desc" },
+        });
+        if (liveCtx) {
+          effectiveContextId = liveCtx.id;
+        }
+      }
 
       // Construct simulated envelope matching this active reader
       const envelope: VersionedScanEnvelope = {
