@@ -91,6 +91,30 @@ export function DashboardView() {
         )}
       </div>
 
+      {/* Dedicated Portal for Incoming Material QC Inspector */}
+      {me.username === "qc.incoming" && (
+        <div className="rounded-xl border border-primary/40 bg-card p-5 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider">
+                Dedicated Inspection Dashboard
+              </p>
+              <h2 className="text-lg font-bold text-foreground mt-0.5">
+                Incoming Fabric Bundle Lot Sign-Offs
+              </h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Assigned to Receiving &amp; Raw Store. Clear arriving fabric rolls, verify specifications, and record accepted meterage (Zero scanner required).
+              </p>
+            </div>
+            <Button asChild size="default" className="gap-2">
+              <AppLink href={paths.quality}>
+                <ShieldCheck className="size-4" /> Open Incoming QC Queue
+              </AppLink>
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Loadable query={q}>
         {(d) => (
           <div className="space-y-6">

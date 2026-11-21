@@ -243,7 +243,10 @@ export function QualityView() {
     c.getRfidStationData("final_qc"),
   );
 
-  const [activeTab, setActiveTab] = useState<InspectionKind>("final");
+  const isIncomingQC = me.username === "qc.incoming" || me.department === "receiving";
+  const [activeTab, setActiveTab] = useState<InspectionKind>(() =>
+    isIncomingQC ? "incoming" : "final",
+  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -262,16 +265,32 @@ export function QualityView() {
   return (
     <>
       <PageHeader
-        title="Quality Assurance"
+        title={isIncomingQC ? "Incoming Material Quality Assurance" : "Quality Assurance"}
         description={
-          me.role === "M"
-            ? "Managerial quality oversight. Only certified inspectors record operational decisions."
-            : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
+          isIncomingQC
+            ? "Fabric roll and bundle clearance portal. Evaluate received lots, balance quantities, and clear materials for cutting (Zero scanner required)."
+            : me.role === "M"
+              ? "Managerial quality oversight. Only certified inspectors record operational decisions."
+              : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
         }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality" }]}
       />
 
       <div className="space-y-6">
+        {/* Dedicated Incoming QC Inspector Portal Banner */}
+        {isIncomingQC && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 shadow-sm flex items-start gap-3">
+            <Sparkles className="size-5 text-primary shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-primary">
+                Incoming Materials Inspection Station (Dedicated Portal)
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Assigned to Receiving &amp; Raw Store. As new fabric rolls are scanned at Station 1, their bundle records appear below for quality sign-off. Click &ldquo;Perform Incoming QC&rdquo; to review specs, tick the checklist, and unlock the lot for cutting.
+              </p>
+            </div>
+          </div>
+        )}
         {/* KPI Summary Cards */}
         <Loadable query={insp}>
           {(all) => {
