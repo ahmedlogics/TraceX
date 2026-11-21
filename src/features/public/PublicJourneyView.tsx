@@ -1,25 +1,31 @@
 import { useState } from "react";
 import {
   AlertCircle,
+  ArrowRightCircle,
+  Box,
+  Building2,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Clock,
-  ExternalLink,
   Layers,
   Loader2,
   Lock,
   OctagonAlert,
+  PackageCheck,
+  Scissors,
   SearchX,
   ShieldCheck,
   Sparkles,
+  Truck,
+  type LucideIcon,
 } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
-import { fmt } from "@/components/wt/layout";
 import { errorMessage, useWtQuery } from "@/lib/data/hooks";
 import type { PublicJourney, PublicMilestone } from "@/domain/public-types";
 
@@ -30,6 +36,7 @@ interface ManufacturingStageDef {
   id: string;
   name: string;
   department: string;
+  icon: LucideIcon;
   defaultDescription: string;
   isMatch: (m: PublicMilestone) => boolean;
 }
@@ -39,8 +46,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "raw-material",
     name: "Raw Material Received",
     department: "Materials",
+    icon: Layers,
     defaultDescription:
-      "Sustainably sourced fabric lot received and inspected for fiber density, color consistency, and organic certification compliance.",
+      "Certified organic fabric rolls received and inspected for weave consistency, thread density, and material integrity.",
     isMatch: (m) =>
       m.key === "fabric-sourced" ||
       m.label.toLowerCase().includes("fabric lot") ||
@@ -51,8 +59,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "material-issued",
     name: "Material Issued",
     department: "Raw Store",
+    icon: ArrowRightCircle,
     defaultDescription:
-      "Inspected fabric rolls issued from storage and allocated to the automated cutting room according to the production plan.",
+      "Inspected fabric rolls issued from storage and allocated to the automated cutting line for pattern cutting.",
     isMatch: (m) =>
       m.key === "material-issued" ||
       m.label.toLowerCase().includes("material issued") ||
@@ -63,8 +72,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "cutting",
     name: "Cutting",
     department: "Production",
+    icon: Scissors,
     defaultDescription:
-      "Fabric rolls unrolled, aligned, and precision cut into exact garment panel shapes with individual item identification.",
+      "Precision computerized fabric cutting into exact garment panel shapes with unique serial tracking.",
     isMatch: (m) =>
       m.key === "garment-cut" ||
       (m.label.toLowerCase().includes("cut") && !m.label.toLowerCase().includes("issue")),
@@ -73,8 +83,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "stitching",
     name: "Stitching",
     department: "Production",
+    icon: Sparkles,
     defaultDescription:
-      "Precision seam sewing, panel joining, and sleeve assembly performed at the dedicated sewing line.",
+      "Structural seams joined, precision tailoring performed, and sleeves set at the sewing line.",
     isMatch: (m) =>
       m.key === "stitching-completed" ||
       m.label.toLowerCase().includes("stitch") ||
@@ -84,8 +95,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "finishing",
     name: "Finishing",
     department: "Production",
+    icon: CheckCircle2,
     defaultDescription:
-      "Garment hardware and buttons secured, loose threads trimmed, and final steam pressing applied.",
+      "Buttons and hardware secured, seam edges neatened, and artisan steam pressing applied.",
     isMatch: (m) =>
       m.key === "garment-assembled" ||
       m.label.toLowerCase().includes("finish") ||
@@ -95,8 +107,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "quality",
     name: "Quality Inspection",
     department: "Quality Assurance",
+    icon: ShieldCheck,
     defaultDescription:
-      "Comprehensive multi-point inspection evaluating seam strength, dimensional tolerances, and visual workmanship standards.",
+      "Multi-point quality evaluation examining seam strength, dimensional tolerances, and workmanship compliance.",
     isMatch: (m) =>
       m.key === "quality-passed" ||
       m.label.toLowerCase().includes("quality") ||
@@ -106,8 +119,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "packing",
     name: "Packing",
     department: "Logistics",
+    icon: Box,
     defaultDescription:
-      "Quality-approved garment tagged, folded into protective eco-packaging, and sealed into master shipping cartons.",
+      "Quality-approved garment tagged with brand labels, folded in protective packaging, and packed into master shipping cartons.",
     isMatch: (m) =>
       m.key === "garment-packed" ||
       m.label.toLowerCase().includes("pack") ||
@@ -117,8 +131,9 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "warehouse",
     name: "Warehouse",
     department: "Logistics",
+    icon: Building2,
     defaultDescription:
-      "Master shipping carton scanned and securely placed into distribution warehouse inventory awaiting dispatch.",
+      "Master shipping carton scanned and securely cataloged in distribution warehouse inventory.",
     isMatch: (m) =>
       m.key === "warehouse-received" ||
       m.label.toLowerCase().includes("warehouse"),
@@ -127,6 +142,7 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
     id: "dispatch",
     name: "Dispatch",
     department: "Logistics",
+    icon: Truck,
     defaultDescription:
       "Verified shipping manifest sealed and departed the facility for delivery to authorized retail partners.",
     isMatch: (m) =>
@@ -137,10 +153,6 @@ const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
   },
 ];
 
-/**
- * Curated product image sets based on garment category.
- * Includes multiple high-resolution gallery angles with graceful fallback illustration placeholders.
- */
 interface ProductGalleryImage {
   url: string;
   label: string;
@@ -172,7 +184,7 @@ function getProductGallery(productName: string, publicId: string): ProductGaller
     ];
   }
 
-  // Default: Heritage Overshirt / Shirt
+  // Heritage Overshirt / Shirt
   return [
     {
       url: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
@@ -193,7 +205,7 @@ function getProductGallery(productName: string, publicId: string): ProductGaller
 }
 
 /**
- * Intentional SVG fallback illustration when images fail or load offline.
+ * Polished SVG fallback placeholder when images fail or load offline.
  */
 function FallbackGarmentIllustration({ isTrouser }: { isTrouser: boolean }) {
   if (isTrouser) {
@@ -231,6 +243,32 @@ function FallbackGarmentIllustration({ isTrouser }: { isTrouser: boolean }) {
       <circle cx="100" cy="138" r="2.2" fill="#F3E8FF" />
     </svg>
   );
+}
+
+/**
+ * Human-friendly date and time formatter.
+ */
+function formatDateTime(dateStr?: string | null): string {
+  if (!dateStr) return "Pending";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const dateFormatted = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    if (dateStr.includes("T") || dateStr.includes(":")) {
+      const timeFormatted = d.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `${dateFormatted} · ${timeFormatted}`;
+    }
+    return dateFormatted;
+  } catch {
+    return dateStr;
+  }
 }
 
 export function PublicJourneyView({ publicId }: { publicId: string }) {
@@ -326,8 +364,27 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
   const j: PublicJourney = q.data;
   const gallery = getProductGallery(j.productName, j.publicId);
   const isTrouser = j.productName.toLowerCase().includes("trouser");
+  const hasActiveHold = j.status === "Temporarily on hold" || !!j.notice;
 
-  // Determine truthful blockchain state
+  // Calculate manufacturing completion progress and sequence validity
+  const matchedIndices: number[] = [];
+  MANUFACTURING_STAGES.forEach((stage, idx) => {
+    if (j.milestones.some((m) => stage.isMatch(m))) {
+      matchedIndices.push(idx);
+    }
+  });
+
+  const maxCompletedIndex = matchedIndices.length > 0 ? Math.max(...matchedIndices) : -1;
+  const validCompletedCount = matchedIndices.length;
+  const progressPercent = Math.round((validCompletedCount / MANUFACTURING_STAGES.length) * 100);
+
+  // Check for historical discontinuity: any stage before maxCompletedIndex that lacks a recorded milestone
+  const missingPrerequisiteStages = MANUFACTURING_STAGES.filter(
+    (stage, idx) => idx < maxCompletedIndex && !j.milestones.some((m) => stage.isMatch(m)),
+  );
+  const hasInconsistentHistory = missingPrerequisiteStages.length > 0;
+
+  // Truthful on-chain blockchain verification check
   const isBlockchainVerified =
     j.evidence === "sample-confirmed" ||
     (!!j.blockchain?.confirmedAt && !!j.blockchain?.transactionHash);
@@ -337,7 +394,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
 
   return (
     <article className="space-y-6 motion-safe:animate-fade-in-up">
-      {/* 1. Functional Product Gallery with Real Imagery & Graceful Fallback */}
+      {/* 1. Functional Product Gallery */}
       <section
         aria-label="Product Gallery"
         className="relative overflow-hidden rounded-2xl border border-purple-500/20 bg-[#181023]/90 shadow-2xl backdrop-blur-md"
@@ -357,7 +414,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
               onError={() =>
                 setImageErrorMap((prev) => ({ ...prev, [activeSlide]: true }))
               }
-              className="h-full w-full object-cover object-center transition-opacity duration-300"
+              className="h-full w-full object-cover object-center transition-opacity duration-300 motion-safe:transition-transform hover:scale-[1.02]"
             />
           )}
 
@@ -376,7 +433,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                   setActiveSlide((prev) => (prev === 0 ? gallery.length - 1 : prev - 1))
                 }
                 aria-label="Previous product image"
-                className="absolute left-3 top-1/2 -translate-y-1/2 size-8 rounded-full border border-purple-400/25 bg-[#170E22]/70 text-purple-200 hover:text-white hover:bg-purple-900/60 flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer"
+                className="absolute left-3 top-1/2 -translate-y-1/2 size-8 rounded-full border border-purple-400/25 bg-[#170E22]/70 text-purple-200 hover:text-white hover:bg-purple-900/60 flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer select-none"
               >
                 <ChevronLeft className="size-4" />
               </button>
@@ -386,7 +443,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                   setActiveSlide((prev) => (prev + 1) % gallery.length)
                 }
                 aria-label="Next product image"
-                className="absolute right-3 top-1/2 -translate-y-1/2 size-8 rounded-full border border-purple-400/25 bg-[#170E22]/70 text-purple-200 hover:text-white hover:bg-purple-900/60 flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 size-8 rounded-full border border-purple-400/25 bg-[#170E22]/70 text-purple-200 hover:text-white hover:bg-purple-900/60 flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer select-none"
               >
                 <ChevronRight className="size-4" />
               </button>
@@ -413,10 +470,11 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                 type="button"
                 onClick={() => setActiveSlide(idx)}
                 aria-label={`View ${g.label}`}
-                className={`size-1.5 rounded-full transition-all cursor-pointer ${idx === activeSlide
+                className={`size-1.5 rounded-full transition-all cursor-pointer ${
+                  idx === activeSlide
                     ? "w-6 bg-purple-300"
                     : "bg-purple-700/50 hover:bg-purple-500/60"
-                  }`}
+                }`}
               />
             ))}
           </div>
@@ -426,7 +484,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
       {/* 2. Compact Product Identity Card */}
       <section
         aria-label="Product Identity"
-        className="rounded-2xl border border-purple-500/25 bg-[#1D1429]/90 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-3"
+        className="rounded-2xl border border-purple-500/25 bg-[#1D1429]/90 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-3.5"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-800/30 pb-3">
           <div className="space-y-0.5">
@@ -438,7 +496,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
             </h1>
           </div>
 
-          {/* Compact Manufacturing Status Pill */}
+          {/* Manufacturing Status Pill with Distinct State Colors */}
           <div className="shrink-0">
             {j.status === "Dispatched to authorized retail network" ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-950/45 px-2.5 py-1 text-xs font-medium text-emerald-200">
@@ -450,9 +508,9 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                 <span className="size-1.5 rounded-full bg-purple-300" />
                 Passed Quality Control
               </span>
-            ) : j.status === "Temporarily on hold" ? (
+            ) : hasActiveHold ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/50 px-2.5 py-1 text-xs font-medium text-amber-200">
-                <span className="size-1.5 rounded-full bg-amber-400" />
+                <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
                 Under Quality Review
               </span>
             ) : (
@@ -464,28 +522,28 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
           </div>
         </div>
 
-        {/* Garment Identification Details */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-0.5">
+        {/* Compact Garment Details */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs pt-0.5">
           <div className="space-y-0.5">
             <span className="block font-mono text-[10px] text-purple-400/80">GARMENT ID</span>
-            <span className="font-mono text-sm font-semibold text-white tracking-wider">
+            <span className="font-mono text-xs sm:text-sm font-semibold text-white tracking-wide truncate block">
               {j.publicId}
             </span>
           </div>
 
           {j.size && (
-            <div className="space-y-0.5 text-right sm:text-left">
+            <div className="space-y-0.5">
               <span className="block font-mono text-[10px] text-purple-400/80">SIZE</span>
-              <span className="font-mono text-xs font-medium text-purple-200">
+              <span className="font-mono text-xs font-medium text-purple-200 block">
                 {j.size}
               </span>
             </div>
           )}
 
           {j.materialInfo?.fabricType && (
-            <div className="space-y-0.5 text-right">
+            <div className="col-span-2 sm:col-span-1 space-y-0.5">
               <span className="block font-mono text-[10px] text-purple-400/80">MATERIAL</span>
-              <span className="text-xs text-purple-200 truncate max-w-[180px] block">
+              <span className="text-xs text-purple-200 truncate block">
                 {j.materialInfo.fabricType}
               </span>
             </div>
@@ -507,66 +565,149 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
         </div>
       )}
 
-      {/* 3. Complete Sequential Manufacturing Journey */}
+      {/* 3. Connected Sequential Manufacturing Journey */}
       <section
         aria-labelledby="journey-timeline-heading"
         className="rounded-2xl border border-purple-500/20 bg-[#1A1225]/90 p-5 sm:p-7 shadow-2xl backdrop-blur-md space-y-5"
       >
-        <div className="border-b border-purple-800/35 pb-3">
-          <span className="block text-[10px] font-mono uppercase tracking-wider text-purple-400">
-            End-To-End Traceability
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-800/35 pb-3">
+          <div>
+            <span className="block text-[10px] font-mono uppercase tracking-wider text-purple-400">
+              Verified Production Trail
+            </span>
+            <h2
+              id="journey-timeline-heading"
+              className="font-editorial text-2xl font-normal text-white tracking-tight"
+            >
+              Manufacturing Journey
+            </h2>
+          </div>
+
+          {/* Milestone Completion Counter */}
+          <span className="rounded-full border border-purple-500/20 bg-purple-950/60 px-3 py-1 font-mono text-xs text-purple-200">
+            {validCompletedCount} of {MANUFACTURING_STAGES.length} Stages Verified
           </span>
-          <h2
-            id="journey-timeline-heading"
-            className="font-editorial text-2xl font-normal text-white tracking-tight"
-          >
-            Manufacturing Journey
-          </h2>
         </div>
 
-        {/* 9-Stage Sequential Timeline */}
-        <ol className="relative border-l-2 border-dashed border-purple-500/30 pl-6 ml-2.5 space-y-5 my-2">
-          {MANUFACTURING_STAGES.map((stage) => {
-            // Check if there is an actual recorded event for this stage
+        {/* Progress Bar Indicator */}
+        <div className="space-y-1.5 rounded-xl border border-purple-500/15 bg-purple-950/20 p-3">
+          <div className="flex items-center justify-between text-[11px] font-mono text-purple-300">
+            <span>Overall Completion</span>
+            <span className="font-semibold text-purple-100">{progressPercent}%</span>
+          </div>
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-[#130B1C] border border-purple-500/20">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-purple-500 via-[#E879F9] to-emerald-400 transition-all duration-700 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Inconsistent History Advisory Alert (if intermediate records are missing) */}
+        {hasInconsistentHistory && (
+          <div
+            role="alert"
+            className="flex gap-3 rounded-2xl border border-amber-500/35 bg-[#251817]/95 p-4 text-amber-200 shadow-md backdrop-blur-md"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-400" aria-hidden />
+            <div className="space-y-0.5 text-xs">
+              <p className="font-semibold text-amber-100">Tracking Discontinuity Detected</p>
+              <p className="text-amber-200/85 leading-relaxed">
+                Prerequisite manufacturing records ({missingPrerequisiteStages.map((s) => s.name).join(", ")}) were not recorded before subsequent milestones were completed. These intermediate milestones are flagged as &ldquo;Record unavailable&rdquo; rather than pending.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Connected Vertical Timeline */}
+        <div className="relative space-y-5 my-2">
+          {MANUFACTURING_STAGES.map((stage, idx) => {
             const matchedMilestone = j.milestones.find((m) => stage.isMatch(m));
             const isCompleted = !!matchedMilestone;
+            const isUnavailable = !isCompleted && idx < maxCompletedIndex;
+            const isPending = !isCompleted && idx > maxCompletedIndex;
+            const isHeldStage = hasActiveHold && stage.id === "quality";
             const isExpanded = expandedStages[stage.id] ?? false;
+            const isInteractive = isCompleted || isUnavailable;
+            const Icon = stage.icon;
+            const isLast = idx === MANUFACTURING_STAGES.length - 1;
 
             return (
-              <li key={stage.id} className="relative group">
-                {/* Milestone Node */}
-                {isCompleted ? (
-                  <span
+              <div key={stage.id} className="relative flex items-start gap-4 group">
+                {/* Connected Vertical Line */}
+                {!isLast && (
+                  <div
                     aria-hidden="true"
-                    className="absolute -left-[1.95rem] top-1.5 size-3.5 rotate-45 bg-[#E879F9] border border-white shadow-[0_0_10px_rgba(232,121,249,0.9)] flex items-center justify-center"
-                  />
-                ) : (
-                  <span
-                    aria-hidden="true"
-                    className="absolute -left-[1.95rem] top-1.5 size-3.5 rotate-45 border-2 border-purple-600/40 bg-[#160E22]"
+                    className={`absolute left-4 top-8 bottom-0 w-0.5 -mb-5 transition-colors ${
+                      isCompleted
+                        ? "bg-gradient-to-b from-[#E879F9] to-purple-500/60 shadow-[0_0_6px_rgba(232,121,249,0.3)]"
+                        : isUnavailable
+                        ? "border-l-2 border-dashed border-amber-500/40"
+                        : "border-l-2 border-dashed border-purple-800/40"
+                    }`}
                   />
                 )}
 
-                {/* Milestone Card */}
+                {/* Stage Icon Node with Distinct State Colors */}
+                <div className="relative z-10 shrink-0">
+                  {isHeldStage ? (
+                    <div
+                      aria-label="Quality Hold"
+                      className="size-8 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-300 flex items-center justify-center animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                    >
+                      <OctagonAlert className="size-4" />
+                    </div>
+                  ) : isCompleted ? (
+                    <div
+                      aria-label="Stage Completed"
+                      className="size-8 rounded-full bg-gradient-to-br from-purple-500 to-[#E879F9] text-white flex items-center justify-center shadow-[0_0_12px_rgba(232,121,249,0.7)] group-hover:scale-105 transition-transform"
+                    >
+                      <Icon className="size-4" />
+                    </div>
+                  ) : isUnavailable ? (
+                    <div
+                      aria-label="Record Unavailable"
+                      className="size-8 rounded-full border border-amber-500/40 bg-[#1e1319] text-amber-300 flex items-center justify-center shadow-[0_0_8px_rgba(245,158,11,0.2)]"
+                    >
+                      <AlertCircle className="size-3.5 opacity-90" />
+                    </div>
+                  ) : (
+                    <div
+                      aria-label="Stage Pending"
+                      className="size-8 rounded-full border border-purple-800/60 bg-[#160D20] text-purple-400/60 flex items-center justify-center"
+                    >
+                      <Icon className="size-3.5 opacity-60" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Milestone Information Card */}
                 <div
-                  className={`rounded-xl border p-3.5 transition-all ${isCompleted
-                      ? "border-purple-500/20 bg-purple-950/25 hover:border-purple-500/40 hover:bg-purple-950/40"
-                      : "border-purple-800/20 bg-purple-950/10 opacity-70"
-                    }`}
+                  className={`flex-1 rounded-xl border p-3.5 transition-all ${
+                    isCompleted
+                      ? "border-purple-500/25 bg-purple-950/25 hover:border-purple-500/40 hover:bg-purple-950/35 cursor-pointer"
+                      : isUnavailable
+                      ? "border-amber-500/25 bg-amber-950/15 hover:border-amber-500/35 hover:bg-amber-950/25 cursor-pointer"
+                      : "border-purple-800/20 bg-purple-950/10 opacity-65"
+                  }`}
+                  onClick={() => isInteractive && toggleStage(stage.id)}
+                  role={isInteractive ? "button" : undefined}
+                  tabIndex={isInteractive ? 0 : undefined}
+                  onKeyDown={(e) => {
+                    if (isInteractive && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      toggleStage(stage.id);
+                    }
+                  }}
+                  aria-expanded={isInteractive ? isExpanded : undefined}
                 >
-                  <button
-                    type="button"
-                    onClick={() => isCompleted && toggleStage(stage.id)}
-                    disabled={!isCompleted}
-                    aria-expanded={isCompleted ? isExpanded : undefined}
-                    className={`w-full text-left flex items-start justify-between gap-3 ${isCompleted ? "cursor-pointer select-none" : "cursor-default"
-                      }`}
-                  >
+                  <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`font-semibold text-sm tracking-wide ${isCompleted ? "text-white" : "text-purple-300/70"
-                            }`}
+                          className={`font-semibold text-sm tracking-wide ${
+                            isCompleted ? "text-white" : isUnavailable ? "text-amber-200" : "text-purple-300/70"
+                          }`}
                         >
                           {stage.name}
                         </span>
@@ -576,10 +717,18 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                           {stage.department}
                         </span>
 
-                        {/* Accurate Status Pill */}
-                        {isCompleted ? (
+                        {/* Status Badge */}
+                        {isHeldStage ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-950/60 border border-amber-500/30 px-1.5 py-0.2 text-[10px] font-mono text-amber-200">
+                            Under Review
+                          </span>
+                        ) : isCompleted ? (
                           <span className="inline-flex items-center gap-1 rounded bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.2 text-[10px] font-mono text-emerald-300">
                             <Check className="size-2.5" /> Completed
+                          </span>
+                        ) : isUnavailable ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-950/40 border border-amber-500/35 px-1.5 py-0.2 text-[10px] font-mono text-amber-300">
+                            <AlertCircle className="size-2.5" /> Record unavailable
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded bg-purple-950/40 border border-purple-700/20 px-1.5 py-0.2 text-[10px] font-mono text-purple-400/80">
@@ -588,10 +737,14 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                         )}
                       </div>
 
-                      {/* Actual Date / Timestamp if recorded */}
+                      {/* Actual Recorded Date / Timestamp or Unavailable / Pending explanation */}
                       {isCompleted && matchedMilestone ? (
                         <p className="text-xs font-mono text-purple-300/80">
-                          {fmt.date(matchedMilestone.date)}
+                          {formatDateTime(matchedMilestone.date)}
+                        </p>
+                      ) : isUnavailable ? (
+                        <p className="text-xs font-mono text-amber-400/80 italic">
+                          Factory record missing from tracking trail
                         </p>
                       ) : (
                         <p className="text-xs font-mono text-purple-400/60 italic">
@@ -600,9 +753,9 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                       )}
                     </div>
 
-                    {/* Interactive Toggle Chevron for completed milestones */}
-                    {isCompleted && (
-                      <div className="text-purple-400 group-hover:text-purple-200 transition-colors pt-0.5">
+                    {/* Expand/Collapse Chevron for completed or unavailable stages */}
+                    {isInteractive && (
+                      <div className={`transition-colors pt-0.5 ${isCompleted ? "text-purple-400 group-hover:text-purple-200" : "text-amber-400 group-hover:text-amber-200"}`}>
                         {isExpanded ? (
                           <ChevronUp className="size-4" aria-hidden="true" />
                         ) : (
@@ -610,26 +763,45 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                         )}
                       </div>
                     )}
-                  </button>
+                  </div>
 
-                  {/* Expandable Plain-English Explanation */}
-                  {isCompleted && isExpanded && (
-                    <div className="mt-3 pt-3 border-t border-purple-500/15 text-xs text-purple-200/90 space-y-1.5">
-                      <p className="leading-relaxed">
-                        {matchedMilestone?.description || stage.defaultDescription}
-                      </p>
-                      <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-purple-400/80">
-                        <span className="text-emerald-300 inline-flex items-center gap-1">
-                          <Check className="size-3" /> Factory verified record
-                        </span>
-                      </div>
+                  {/* Expandable Short Plain-English Explanation */}
+                  {isInteractive && isExpanded && (
+                    <div className={`mt-3 pt-3 border-t text-xs space-y-1.5 animate-in fade-in-50 duration-200 ${
+                      isCompleted
+                        ? "border-purple-500/15 text-purple-200/90"
+                        : "border-amber-500/20 text-amber-200/90"
+                    }`}>
+                      {isCompleted ? (
+                        <>
+                          <p className="leading-relaxed">
+                            {matchedMilestone?.description || stage.defaultDescription}
+                          </p>
+                          <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-purple-400/80">
+                            <span className="text-emerald-300 inline-flex items-center gap-1">
+                              <Check className="size-3" /> Factory verified record
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="leading-relaxed">
+                            This prerequisite stage was completed during manufacturing prior to subsequent milestones, but its factory scan or event log was not captured in the public ledger audit trail.
+                          </p>
+                          <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-amber-400/80">
+                            <span className="text-amber-300 inline-flex items-center gap-1">
+                              <AlertCircle className="size-3" /> Missing digital credential
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
-              </li>
+              </div>
             );
           })}
-        </ol>
+        </div>
       </section>
 
       {/* 4. Honest Blockchain Verification Status */}
@@ -646,13 +818,13 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                 </span>
                 <span className="text-[11px] font-mono text-emerald-300/80 block">
                   Immutable proof recorded on {j.blockchain?.networkName ?? "Ethereum Sepolia"}
-                  {j.blockchain?.blockNumber ? ` (Block #${j.blockchain.blockNumber})` : ""}
+                  {j.blockchain?.blockNumber ? ` · Block #${j.blockchain.blockNumber}` : ""}
                 </span>
               </div>
             </div>
             {j.blockchain?.confirmedAt && (
               <span className="hidden sm:inline-block font-mono text-[11px] text-emerald-400/80">
-                {fmt.date(j.blockchain.confirmedAt)}
+                {formatDateTime(j.blockchain.confirmedAt)}
               </span>
             )}
           </div>

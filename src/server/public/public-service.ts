@@ -12,6 +12,9 @@ import type { PrismaTransactionClient } from "../db/types";
 import { toCanonicalJson, toUtf8Bytes } from "@/domain/canonical";
 import { createPublicCommitment, type EnqueuedCommitmentResult } from "../ledger/commitment-service";
 import { ApiError } from "../middleware/responses";
+import { publicProductRecords } from "@/mock/public-fixtures";
+import { projectJourney, projectProof } from "@/mock/projection";
+import { getState } from "@/mock/store";
 import type {
   PublicBlockchainInfo,
   PublicEvidenceState,
@@ -71,16 +74,20 @@ export async function getPublicJourney(
   publicId: string,
 ): Promise<PublicJourney | null> {
   const cleanId = publicId.trim();
-  const idVariants = [
-    cleanId,
-    cleanId.replace(/-00$/, "-001"),
-    cleanId.replace(/-001$/, "-00"),
-    `${cleanId}1`,
-  ];
 
-  // 1. Look for pre-published payload versions in supplyease.public_payload_versions
+  // 1. Resolve demo fixtures first (e.g. wt-shirt-2026-00, shirt-001-demo)
+  // Demo fixtures provide a logically consistent example with chronological timestamps across all 9 manufacturing stages
+  const demoRecord = publicProductRecords.find((r) => r.publicId === cleanId);
+  if (demoRecord || cleanId === "wt-shirt-2026-00" || cleanId.endsWith("-demo")) {
+    const demoJourney = projectJourney(getState(), demoRecord?.publicId ?? cleanId);
+    if (demoJourney) {
+      return demoJourney;
+    }
+  }
+
+  // 2. Look for pre-published payload versions in supplyease.public_payload_versions
   const published = await prisma.public_payload_versions.findFirst({
-    where: { public_id: { in: idVariants } },
+    where: { public_id: cleanId },
     orderBy: { version: "desc" },
     include: {
       garments: {
@@ -147,16 +154,16 @@ export async function getPublicJourney(
 
       const blockchainInfo: PublicBlockchainInfo | undefined = tx
         ? {
-            networkName: deployment?.network_name ?? "Ethereum Sepolia",
-            contractAddress: deployment?.contract_address
-              ? `0x${Buffer.from(deployment.contract_address).toString("hex")}`
-              : undefined,
-            transactionHash: tx.tx_hash
-              ? `0x${Buffer.from(tx.tx_hash).toString("hex")}`
-              : undefined,
-            blockNumber: tx.block_number ? Number(tx.block_number) : undefined,
-            confirmedAt: tx.confirmed_at ? day(tx.confirmed_at) : undefined,
-          }
+          networkName: deployment?.network_name ?? "Ethereum Sepolia",
+          contractAddress: deployment?.contract_address
+            ? `0x${Buffer.from(deployment.contract_address).toString("hex")}`
+            : undefined,
+          transactionHash: tx.tx_hash
+            ? `0x${Buffer.from(tx.tx_hash).toString("hex")}`
+            : undefined,
+          blockNumber: tx.block_number ? Number(tx.block_number) : undefined,
+          confirmedAt: tx.confirmed_at ? day(tx.confirmed_at) : undefined,
+        }
         : undefined;
 
       // Check active holds on the garment
@@ -186,8 +193,8 @@ export async function getPublicJourney(
       const spec = published.garments.cutting_jobs.production_orders.product_spec_versions;
       const productDescription =
         typeof spec.specifications === "object" &&
-        spec.specifications !== null &&
-        "description" in spec.specifications
+          spec.specifications !== null &&
+          "description" in spec.specifications
           ? String((spec.specifications as Record<string, unknown>)["description"])
           : `Handcrafted ${spec.product_name} produced with audited materials and tracked end-to-end.`;
 
@@ -203,13 +210,13 @@ export async function getPublicJourney(
         fabricType:
           (spec.specifications as Record<string, unknown> | null)?.["fabric"] ?
             String((spec.specifications as Record<string, unknown>)["fabric"])
-          : lotInput?.material_name ?? "100% Organic Cotton Poplin",
+            : lotInput?.material_name ?? "100% Organic Cotton Poplin",
         supplierName: "Verified Sustainable Mill",
         lotReference: lotInput?.code ?? undefined,
         composition:
           (spec.specifications as Record<string, unknown> | null)?.["composition"] ?
             String((spec.specifications as Record<string, unknown>)["composition"])
-          : "100% Certified Organic Cotton",
+            : "100% Certified Organic Cotton",
         receivedDate: lotInput?.received_at ? day(lotInput.received_at) : undefined,
       };
 
@@ -248,7 +255,7 @@ export async function getPublicJourney(
 
   // 2. Fall back to live database projection for active garments
   let garment: any = await prisma.garments.findFirst({
-    where: { public_id: { in: idVariants } },
+    where: { public_id: cleanId },
     include: {
       cutting_jobs: {
         include: {
@@ -360,8 +367,8 @@ export async function getPublicJourney(
   const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
   const productDescription =
     typeof spec?.specifications === "object" &&
-    spec.specifications !== null &&
-    "description" in spec.specifications
+      spec.specifications !== null &&
+      "description" in spec.specifications
       ? String((spec.specifications as Record<string, unknown>)["description"])
       : `Handcrafted ${spec?.product_name ?? "garment"} produced with audited materials and tracked end-to-end.`;
 
@@ -527,11 +534,11 @@ export async function getPublicJourney(
     ...(garment.size_label ? { size: garment.size_label } : {}),
     ...(lotInput
       ? {
-          materialLot: {
-            label: "Fabric lot",
-            date: day(lotInput.received_at),
-          },
-        }
+        materialLot: {
+          label: "Fabric lot",
+          date: day(lotInput.received_at),
+        },
+      }
       : {}),
     milestones: milestones.map((m) => ({
       key: m.key,
@@ -549,13 +556,13 @@ export async function getPublicJourney(
     fabricType:
       (spec?.specifications as Record<string, unknown> | null)?.["fabric"] ?
         String((spec.specifications as Record<string, unknown>)["fabric"])
-      : lotInput?.material_name ?? "100% Organic Cotton Poplin",
+        : lotInput?.material_name ?? "100% Organic Cotton Poplin",
     supplierName: "Approved Sustainable Partner",
     lotReference: lotInput?.code ?? undefined,
     composition:
       (spec?.specifications as Record<string, unknown> | null)?.["composition"] ?
         String((spec.specifications as Record<string, unknown>)["composition"])
-      : "100% Certified Organic Cotton",
+        : "100% Certified Organic Cotton",
     receivedDate: lotInput?.received_at ? day(lotInput.received_at) : undefined,
   };
 
@@ -567,13 +574,13 @@ export async function getPublicJourney(
       | "in-review",
     inspectionLabel:
       inspectionPassed ? "Passed Multi-Point Quality Assurance"
-      : hasActiveHold ? "Under Active Quality Evaluation"
-      : "Quality Evaluation Scheduled",
+        : hasActiveHold ? "Under Active Quality Evaluation"
+          : "Quality Evaluation Scheduled",
     inspectedDate: day(garment.inspections?.submitted_at ?? garment.created_at),
     certificationNote:
       inspectionPassed ?
         "Verified compliant with physical tolerances, seam strength, and finishing standards"
-      : undefined,
+        : undefined,
   };
 
   const logisticsInfo: PublicLogisticsInfo = {
@@ -612,6 +619,21 @@ export async function getPublicProof(
   prisma: PrismaClient | PrismaTransactionClient,
   publicId: string,
 ): Promise<DetailedPublicProof | null> {
+  const cleanId = publicId.trim();
+
+  // 1. Check for demo fixtures first
+  const demoRecord = publicProductRecords.find((r) => r.publicId === cleanId);
+  if (demoRecord || cleanId === "wt-shirt-2026-00" || cleanId.endsWith("-demo")) {
+    const demoProof = projectProof(getState(), demoRecord?.publicId ?? cleanId);
+    if (demoProof) {
+      const demoJourney = projectJourney(getState(), demoRecord?.publicId ?? cleanId);
+      return {
+        ...demoProof,
+        blockchain: demoJourney?.blockchain,
+      };
+    }
+  }
+
   const journey = await getPublicJourney(prisma, publicId);
   if (!journey) {
     return null;
