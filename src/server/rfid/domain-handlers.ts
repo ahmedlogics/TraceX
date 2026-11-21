@@ -33,7 +33,15 @@ function generateGarmentCode(): string {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function idOrCodeWhere(idOrCode: string) {
-  if (UUID_REGEX.test(idOrCode)) {
+  if (
+    UUID_REGEX.test(idOrCode) ||
+    idOrCode.startsWith("lot-") ||
+    idOrCode.startsWith("order-") ||
+    idOrCode.startsWith("g-") ||
+    idOrCode.startsWith("sup-") ||
+    idOrCode.startsWith("cj-") ||
+    idOrCode.startsWith("ci-")
+  ) {
     return { OR: [{ id: idOrCode }, { code: idOrCode }] };
   }
   return { code: idOrCode };

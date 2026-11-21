@@ -26,9 +26,18 @@ import type {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function idOrCodeWhere(idOrCode: string) {
-  return UUID_REGEX.test(idOrCode)
-    ? { OR: [{ id: idOrCode }, { code: idOrCode }] }
-    : { code: idOrCode };
+  if (
+    UUID_REGEX.test(idOrCode) ||
+    idOrCode.startsWith("lot-") ||
+    idOrCode.startsWith("order-") ||
+    idOrCode.startsWith("g-") ||
+    idOrCode.startsWith("sup-") ||
+    idOrCode.startsWith("cj-") ||
+    idOrCode.startsWith("ci-")
+  ) {
+    return { OR: [{ id: idOrCode }, { code: idOrCode }] };
+  }
+  return { code: idOrCode };
 }
 
 // ---------------------------------------------------------------- Subject Revision Service (Optimistic Concurrency)
