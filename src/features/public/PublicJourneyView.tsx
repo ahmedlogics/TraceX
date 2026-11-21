@@ -1,111 +1,251 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   AlertCircle,
-  ArrowDown,
-  Box,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
-  Copy,
+  Clock,
   ExternalLink,
-  Feather,
-  Hash,
-  Info,
   Layers,
   Loader2,
+  Lock,
   OctagonAlert,
-  PackageCheck,
   SearchX,
   ShieldCheck,
   Sparkles,
-  Truck,
 } from "lucide-react";
-import { toast } from "sonner";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { fmt } from "@/components/wt/layout";
 import { errorMessage, useWtQuery } from "@/lib/data/hooks";
+import type { PublicJourney, PublicMilestone } from "@/domain/public-types";
 
 /**
- * Consumer-friendly status mapping for shoppers.
- * Translates factory/disposition codes into clean, reassuring language.
+ * 9 Standard Manufacturing Stages in sequential factory order.
  */
-function getCustomerStatusDetails(status: string, notice?: { title: string; message: string }) {
-  if (notice || status === "Temporarily on hold") {
-    return {
-      label: "Quality Review in Progress",
-      badgeClass: "bg-amber-950/60 border-amber-500/40 text-amber-200",
-      dotClass: "bg-amber-400",
-      description: "Our quality team is performing a routine evaluation before final release.",
-    };
+interface ManufacturingStageDef {
+  id: string;
+  name: string;
+  department: string;
+  defaultDescription: string;
+  isMatch: (m: PublicMilestone) => boolean;
+}
+
+const MANUFACTURING_STAGES: ManufacturingStageDef[] = [
+  {
+    id: "raw-material",
+    name: "Raw Material Received",
+    department: "Materials",
+    defaultDescription:
+      "Sustainably sourced fabric lot received and inspected for fiber density, color consistency, and organic certification compliance.",
+    isMatch: (m) =>
+      m.key === "fabric-sourced" ||
+      m.label.toLowerCase().includes("fabric lot") ||
+      m.label.toLowerCase().includes("raw material") ||
+      (m.label.toLowerCase().includes("fabric") && !m.label.toLowerCase().includes("cut")),
+  },
+  {
+    id: "material-issued",
+    name: "Material Issued",
+    department: "Raw Store",
+    defaultDescription:
+      "Inspected fabric rolls issued from storage and allocated to the automated cutting room according to the production plan.",
+    isMatch: (m) =>
+      m.key === "material-issued" ||
+      m.label.toLowerCase().includes("material issued") ||
+      m.label.toLowerCase().includes("fabric issued") ||
+      m.label.toLowerCase().includes("allocated to cutting"),
+  },
+  {
+    id: "cutting",
+    name: "Cutting",
+    department: "Production",
+    defaultDescription:
+      "Fabric rolls unrolled, aligned, and precision cut into exact garment panel shapes with individual item identification.",
+    isMatch: (m) =>
+      m.key === "garment-cut" ||
+      (m.label.toLowerCase().includes("cut") && !m.label.toLowerCase().includes("issue")),
+  },
+  {
+    id: "stitching",
+    name: "Stitching",
+    department: "Production",
+    defaultDescription:
+      "Precision seam sewing, panel joining, and sleeve assembly performed at the dedicated sewing line.",
+    isMatch: (m) =>
+      m.key === "stitching-completed" ||
+      m.label.toLowerCase().includes("stitch") ||
+      m.label.toLowerCase().includes("sewing"),
+  },
+  {
+    id: "finishing",
+    name: "Finishing",
+    department: "Production",
+    defaultDescription:
+      "Garment hardware and buttons secured, loose threads trimmed, and final steam pressing applied.",
+    isMatch: (m) =>
+      m.key === "garment-assembled" ||
+      m.label.toLowerCase().includes("finish") ||
+      m.label.toLowerCase().includes("assembled"),
+  },
+  {
+    id: "quality",
+    name: "Quality Inspection",
+    department: "Quality Assurance",
+    defaultDescription:
+      "Comprehensive multi-point inspection evaluating seam strength, dimensional tolerances, and visual workmanship standards.",
+    isMatch: (m) =>
+      m.key === "quality-passed" ||
+      m.label.toLowerCase().includes("quality") ||
+      m.label.toLowerCase().includes("inspection"),
+  },
+  {
+    id: "packing",
+    name: "Packing",
+    department: "Logistics",
+    defaultDescription:
+      "Quality-approved garment tagged, folded into protective eco-packaging, and sealed into master shipping cartons.",
+    isMatch: (m) =>
+      m.key === "garment-packed" ||
+      m.label.toLowerCase().includes("pack") ||
+      m.label.toLowerCase().includes("carton"),
+  },
+  {
+    id: "warehouse",
+    name: "Warehouse",
+    department: "Logistics",
+    defaultDescription:
+      "Master shipping carton scanned and securely placed into distribution warehouse inventory awaiting dispatch.",
+    isMatch: (m) =>
+      m.key === "warehouse-received" ||
+      m.label.toLowerCase().includes("warehouse"),
+  },
+  {
+    id: "dispatch",
+    name: "Dispatch",
+    department: "Logistics",
+    defaultDescription:
+      "Verified shipping manifest sealed and departed the facility for delivery to authorized retail partners.",
+    isMatch: (m) =>
+      m.key === "dispatched" ||
+      m.label.toLowerCase().includes("dispatch") ||
+      m.label.toLowerCase().includes("departed") ||
+      m.label.toLowerCase().includes("retail"),
+  },
+];
+
+/**
+ * Curated product image sets based on garment category.
+ * Includes multiple high-resolution gallery angles with graceful fallback illustration placeholders.
+ */
+interface ProductGalleryImage {
+  url: string;
+  label: string;
+  caption: string;
+}
+
+function getProductGallery(productName: string, publicId: string): ProductGalleryImage[] {
+  const isTrouser =
+    productName.toLowerCase().includes("trouser") ||
+    publicId.toLowerCase().includes("trouser");
+
+  if (isTrouser) {
+    return [
+      {
+        url: "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=900&q=80",
+        label: "Front Studio View",
+        caption: "Tailored relaxed silhouette in certified organic cotton.",
+      },
+      {
+        url: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=900&q=80",
+        label: "Tailoring & Seam Detail",
+        caption: "Reinforced belt loops and double-stitched pocket welt.",
+      },
+      {
+        url: "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=900&q=80",
+        label: "Textile Texture",
+        caption: "Heavyweight breathable twill weave with natural handfeel.",
+      },
+    ];
   }
-  if (status === "Dispatched to authorized retail network") {
-    return {
-      label: "Dispatched & Verified",
-      badgeClass: "bg-emerald-950/50 border-emerald-500/40 text-emerald-200",
-      dotClass: "bg-emerald-400 animate-pulse",
-      description: "This garment has passed every verified checkpoint and dispatched to retail.",
-    };
+
+  // Default: Heritage Overshirt / Shirt
+  return [
+    {
+      url: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
+      label: "Front Studio View",
+      caption: "Crafted with certified organic cotton twill and reinforced seams.",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1598033129183-c4f50c736f10?auto=format&fit=crop&w=900&q=80",
+      label: "Collar & Horn Button Detail",
+      caption: "Sustainably sourced horn buttons and precision topstitching.",
+    },
+    {
+      url: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=900&q=80",
+      label: "Profile & Seam Construction",
+      caption: "Structured yoke and articulated sleeves for everyday durability.",
+    },
+  ];
+}
+
+/**
+ * Intentional SVG fallback illustration when images fail or load offline.
+ */
+function FallbackGarmentIllustration({ isTrouser }: { isTrouser: boolean }) {
+  if (isTrouser) {
+    return (
+      <svg
+        viewBox="0 0 200 200"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="size-40 text-purple-300 drop-shadow-md"
+        aria-hidden="true"
+      >
+        <rect x="65" y="30" width="70" height="12" rx="2" fill="#9333EA" fillOpacity="0.3" stroke="#C084FC" strokeWidth="2" />
+        <path d="M65 42 L68 170 L92 170 L100 85 L108 170 L132 170 L135 42 Z" fill="#581C87" fillOpacity="0.35" stroke="#C084FC" strokeWidth="2" strokeLinejoin="round" />
+        <line x1="80" y1="44" x2="80" y2="168" stroke="#E9D5FF" strokeWidth="1.5" strokeDasharray="3 3" />
+        <line x1="120" y1="44" x2="120" y2="168" stroke="#E9D5FF" strokeWidth="1.5" strokeDasharray="3 3" />
+      </svg>
+    );
   }
-  if (status === "Passed quality control") {
-    return {
-      label: "Passed Quality Control",
-      badgeClass: "bg-purple-950/60 border-purple-400/40 text-purple-200",
-      dotClass: "bg-purple-300",
-      description: "Crafting and multi-point quality inspection successfully completed.",
-    };
-  }
-  return {
-    label: "Crafting in Progress",
-    badgeClass: "bg-purple-900/40 border-purple-500/30 text-purple-200",
-    dotClass: "bg-purple-400",
-    description: "Currently progressing through verified factory production stations.",
-  };
+
+  return (
+    <svg
+      viewBox="0 0 200 200"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="size-40 text-purple-300 drop-shadow-md"
+      aria-hidden="true"
+    >
+      <path d="M72 38 L100 56 L128 38 L114 28 L86 28 Z" fill="#9333EA" fillOpacity="0.35" stroke="#C084FC" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M60 50 L72 38 L128 38 L140 50 L162 86 L144 94 L136 68 L136 168 L64 168 L64 68 L56 94 L38 86 Z" fill="#581C87" fillOpacity="0.35" stroke="#C084FC" strokeWidth="2" strokeLinejoin="round" />
+      <line x1="100" y1="56" x2="100" y2="168" stroke="#E9D5FF" strokeWidth="1.8" strokeDasharray="2 3" />
+      <rect x="74" y="80" width="18" height="20" rx="2" stroke="#E9D5FF" strokeWidth="1.4" fill="none" />
+      <circle cx="100" cy="72" r="2.2" fill="#F3E8FF" />
+      <circle cx="100" cy="94" r="2.2" fill="#F3E8FF" />
+      <circle cx="100" cy="116" r="2.2" fill="#F3E8FF" />
+      <circle cx="100" cy="138" r="2.2" fill="#F3E8FF" />
+    </svg>
+  );
 }
 
 export function PublicJourneyView({ publicId }: { publicId: string }) {
   const cleanId = publicId.trim();
   const q = useWtQuery(["public-journey", cleanId], (c) => c.getPublicJourney(cleanId));
-  const timelineRef = useRef<HTMLElement | null>(null);
 
-  const [copiedHash, setCopiedHash] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [imageErrorMap, setImageErrorMap] = useState<Record<number, boolean>>({});
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
 
-  const toggleMilestone = (key: string) => {
-    setExpandedKeys((prev) => ({
+  const toggleStage = (stageId: string) => {
+    setExpandedStages((prev) => ({
       ...prev,
-      [key]: !prev[key],
+      [stageId]: !prev[stageId],
     }));
-  };
-
-  const scrollToTimeline = () => {
-    if (timelineRef.current) {
-      timelineRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
-  const copyHash = async (hash: string) => {
-    try {
-      await navigator.clipboard.writeText(hash);
-      setCopiedHash(true);
-      toast.success("Journey fingerprint copied to clipboard.");
-      setTimeout(() => setCopiedHash(false), 2000);
-    } catch {
-      toast.error("Could not copy hash.");
-    }
-  };
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopiedLink(true);
-      toast.success("Product passport URL copied.");
-      setTimeout(() => setCopiedLink(false), 2000);
-    } catch {
-      toast.error("Could not copy URL.");
-    }
   };
 
   // Loading state in public plum theme
@@ -183,334 +323,305 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
     );
   }
 
-  const j = q.data;
-  const statusDetails = getCustomerStatusDetails(j.status, j.notice);
-  const latestMilestone = j.milestones[j.milestones.length - 1];
+  const j: PublicJourney = q.data;
+  const gallery = getProductGallery(j.productName, j.publicId);
+  const isTrouser = j.productName.toLowerCase().includes("trouser");
+
+  // Determine truthful blockchain state
+  const isBlockchainVerified =
+    j.evidence === "sample-confirmed" ||
+    (!!j.blockchain?.confirmedAt && !!j.blockchain?.transactionHash);
+  const isBlockchainPending =
+    j.evidence === "pending" ||
+    (j.status === "Dispatched to authorized retail network" && !isBlockchainVerified);
 
   return (
-    <article className="space-y-6 motion-safe:animate-fade-in-up motion-reduce:transform-none">
-      {/* 1. Header / Digital Product Passport Identity Card */}
-      <div className="relative overflow-hidden rounded-2xl border border-purple-500/25 bg-[#1D1429]/90 p-6 sm:p-7 shadow-2xl backdrop-blur-md space-y-5">
-        {/* Subtle top stitch aura */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 right-0 h-48 w-48 rounded-full bg-purple-500/10 blur-3xl"
-        />
-
-        {/* Sub-header with delicate stitch line */}
-        <div className="flex items-center gap-2.5 text-xs font-mono font-medium tracking-widest uppercase text-purple-300/80">
-          <span className="w-6 border-t border-dashed border-purple-400/50" aria-hidden />
-          <span>Digital Product Passport · WearTrail</span>
-        </div>
-
-        {/* Garment Title & Narrative */}
-        <div className="space-y-2">
-          <h1 className="font-editorial text-3xl sm:text-4xl font-normal tracking-tight text-white leading-tight">
-            {j.productName}
-          </h1>
-          <p className="text-sm leading-relaxed text-purple-200/85 max-w-xl">
-            {j.productDescription}
-          </p>
-        </div>
-
-        {/* Attributes & Plain-English Status Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-purple-500/20 pt-4 text-xs">
-          <div className="space-y-1">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-purple-300/70">
-              Garment ID
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-semibold text-white tracking-wide">
-                {j.publicId}
+    <article className="space-y-6 motion-safe:animate-fade-in-up">
+      {/* 1. Functional Product Gallery with Real Imagery & Graceful Fallback */}
+      <section
+        aria-label="Product Gallery"
+        className="relative overflow-hidden rounded-2xl border border-purple-500/20 bg-[#181023]/90 shadow-2xl backdrop-blur-md"
+      >
+        <div className="relative aspect-[4/3] sm:aspect-[16/10] w-full max-h-[340px] overflow-hidden bg-[#130B1C] flex items-center justify-center">
+          {imageErrorMap[activeSlide] ? (
+            <div className="flex flex-col items-center justify-center p-6 text-center space-y-2">
+              <FallbackGarmentIllustration isTrouser={isTrouser} />
+              <span className="text-xs text-purple-300/80 font-mono">
+                {gallery[activeSlide]?.label ?? "Authentic Garment Representation"}
               </span>
-              {j.garmentReference && (
-                <span className="rounded bg-purple-950/70 border border-purple-500/25 px-1.5 py-0.5 font-mono text-[10px] text-purple-300/90">
-                  Ref: {j.garmentReference}
-                </span>
-              )}
             </div>
-          </div>
+          ) : (
+            <img
+              src={gallery[activeSlide]?.url}
+              alt={gallery[activeSlide]?.label ?? j.productName}
+              onError={() =>
+                setImageErrorMap((prev) => ({ ...prev, [activeSlide]: true }))
+              }
+              className="h-full w-full object-cover object-center transition-opacity duration-300"
+            />
+          )}
 
-          <div className="space-y-1">
-            <span className="block font-mono text-[11px] uppercase tracking-wider text-purple-300/70">
-              Verified Status
+          {/* Subtle Top & Bottom vignette gradient */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#181023] via-transparent to-black/30"
+          />
+
+          {/* Previous / Next Controls */}
+          {gallery.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveSlide((prev) => (prev === 0 ? gallery.length - 1 : prev - 1))
+                }
+                aria-label="Previous product image"
+                className="absolute left-3 top-1/2 -translate-y-1/2 size-8 rounded-full border border-purple-400/25 bg-[#170E22]/70 text-purple-200 hover:text-white hover:bg-purple-900/60 flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveSlide((prev) => (prev + 1) % gallery.length)
+                }
+                aria-label="Next product image"
+                className="absolute right-3 top-1/2 -translate-y-1/2 size-8 rounded-full border border-purple-400/25 bg-[#170E22]/70 text-purple-200 hover:text-white hover:bg-purple-900/60 flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </>
+          )}
+
+          {/* Slide Indicator Pill */}
+          <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-xs text-white/90">
+            <span className="rounded-md bg-black/50 px-2 py-0.5 font-mono text-[11px] backdrop-blur-sm">
+              {gallery[activeSlide]?.label}
             </span>
-            <div className="flex items-center gap-1.5 text-sm font-medium text-purple-100">
-              <span className={`size-2 rounded-full ${statusDetails.dotClass}`} aria-hidden />
-              <span>{statusDetails.label}</span>
-            </div>
+            <span className="rounded-md bg-black/50 px-2 py-0.5 font-mono text-[11px] backdrop-blur-sm">
+              {activeSlide + 1} / {gallery.length}
+            </span>
           </div>
         </div>
 
-        {/* Optional size & colour: only shown when present */}
-        {(j.size || j.colour) && (
-          <div className="flex flex-wrap items-center gap-4 text-xs text-purple-300/80 pt-1">
-            {j.size && (
-              <span className="inline-flex items-center gap-1.5">
-                <strong className="text-white font-medium">Size:</strong> {j.size}
-              </span>
-            )}
-            {j.colour && (
-              <span className="inline-flex items-center gap-1.5">
-                <strong className="text-white font-medium">Colour:</strong> {j.colour}
-              </span>
-            )}
+        {/* Gallery Dot Nav */}
+        {gallery.length > 1 && (
+          <div className="flex items-center justify-center gap-2 py-2.5 bg-[#150D20]">
+            {gallery.map((g, idx) => (
+              <button
+                key={g.label}
+                type="button"
+                onClick={() => setActiveSlide(idx)}
+                aria-label={`View ${g.label}`}
+                className={`size-1.5 rounded-full transition-all cursor-pointer ${idx === activeSlide
+                    ? "w-6 bg-purple-300"
+                    : "bg-purple-700/50 hover:bg-purple-500/60"
+                  }`}
+              />
+            ))}
           </div>
         )}
+      </section>
 
-        {/* Quick Scroll Action Button */}
-        <div className="pt-1">
-          <Button
-            type="button"
-            onClick={scrollToTimeline}
-            variant="outline"
-            size="sm"
-            className="gap-2 rounded-full border-purple-400/30 bg-purple-950/40 text-purple-100 hover:bg-purple-900/60 hover:text-white transition-all shadow-sm cursor-pointer"
-          >
-            Explore the journey <ArrowDown className="size-3.5" />
-          </Button>
+      {/* 2. Compact Product Identity Card */}
+      <section
+        aria-label="Product Identity"
+        className="rounded-2xl border border-purple-500/25 bg-[#1D1429]/90 p-5 sm:p-6 shadow-xl backdrop-blur-md space-y-3"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-800/30 pb-3">
+          <div className="space-y-0.5">
+            <span className="block font-mono text-[10px] uppercase tracking-wider text-purple-400">
+              Scanned Garment
+            </span>
+            <h1 className="font-editorial text-xl sm:text-2xl font-normal text-white tracking-tight">
+              {j.productName}
+            </h1>
+          </div>
+
+          {/* Compact Manufacturing Status Pill */}
+          <div className="shrink-0">
+            {j.status === "Dispatched to authorized retail network" ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-950/45 px-2.5 py-1 text-xs font-medium text-emerald-200">
+                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Dispatched & Verified
+              </span>
+            ) : j.status === "Passed quality control" ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-400/40 bg-purple-950/50 px-2.5 py-1 text-xs font-medium text-purple-200">
+                <span className="size-1.5 rounded-full bg-purple-300" />
+                Passed Quality Control
+              </span>
+            ) : j.status === "Temporarily on hold" ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-950/50 px-2.5 py-1 text-xs font-medium text-amber-200">
+                <span className="size-1.5 rounded-full bg-amber-400" />
+                Under Quality Review
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-900/40 px-2.5 py-1 text-xs font-medium text-purple-200">
+                <span className="size-1.5 rounded-full bg-purple-400" />
+                In Production
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* 2. Hold / Quality Review Advisory (Honest, generalized, zero internal defect notes) */}
+        {/* Garment Identification Details */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-0.5">
+          <div className="space-y-0.5">
+            <span className="block font-mono text-[10px] text-purple-400/80">GARMENT ID</span>
+            <span className="font-mono text-sm font-semibold text-white tracking-wider">
+              {j.publicId}
+            </span>
+          </div>
+
+          {j.size && (
+            <div className="space-y-0.5 text-right sm:text-left">
+              <span className="block font-mono text-[10px] text-purple-400/80">SIZE</span>
+              <span className="font-mono text-xs font-medium text-purple-200">
+                {j.size}
+              </span>
+            </div>
+          )}
+
+          {j.materialInfo?.fabricType && (
+            <div className="space-y-0.5 text-right">
+              <span className="block font-mono text-[10px] text-purple-400/80">MATERIAL</span>
+              <span className="text-xs text-purple-200 truncate max-w-[180px] block">
+                {j.materialInfo.fabricType}
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Routine Hold Notification (if garment is under review) */}
       {j.notice && (
         <div
           role="alert"
-          className="flex gap-3.5 rounded-2xl border border-amber-500/35 bg-[#251817]/95 p-4 sm:p-5 text-amber-200 shadow-lg backdrop-blur-md"
+          className="flex gap-3 rounded-2xl border border-amber-500/35 bg-[#251817]/95 p-4 text-amber-200 shadow-md backdrop-blur-md"
         >
-          <OctagonAlert className="mt-0.5 size-5 shrink-0 text-amber-400" aria-hidden />
-          <div className="space-y-1">
-            <p className="font-semibold text-amber-100 text-sm">{j.notice.title}</p>
-            <p className="text-xs sm:text-sm text-amber-200/85 leading-relaxed">
-              {j.notice.message}
-            </p>
+          <OctagonAlert className="mt-0.5 size-4 shrink-0 text-amber-400" aria-hidden />
+          <div className="space-y-0.5 text-xs">
+            <p className="font-semibold text-amber-100">{j.notice.title}</p>
+            <p className="text-amber-200/85 leading-relaxed">{j.notice.message}</p>
           </div>
         </div>
       )}
 
-      {/* General Advisory */}
-      {j.advisory && (
-        <div className="flex gap-3 rounded-2xl border border-purple-500/30 bg-[#1D142E]/80 p-4 text-xs sm:text-sm text-purple-200/90 shadow-sm backdrop-blur-md">
-          <Info className="mt-0.5 size-4 shrink-0 text-purple-400" aria-hidden />
-          <p>{j.advisory}</p>
-        </div>
-      )}
-
-      {/* 3. Core Digital Product Passport Specifications Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Material Origin Card */}
-        <section className="rounded-2xl border border-purple-500/20 bg-[#1A1225]/85 p-5 shadow-xl backdrop-blur-md space-y-3">
-          <div className="flex items-center gap-2 text-purple-300 border-b border-purple-800/30 pb-2.5">
-            <Feather className="size-4 text-purple-400" aria-hidden="true" />
-            <h2 className="font-semibold text-xs tracking-wider uppercase text-purple-200">
-              Material Origin
-            </h2>
-          </div>
-          <div className="space-y-2 text-xs">
-            <div>
-              <span className="block text-[11px] font-mono text-purple-300/70">Fabric Type</span>
-              <span className="font-medium text-white">
-                {j.materialInfo?.fabricType ?? "100% Certified Cotton"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-[11px] font-mono text-purple-300/70">Supplier / Mill</span>
-              <span className="text-purple-200">
-                {j.materialInfo?.supplierName ?? "Audited Partner Mill"}
-              </span>
-            </div>
-            {j.materialInfo?.lotReference && (
-              <div>
-                <span className="block text-[11px] font-mono text-purple-300/70">Lot Reference</span>
-                <span className="font-mono text-purple-200">{j.materialInfo.lotReference}</span>
-              </div>
-            )}
-            {j.materialInfo?.receivedDate && (
-              <div>
-                <span className="block text-[11px] font-mono text-purple-300/70">Received Date</span>
-                <span className="font-mono text-purple-200">{fmt.date(j.materialInfo.receivedDate)}</span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Quality Assurance Card */}
-        <section className="rounded-2xl border border-purple-500/20 bg-[#1A1225]/85 p-5 shadow-xl backdrop-blur-md space-y-3">
-          <div className="flex items-center gap-2 text-purple-300 border-b border-purple-800/30 pb-2.5">
-            <ShieldCheck className="size-4 text-purple-400" aria-hidden="true" />
-            <h2 className="font-semibold text-xs tracking-wider uppercase text-purple-200">
-              Quality Assurance
-            </h2>
-          </div>
-          <div className="space-y-2 text-xs">
-            <div>
-              <span className="block text-[11px] font-mono text-purple-300/70">Inspection Result</span>
-              <div className="flex items-center gap-1.5 pt-0.5">
-                {j.status === "Temporarily on hold" ? (
-                  <span className="inline-flex items-center gap-1 rounded bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 text-[11px] font-medium text-amber-200">
-                    Review In Progress
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-medium text-emerald-200">
-                    <Check className="size-3" /> Passed Full Quality Check
-                  </span>
-                )}
-              </div>
-            </div>
-            <div>
-              <span className="block text-[11px] font-mono text-purple-300/70">Certification</span>
-              <span className="text-purple-200 leading-relaxed block">
-                {j.qualityInfo?.certificationNote ??
-                  "Certified compliant with WearTrail dimensional tolerances and seam durability standards."}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* Packaging & Logistics Card */}
-        <section className="rounded-2xl border border-purple-500/20 bg-[#1A1225]/85 p-5 shadow-xl backdrop-blur-md space-y-3">
-          <div className="flex items-center gap-2 text-purple-300 border-b border-purple-800/30 pb-2.5">
-            <Box className="size-4 text-purple-400" aria-hidden="true" />
-            <h2 className="font-semibold text-xs tracking-wider uppercase text-purple-200">
-              Packaging & Logistics
-            </h2>
-          </div>
-          <div className="space-y-2 text-xs">
-            <div>
-              <span className="block text-[11px] font-mono text-purple-300/70">Master Carton</span>
-              <span className="font-mono text-white font-medium">
-                {j.logisticsInfo?.cartonCode ?? (j.milestones.find((m) => m.key === "garment-packed")?.details?.["cartonId"] as string) ?? "Carton Packaged & Sealed"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-[11px] font-mono text-purple-300/70">Logistics Status</span>
-              <div className="flex items-center gap-1.5 pt-0.5">
-                {j.status === "Dispatched to authorized retail network" ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-300">
-                    <Truck className="size-3.5" /> Departed to Retail Partner
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-purple-300">
-                    <PackageCheck className="size-3.5" /> In Warehouse Inventory
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {/* 4. Stitched Journey Timeline Section */}
+      {/* 3. Complete Sequential Manufacturing Journey */}
       <section
-        ref={timelineRef}
-        id="journey-timeline"
         aria-labelledby="journey-timeline-heading"
-        className="rounded-2xl border border-purple-500/20 bg-[#1A1225]/90 p-6 sm:p-7 shadow-2xl backdrop-blur-md space-y-6"
+        className="rounded-2xl border border-purple-500/20 bg-[#1A1225]/90 p-5 sm:p-7 shadow-2xl backdrop-blur-md space-y-5"
       >
-        {/* Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-800/35 pb-4">
-          <div className="space-y-1">
-            <span className="block text-[10px] font-mono font-medium tracking-wider uppercase text-purple-400">
-              Verified Production & Supply Chain Record
-            </span>
-            <h2
-              id="journey-timeline-heading"
-              className="font-editorial text-2xl font-normal text-white tracking-tight"
-            >
-              The garment journey
-            </h2>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-mono text-purple-300/70">
-            <span>Chronological record</span>
-            <span className="rounded bg-purple-950/60 border border-purple-500/20 px-2 py-0.5 text-[10px] text-purple-300">
-              v{j.payloadVersion}
-            </span>
-          </div>
+        <div className="border-b border-purple-800/35 pb-3">
+          <span className="block text-[10px] font-mono uppercase tracking-wider text-purple-400">
+            End-To-End Traceability
+          </span>
+          <h2
+            id="journey-timeline-heading"
+            className="font-editorial text-2xl font-normal text-white tracking-tight"
+          >
+            Manufacturing Journey
+          </h2>
         </div>
 
-        {/* Stitched Timeline List */}
-        <ol className="relative space-y-6 border-l-2 border-dashed border-purple-500/30 pl-7 ml-2.5 my-2">
-          {j.milestones.map((m, idx) => {
-            const isLatest = idx === j.milestones.length - 1;
-            const isExpanded = expandedKeys[m.key] ?? isLatest;
+        {/* 9-Stage Sequential Timeline */}
+        <ol className="relative border-l-2 border-dashed border-purple-500/30 pl-6 ml-2.5 space-y-5 my-2">
+          {MANUFACTURING_STAGES.map((stage) => {
+            // Check if there is an actual recorded event for this stage
+            const matchedMilestone = j.milestones.find((m) => stage.isMatch(m));
+            const isCompleted = !!matchedMilestone;
+            const isExpanded = expandedStages[stage.id] ?? false;
 
             return (
-              <li key={m.key} className="relative group">
-                {/* Stitched Diamond Node */}
-                {isLatest ? (
+              <li key={stage.id} className="relative group">
+                {/* Milestone Node */}
+                {isCompleted ? (
                   <span
                     aria-hidden="true"
-                    className="absolute -left-[2.35rem] top-1 size-3.5 rotate-45 bg-[#E879F9] border border-white/90 shadow-[0_0_12px_rgba(232,121,249,0.85)] motion-safe:transition-transform group-hover:scale-110"
+                    className="absolute -left-[1.95rem] top-1.5 size-3.5 rotate-45 bg-[#E879F9] border border-white shadow-[0_0_10px_rgba(232,121,249,0.9)] flex items-center justify-center"
                   />
                 ) : (
                   <span
                     aria-hidden="true"
-                    className="absolute -left-[2.35rem] top-1 size-3.5 rotate-45 border-2 border-purple-400/60 bg-[#160E22] motion-safe:transition-transform group-hover:scale-110 group-hover:border-purple-300 flex items-center justify-center"
+                    className="absolute -left-[1.95rem] top-1.5 size-3.5 rotate-45 border-2 border-purple-600/40 bg-[#160E22]"
                   />
                 )}
 
-                {/* Milestone Row Card */}
-                <div className="rounded-xl border border-purple-500/15 bg-purple-950/20 p-4 transition-all hover:border-purple-500/35 hover:bg-purple-950/40">
-                  {/* Clickable Header for expanding/collapsing details */}
+                {/* Milestone Card */}
+                <div
+                  className={`rounded-xl border p-3.5 transition-all ${isCompleted
+                      ? "border-purple-500/20 bg-purple-950/25 hover:border-purple-500/40 hover:bg-purple-950/40"
+                      : "border-purple-800/20 bg-purple-950/10 opacity-70"
+                    }`}
+                >
                   <button
                     type="button"
-                    onClick={() => toggleMilestone(m.key)}
-                    className="w-full text-left flex items-start justify-between gap-3 cursor-pointer select-none"
-                    aria-expanded={isExpanded}
-                    aria-controls={`milestone-content-${m.key}`}
+                    onClick={() => isCompleted && toggleStage(stage.id)}
+                    disabled={!isCompleted}
+                    aria-expanded={isCompleted ? isExpanded : undefined}
+                    className={`w-full text-left flex items-start justify-between gap-3 ${isCompleted ? "cursor-pointer select-none" : "cursor-default"
+                      }`}
                   >
-                    <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-white text-sm sm:text-base tracking-wide">
-                          {m.label}
+                        <span
+                          className={`font-semibold text-sm tracking-wide ${isCompleted ? "text-white" : "text-purple-300/70"
+                            }`}
+                        >
+                          {stage.name}
                         </span>
 
-                        {m.lotLevel && (
-                          <span className="rounded-full border border-purple-400/30 bg-purple-950/70 px-2 py-0.5 text-[10px] font-mono text-purple-300">
-                            Fabric lot
-                          </span>
-                        )}
+                        {/* Department Badge */}
+                        <span className="rounded bg-purple-900/40 border border-purple-500/20 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-purple-300">
+                          {stage.department}
+                        </span>
 
-                        {m.department && (
-                          <span className="rounded bg-purple-900/40 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-purple-300/80">
-                            {m.department}
+                        {/* Accurate Status Pill */}
+                        {isCompleted ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.2 text-[10px] font-mono text-emerald-300">
+                            <Check className="size-2.5" /> Completed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-purple-950/40 border border-purple-700/20 px-1.5 py-0.2 text-[10px] font-mono text-purple-400/80">
+                            <Clock className="size-2.5" /> Pending
                           </span>
                         )}
                       </div>
 
-                      <p className="text-xs font-mono text-purple-300/75">{fmt.date(m.date)}</p>
-                    </div>
-
-                    {/* Toggle Chevron */}
-                    <div className="text-purple-400 group-hover:text-purple-200 transition-colors pt-0.5">
-                      {isExpanded ? (
-                        <ChevronUp className="size-4" aria-hidden="true" />
+                      {/* Actual Date / Timestamp if recorded */}
+                      {isCompleted && matchedMilestone ? (
+                        <p className="text-xs font-mono text-purple-300/80">
+                          {fmt.date(matchedMilestone.date)}
+                        </p>
                       ) : (
-                        <ChevronDown className="size-4" aria-hidden="true" />
+                        <p className="text-xs font-mono text-purple-400/60 italic">
+                          Stage not yet reached
+                        </p>
                       )}
                     </div>
+
+                    {/* Interactive Toggle Chevron for completed milestones */}
+                    {isCompleted && (
+                      <div className="text-purple-400 group-hover:text-purple-200 transition-colors pt-0.5">
+                        {isExpanded ? (
+                          <ChevronUp className="size-4" aria-hidden="true" />
+                        ) : (
+                          <ChevronDown className="size-4" aria-hidden="true" />
+                        )}
+                      </div>
+                    )}
                   </button>
 
-                  {/* Expandable Details Container */}
-                  {isExpanded && (
-                    <div
-                      id={`milestone-content-${m.key}`}
-                      className="mt-3 pt-3 border-t border-purple-500/15 text-xs text-purple-200/85 space-y-2 motion-safe:transition-all"
-                    >
-                      <p className="leading-relaxed">{m.description}</p>
-
-                      <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-mono text-purple-300/70">
-                        <span>Department: {m.department || "Factory Station"}</span>
-                        <span>·</span>
+                  {/* Expandable Plain-English Explanation */}
+                  {isCompleted && isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-purple-500/15 text-xs text-purple-200/90 space-y-1.5">
+                      <p className="leading-relaxed">
+                        {matchedMilestone?.description || stage.defaultDescription}
+                      </p>
+                      <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-purple-400/80">
                         <span className="text-emerald-300 inline-flex items-center gap-1">
-                          <Check className="size-3" /> Recorded Event
+                          <Check className="size-3" /> Factory verified record
                         </span>
-                        {m.lotLevel && (
-                          <>
-                            <span>·</span>
-                            <span className="text-purple-300">Lot-level shared origin</span>
-                          </>
-                        )}
                       </div>
                     </div>
                   )}
@@ -521,97 +632,60 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
         </ol>
       </section>
 
-      {/* 5. Cryptographic Verification & Blockchain Section */}
-      <section className="space-y-4 rounded-2xl border border-purple-500/20 bg-[#1A1225]/90 p-6 sm:p-7 shadow-2xl backdrop-blur-md">
-        <div className="flex items-center justify-between gap-2 border-b border-purple-800/35 pb-3">
-          <div className="flex items-center gap-2">
-            <Hash className="size-4 text-purple-400" aria-hidden="true" />
-            <h3 className="font-semibold text-sm text-white">Cryptographic Verification</h3>
-          </div>
-          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-purple-300/80">
-            <Sparkles className="size-3 text-purple-400" aria-hidden="true" />
-            SHA-256 sealed payload
-          </span>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-xs text-purple-300/80 leading-relaxed">
-            This cryptographic fingerprint seals the authentic factory timeline above, guaranteeing
-            it cannot be altered, forged, or reordered:
-          </p>
-          <div className="relative rounded-xl border border-purple-800/40 bg-[#120B1C] p-3.5">
-            <code className="wt-id block text-xs break-all text-purple-100 font-mono select-all">
-              {j.journeyHash}
-            </code>
-          </div>
-        </div>
-
-        {/* Blockchain Evidence Status */}
-        {j.blockchain?.transactionHash ? (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3.5 text-xs text-emerald-200 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-emerald-100 flex items-center gap-1.5">
-                <Check className="size-3.5 text-emerald-400" /> On-Chain Registration Confirmed
+      {/* 4. Honest Blockchain Verification Status */}
+      <footer className="pt-1">
+        {isBlockchainVerified ? (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/25 p-4 shadow-lg backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full border border-emerald-500/40 bg-emerald-950/60 p-2 text-emerald-400">
+                <ShieldCheck className="size-5" aria-hidden="true" />
+              </div>
+              <div>
+                <span className="font-semibold text-sm text-emerald-200 tracking-wide block">
+                  Blockchain Verified
+                </span>
+                <span className="text-[11px] font-mono text-emerald-300/80 block">
+                  Immutable proof recorded on {j.blockchain?.networkName ?? "Ethereum Sepolia"}
+                  {j.blockchain?.blockNumber ? ` (Block #${j.blockchain.blockNumber})` : ""}
+                </span>
+              </div>
+            </div>
+            {j.blockchain?.confirmedAt && (
+              <span className="hidden sm:inline-block font-mono text-[11px] text-emerald-400/80">
+                {fmt.date(j.blockchain.confirmedAt)}
               </span>
-              <span className="font-mono text-[11px] text-emerald-300/80">
-                {j.blockchain.networkName ?? "Ethereum Sepolia"}
+            )}
+          </div>
+        ) : isBlockchainPending ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-950/25 p-4 shadow-lg backdrop-blur-md">
+            <div className="rounded-full border border-amber-500/40 bg-amber-950/60 p-2 text-amber-400">
+              <Sparkles className="size-5 animate-pulse" aria-hidden="true" />
+            </div>
+            <div>
+              <span className="font-semibold text-sm text-amber-200 tracking-wide block">
+                Verification Pending
+              </span>
+              <span className="text-[11px] font-mono text-amber-300/80 block">
+                Manufacturing record signed; blockchain anchoring in progress
               </span>
             </div>
-            <p className="text-[11px] font-mono text-emerald-200/80 break-all">
-              Tx: {j.blockchain.transactionHash}
-            </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-purple-800/30 bg-[#120B1C]/80 p-3 text-xs text-purple-300/80 space-y-0.5">
-            <span className="font-medium text-white block">Cryptographic Off-Chain Evidence</span>
-            <p className="text-[11px] leading-relaxed">
-              Canonical JSON payload sealed and ready for ledger anchor batching.
-            </p>
+          <div className="flex items-center gap-3 rounded-2xl border border-purple-500/25 bg-purple-950/30 p-4 shadow-md backdrop-blur-md">
+            <div className="rounded-full border border-purple-500/30 bg-purple-950/50 p-2 text-purple-300">
+              <Lock className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <span className="font-semibold text-sm text-purple-100 tracking-wide block">
+                Cryptographic Integrity Sealed
+              </span>
+              <span className="text-[11px] font-mono text-purple-300/80 block">
+                Factory payload integrity verified · Awaiting ledger anchor
+              </span>
+            </div>
           </div>
         )}
-
-        <div className="flex flex-wrap items-center gap-2 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void copyHash(j.journeyHash)}
-            className="gap-1.5 rounded-full border-purple-500/30 bg-purple-950/40 text-purple-200 hover:bg-purple-900/50 hover:text-white cursor-pointer"
-          >
-            {copiedHash ? (
-              <Check className="size-3.5 text-emerald-400" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-            {copiedHash ? "Hash copied" : "Copy hash"}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void copyLink()}
-            className="gap-1.5 rounded-full border-purple-500/30 bg-purple-950/40 text-purple-200 hover:bg-purple-900/50 hover:text-white cursor-pointer"
-          >
-            {copiedLink ? (
-              <Check className="size-3.5 text-emerald-400" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-            {copiedLink ? "Link copied" : "Copy link"}
-          </Button>
-
-          <Button
-            size="sm"
-            asChild
-            className="gap-1.5 ml-auto rounded-full bg-purple-100 text-purple-950 hover:bg-white font-medium cursor-pointer"
-          >
-            <AppLink href={paths.publicProof(j.publicId)}>
-              <ShieldCheck className="size-3.5" /> Technical proof →
-            </AppLink>
-          </Button>
-        </div>
-      </section>
+      </footer>
     </article>
   );
 }

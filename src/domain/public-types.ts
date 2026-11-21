@@ -8,6 +8,7 @@
 
 export type PublicMilestoneKey =
   | "fabric-sourced"
+  | "material-issued"
   | "garment-cut"
   | "stitching-completed"
   | "garment-assembled"

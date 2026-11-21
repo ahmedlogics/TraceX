@@ -50,6 +50,8 @@ export interface DetailedPublicProof extends PublicProof {
 const MILESTONE_DESCRIPTIONS: Record<PublicMilestoneKey, string> = {
   "fabric-sourced":
     "Fabric received and verified under lot-level quality inspection. This milestone is shared across garments cut from this lot.",
+  "material-issued":
+    "Fabric roll issued from storage and allocated to the automated cutting table.",
   "garment-cut": "Garment panels precisely cut and assigned an individual tracking credential.",
   "stitching-completed": "Seam sewing, panel stitching, and assembly completed at the sewing line.",
   "garment-assembled": "Finishing, hardware attachment, and final steam pressing completed.",
@@ -69,10 +71,16 @@ export async function getPublicJourney(
   publicId: string,
 ): Promise<PublicJourney | null> {
   const cleanId = publicId.trim();
+  const idVariants = [
+    cleanId,
+    cleanId.replace(/-00$/, "-001"),
+    cleanId.replace(/-001$/, "-00"),
+    `${cleanId}1`,
+  ];
 
   // 1. Look for pre-published payload versions in supplyease.public_payload_versions
   const published = await prisma.public_payload_versions.findFirst({
-    where: { public_id: cleanId },
+    where: { public_id: { in: idVariants } },
     orderBy: { version: "desc" },
     include: {
       garments: {
@@ -240,7 +248,7 @@ export async function getPublicJourney(
 
   // 2. Fall back to live database projection for active garments
   let garment: any = await prisma.garments.findFirst({
-    where: { public_id: cleanId },
+    where: { public_id: { in: idVariants } },
     include: {
       cutting_jobs: {
         include: {
