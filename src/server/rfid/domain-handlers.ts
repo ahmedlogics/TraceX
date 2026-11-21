@@ -152,6 +152,29 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
       data: bindingData,
     });
 
+    // Ensure incoming QC task exists for this lot if work_tasks table is available
+    if (tx.work_tasks && typeof tx.work_tasks.findFirst === "function") {
+      const existingTask = await tx.work_tasks.findFirst({
+        where: {
+          material_lot_id: lotId,
+          action_code: "incoming-qc",
+        },
+      });
+      if (!existingTask && typeof tx.work_tasks.create === "function") {
+        await tx.work_tasks.create({
+          data: {
+            action_code: "incoming-qc",
+            department_code: "quality",
+            material_lot_id: lotId,
+            status: "queued",
+            created_by: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
+            created_at: new Date(),
+            revision: 0,
+          },
+        });
+      }
+    }
+
     return {
       kind: "material_lot",
       subjectId: lotId,

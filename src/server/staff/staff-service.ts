@@ -199,6 +199,9 @@ export async function getStaffDashboard(
   const scopedOpenTasks = domainTasks.filter((t) => {
     if (user.role === "M") return true;
     if (t.assigneeId === user.id) return true;
+    if (user.username === "qc.incoming") {
+      return t.kind === "incoming-qc" || t.department === "quality";
+    }
     return t.department === user.department;
   });
 

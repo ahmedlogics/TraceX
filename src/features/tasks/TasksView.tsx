@@ -144,6 +144,31 @@ export function TasksView() {
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
+  const isManager = me.role === "M" || me.role === "A";
+  const isIncomingQC = me.username === "qc.incoming";
+
+  const deptOptions = isManager
+    ? [
+        { value: "all", label: "All Departments" },
+        { value: "receiving", label: "Receiving" },
+        { value: "raw-store", label: "Raw Store" },
+        { value: "cutting", label: "Cutting" },
+        { value: "stitching", label: "Stitching" },
+        { value: "finishing", label: "Finishing" },
+        { value: "quality", label: "Quality" },
+        { value: "packing", label: "Packing" },
+        { value: "warehouse", label: "Warehouse" },
+        { value: "dispatch", label: "Dispatch" },
+      ]
+    : isIncomingQC
+    ? [
+        { value: "all", label: "All Incoming Areas" },
+        { value: "receiving", label: "Receiving" },
+        { value: "raw-store", label: "Raw Store" },
+        { value: "quality", label: "Quality" },
+      ]
+    : [{ value: me.department, label: departmentLabels[me.department] || me.department }];
+
   return (
     <>
       <PageHeader
@@ -166,16 +191,31 @@ export function TasksView() {
                     {(garments) => {
                       const openCount = tasks.filter((t) => t.status === "open").length;
                       const claimedCount = tasks.filter((t) => t.status === "claimed").length;
-                      const myDeptCount = tasks.filter(
-                        (t) => t.department === me.department && t.status !== "done",
-                      ).length;
+                      const myDeptCount = tasks.filter((t) => {
+                        const d = (t.department || "").replace(/_/g, "-");
+                        return (
+                          (isIncomingQC
+                            ? ["receiving", "raw-store", "quality"].includes(d)
+                            : d === me.department) && t.status !== "done"
+                        );
+                      }).length;
                       const doneCount = tasks.filter((t) => t.status === "done").length;
 
                       const rows = tasks.filter((t) => {
                         const matchesStatus =
                           status === "all" ||
                           (status === "active" ? t.status !== "done" : t.status === status);
-                        const matchesDept = deptFilter === "all" || t.department === deptFilter;
+                        const normalizedTaskDept = (t.department || "").replace(/_/g, "-");
+                        const matchesDept = isManager
+                          ? deptFilter === "all" || normalizedTaskDept === deptFilter
+                          : isIncomingQC
+                          ? deptFilter === "all"
+                            ? ["receiving", "raw-store", "quality"].includes(normalizedTaskDept)
+                            : normalizedTaskDept === deptFilter
+                          : deptFilter === "all"
+                          ? normalizedTaskDept === me.department
+                          : normalizedTaskDept === deptFilter;
+
                         const matchesSearch =
                           search.trim() === "" ||
                           `${t.id} ${t.title} ${t.subjectId} ${t.department}`
@@ -253,18 +293,7 @@ export function TasksView() {
                                 ariaLabel="Filter by department"
                                 value={deptFilter}
                                 onChange={setDeptFilter}
-                                options={[
-                                  { value: "all", label: "All Departments" },
-                                  { value: "receiving", label: "Receiving" },
-                                  { value: "raw-store", label: "Raw Store" },
-                                  { value: "cutting", label: "Cutting" },
-                                  { value: "stitching", label: "Stitching" },
-                                  { value: "finishing", label: "Finishing" },
-                                  { value: "quality", label: "Quality" },
-                                  { value: "packing", label: "Packing" },
-                                  { value: "warehouse", label: "Warehouse" },
-                                  { value: "dispatch", label: "Dispatch" },
-                                ]}
+                                options={deptOptions}
                               />
                             </div>
                           </FilterBar>
@@ -360,7 +389,14 @@ export function TasksView() {
                                           </AppLink>
                                         </Button>
                                       )}
-                                      {stCode && t.status !== "done" && (
+                                      {t.kind === "incoming-qc" && (
+                                        <Button asChild size="sm" className="h-7 text-xs">
+                                          <AppLink href={paths.quality}>
+                                            Evaluate <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      )}
+                                      {stCode && !isIncomingQC && t.status !== "done" && (
                                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
                                           <AppLink href={paths.workstation}>
                                             Station <ArrowRight className="size-3 ml-0.5" />

@@ -56,8 +56,13 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
       return Promise.reject(e);
     }
   };
-  const scopedTasks = (s: DemoState, u: StaffUser) =>
-    s.tasks.filter((t) => u.role === "M" || t.department === u.department);
+  const scopedTasks = (s: DemoState, u: StaffUser) => {
+    if (u.role === "M" || u.role === "A") return s.tasks;
+    if (u.username === "qc.incoming") {
+      return s.tasks.filter((t) => t.kind === "incoming-qc" || t.department === "quality");
+    }
+    return s.tasks.filter((t) => t.department === u.department);
+  };
 
   return {
     listDemoAccounts: () => ok(getState().users.filter((u) => u.username.endsWith(".demo"))),

@@ -355,39 +355,6 @@ export function QualityView() {
         />
 
         <div className="space-y-6">
-          {/* Header & Inspector Context */}
-          <div className="rounded-xl border border-primary/30 bg-card p-4 shadow-sm space-y-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <ShieldCheck className="size-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-foreground text-sm">{me.username}</span>
-                    <span className="rounded bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                      Certified Incoming Material QC Inspector
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    First gatekeeper in the supply chain · Receiving dock &amp; quarantine zone
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded-md border bg-muted/50 px-2.5 py-1 text-muted-foreground">
-                  <strong>Assigned Department:</strong> Receiving &amp; Raw Material Stores
-                </span>
-                <span className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1 text-primary font-medium">
-                  <strong>Inspection Mode:</strong> Zero-Scanner / Material Lot Sign-Off
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Physical roll sampling, 4-point defect scoring, and quantity reconciliation. Approving fabric releases usable stock balance to Raw Store &amp; Cutting. Rejections lock rolls from production.
-            </p>
-          </div>
-
           {/* Key Metric Counters */}
           <Loadable query={insp}>
             {() => {
@@ -464,6 +431,7 @@ export function QualityView() {
                     <span>Incoming QC Dashboard &amp; Queue</span>
                     <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold">
                       {
+                        (lots.data ?? []).filter((l) => l.status === "awaiting-inspection").length ||
                         (insp.data ?? []).filter(
                           (i) => i.kind === "incoming" && i.status === "open",
                         ).length
@@ -511,8 +479,26 @@ export function QualityView() {
 
                 <Loadable query={insp}>
                   {(allInspections) => {
-                    const incomingRows = allInspections
-                      .filter((i) => i.kind === "incoming")
+                    const explicitIncoming = allInspections.filter((i) => i.kind === "incoming");
+                    const coveredLotIds = new Set(explicitIncoming.map((i) => i.subjectId));
+                    const pendingLots = (lots.data ?? []).filter(
+                      (l) =>
+                        l.status === "awaiting-inspection" &&
+                        !coveredLotIds.has(l.id) &&
+                        !coveredLotIds.has((l as any).code),
+                    );
+                    const syntheticPending: Inspection[] = pendingLots.map((l) => ({
+                      id: l.incomingInspectionId || `INSP-${l.id}`,
+                      kind: "incoming",
+                      subjectType: "lot",
+                      subjectId: l.id,
+                      status: "open",
+                      checklist: defaultIncomingChecklist,
+                      notes: "",
+                      createdAt: l.receivedAt || new Date().toISOString(),
+                    }));
+
+                    const incomingRows = [...explicitIncoming, ...syntheticPending]
                       .filter((i) => {
                         if (statusFilter !== "all" && i.status !== statusFilter) return false;
                         if (search.trim()) {
