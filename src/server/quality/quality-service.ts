@@ -209,10 +209,18 @@ export async function getOrCreateChecklistVersion(
       checklist_code: `CHK-${scope.toUpperCase()}`,
       version: 1,
       scope,
-      items: [
-        { id: "c1", label: `${scope} Standard Conformance`, default: true },
-        { id: "c2", label: `${scope} Defect-Free Visual Inspection`, default: true },
-      ],
+      items:
+        scope === "incoming"
+          ? [
+              { id: "i1", label: "Lot paperwork matches delivery", default: true },
+              { id: "i2", label: "Shade within approved range", default: true },
+              { id: "i3", label: "Width and weight within spec", default: true },
+              { id: "i4", label: "Four-point defect check acceptable", default: true },
+            ]
+          : [
+              { id: "c1", label: `${scope} Standard Conformance`, default: true },
+              { id: "c2", label: `${scope} Defect-Free Visual Inspection`, default: true },
+            ],
       approved_by: approvedByUserId,
     },
   });

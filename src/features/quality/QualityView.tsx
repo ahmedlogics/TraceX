@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Boxes,
   CheckCircle2,
   ClipboardCheck,
   Filter,
+  Lock,
   Plus,
   RotateCcw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -53,10 +56,17 @@ const tabs: { kind: InspectionKind; label: string; description: string }[] = [
   },
 ];
 
+const defaultIncomingChecklist: ChecklistItem[] = [
+  { id: "i1", label: "Lot paperwork matches delivery", checked: false },
+  { id: "i2", label: "Shade within approved range", checked: false },
+  { id: "i3", label: "Width and weight within spec", checked: false },
+  { id: "i4", label: "Four-point defect check acceptable", checked: false },
+];
+
 function IncomingQcDialog({
   inspection,
   lot,
-  triggerLabel = "Perform Incoming QC",
+  triggerLabel = "Evaluate Lot",
 }: {
   inspection: Inspection;
   lot?: MaterialLot | undefined;
@@ -64,13 +74,18 @@ function IncomingQcDialog({
 }) {
   const { run } = useWtAction();
   const totalQty = lot?.receivedQty ?? 20;
-  const [acceptedQty, setAcceptedQty] = useState(totalQty);
-  const [heldQty, setHeldQty] = useState(0);
-  const [rejectedQty, setRejectedQty] = useState(0);
+  const [acceptedQty, setAcceptedQty] = useState(lot?.acceptedQty ?? totalQty);
+  const [heldQty, setHeldQty] = useState(lot?.heldQty ?? 0);
+  const [rejectedQty, setRejectedQty] = useState(lot?.rejectedQty ?? 0);
   const [result, setResult] = useState<"pass" | "fail">("pass");
-  const [defectReason, setDefectReason] = useState("");
-  const [notes, setNotes] = useState("");
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(inspection.checklist);
+  const [defectReason, setDefectReason] = useState(inspection.defectReason ?? "");
+  const [notes, setNotes] = useState(inspection.notes ?? "");
+  const [checklist, setChecklist] = useState<ChecklistItem[]>(() => {
+    if (inspection.checklist && inspection.checklist.length === 4) {
+      return inspection.checklist;
+    }
+    return defaultIncomingChecklist;
+  });
 
   const totalCalculated = Number(acceptedQty) + Number(heldQty) + Number(rejectedQty);
   const isBalanced = totalCalculated === totalQty;
@@ -78,11 +93,26 @@ function IncomingQcDialog({
   const canSubmit =
     isBalanced && (result === "pass" ? allChecked && acceptedQty > 0 : !!defectReason.trim());
 
+  const handleSelectDecision = (newDecision: "pass" | "fail") => {
+    setResult(newDecision);
+    if (newDecision === "pass") {
+      setAcceptedQty(totalQty);
+      setHeldQty(0);
+      setRejectedQty(0);
+    } else {
+      if (acceptedQty === totalQty && heldQty === 0 && rejectedQty === 0) {
+        setAcceptedQty(0);
+        setHeldQty(0);
+        setRejectedQty(totalQty);
+      }
+    }
+  };
+
   return (
     <FormDialog
       trigger={triggerLabel}
       triggerVariant="default"
-      title={`Incoming Inspection: ${inspection.id}`}
+      title={`Incoming Lot Evaluation & Spec Sign-Off: ${inspection.id}`}
       description={`Lot: ${lot?.id ?? inspection.subjectId} (${lot?.material ?? "Fabric"}) · Total: ${totalQty} ${lot?.unit ?? "m"}`}
       submitLabel="Submit Inspection Decision"
       disabled={!canSubmit}
@@ -100,7 +130,9 @@ function IncomingQcDialog({
               result,
               defectReason: result === "fail" ? defectReason : undefined,
             }),
-          `Incoming QC recorded: ${acceptedQty}${lot?.unit ?? "m"} accepted, lot marked ${result === "pass" ? "accepted" : "rejected"}.`,
+          result === "pass"
+            ? `Incoming QC recorded: ${acceptedQty}${lot?.unit ?? "m"} accepted. Usable balance released to Raw Store & Cutting.`
+            : `Incoming QC rejected / held: ${rejectedQty}${lot?.unit ?? "m"} rejected, ${heldQty}${lot?.unit ?? "m"} held. Defective fabric locked from production.`,
         ))
       }
     >
@@ -118,7 +150,7 @@ function IncomingQcDialog({
                   ? "border-success bg-success text-success-foreground hover:bg-success/90"
                   : ""
               }
-              onClick={() => setResult("pass")}
+              onClick={() => handleSelectDecision("pass")}
             >
               <CheckCircle2 className="size-4 mr-1.5" /> Accept Lot (Pass)
             </Button>
@@ -130,13 +162,48 @@ function IncomingQcDialog({
                   ? "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   : ""
               }
-              onClick={() => setResult("fail")}
+              onClick={() => handleSelectDecision("fail")}
             >
-              <XCircle className="size-4 mr-1.5" /> Reject / Hold Lot
+              <XCircle className="size-4 mr-1.5" /> Reject / Hold Lot (Fail)
             </Button>
           </div>
         </div>
 
+        {/* 4-Point Fabric Quality Checklist */}
+        <div className="space-y-2 rounded-md border p-3 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              4-Point Fabric Quality Checklist
+            </p>
+            {result === "pass" && !allChecked && (
+              <span className="text-[11px] font-medium text-warning">
+                All 4 checks required for Pass
+              </span>
+            )}
+          </div>
+          {checklist.map((c) => (
+            <label
+              key={c.id}
+              className="flex items-center gap-2.5 text-xs p-1.5 rounded hover:bg-muted/40 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={c.checked}
+                onChange={(e) =>
+                  setChecklist((prev) =>
+                    prev.map((item) =>
+                      item.id === c.id ? { ...item, checked: e.target.checked } : item,
+                    ),
+                  )
+                }
+                className="size-4 rounded border-input text-primary focus:ring-primary"
+              />
+              <span className="font-medium text-foreground">{c.label}</span>
+            </label>
+          ))}
+        </div>
+
+        {/* Quantity Breakdown Reconciliation */}
         <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Quantity Breakdown ({lot?.unit ?? "m"})
@@ -180,53 +247,36 @@ function IncomingQcDialog({
               Total accounted: {totalCalculated} / {totalQty} {lot?.unit ?? "m"}
             </span>
             {!isBalanced && (
-              <span className="text-destructive">
-                Quantities must balance to received quantity.
+              <span className="text-destructive font-medium">
+                Strict Balance Required: (Accepted + Held + Rejected = {totalQty} {lot?.unit ?? "m"}).
               </span>
             )}
           </div>
         </div>
 
+        {/* Mandatory Defect Reason on Fail */}
         {result === "fail" && (
-          <Field label="Defect Reason (Required on Fail)" htmlFor="in-defect">
-            <Input
-              id="in-defect"
-              value={defectReason}
-              onChange={(e) => setDefectReason(e.target.value)}
-              placeholder="e.g. Shading mismatch across roll, oil contamination"
-            />
-          </Field>
+          <div className="space-y-1.5 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <Field label="Mandatory Defect Reason (Required on Fail)" htmlFor="in-defect">
+              <Input
+                id="in-defect"
+                value={defectReason}
+                onChange={(e) => setDefectReason(e.target.value)}
+                placeholder="e.g. Shade variation across roll width; center-to-selvedge shading, oil stains at 45m, GSM 210 below 240 tolerance"
+              />
+            </Field>
+            <p className="text-[11px] text-destructive">
+              Logging defect reason locks unapproved fabric from being issued to production. Usable balance will be restricted to accepted meterage (or 0m).
+            </p>
+          </div>
         )}
 
-        <div className="space-y-2 rounded-md border p-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Fabric Quality Checklist
-          </p>
-          {checklist.map((c) => (
-            <label key={c.id} className="flex items-center gap-2 text-xs cursor-pointer">
-              <input
-                type="checkbox"
-                checked={c.checked}
-                onChange={(e) =>
-                  setChecklist((prev) =>
-                    prev.map((item) =>
-                      item.id === c.id ? { ...item, checked: e.target.checked } : item,
-                    ),
-                  )
-                }
-                className="rounded border-input text-primary"
-              />
-              <span>{c.label}</span>
-            </label>
-          ))}
-        </div>
-
-        <Field label="Inspection Notes" htmlFor="in-notes">
+        <Field label="Inspection Notes (Optional)" htmlFor="in-notes">
           <Input
             id="in-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Visual texture, thread count, lab test reference..."
+            placeholder="Visual texture, thread count, mill batch reference, lab test reference..."
           />
         </Field>
       </div>
@@ -248,6 +298,8 @@ export function QualityView() {
     me.department?.toLowerCase() === "receiving" ||
     me.department?.toLowerCase() === "raw-store" ||
     (me.department as string)?.toLowerCase() === "raw_store";
+
+  const [incomingMode, setIncomingMode] = useState<"queue" | "quarantine">("queue");
 
   const availableTabs = useMemo(() => {
     if (isIncomingQC) {
@@ -273,101 +325,451 @@ export function QualityView() {
 
   const lotMap = useMemo(() => {
     const map = new Map<string, MaterialLot>();
-    (lots.data ?? []).forEach((l) => map.set(l.id, l));
+    (lots.data ?? []).forEach((l) => {
+      map.set(l.id, l);
+      if ((l as any).code) map.set((l as any).code, l);
+    });
     return map;
   }, [lots.data]);
 
-  return (
-    <>
-      <PageHeader
-        title={isIncomingQC ? "Incoming Material Quality Assurance" : "Quality Assurance"}
-        description={
-          isIncomingQC
-            ? "Fabric roll and bundle clearance portal. Evaluate received lots, balance quantities, and clear materials for cutting (Zero scanner required)."
-            : me.role === "M"
-              ? "Managerial quality oversight. Only certified inspectors record operational decisions."
-              : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
-        }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality" }]}
-      />
+  const lotInspMap = useMemo(() => {
+    const map = new Map<string, Inspection>();
+    (insp.data ?? []).forEach((i) => {
+      if (i.kind === "incoming") {
+        map.set(i.subjectId, i);
+      }
+    });
+    return map;
+  }, [insp.data]);
 
-      <div className="space-y-6">
-        {/* Dedicated Incoming QC Inspector Portal Banner */}
-        {isIncomingQC && (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 shadow-sm flex items-start gap-3">
-            <Sparkles className="size-5 text-primary shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-primary">
-                Incoming Materials Inspection Station (Dedicated Portal)
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Assigned to Receiving &amp; Raw Store. As new fabric rolls are scanned at Station 1, their bundle records appear below for quality sign-off. Click &ldquo;Perform Incoming QC&rdquo; to review specs, tick the checklist, and unlock the lot for cutting.
-              </p>
+  // -------------------------------------------------------------
+  // DEDICATED INCOMING QC WORKSTATION VIEW (qc.incoming)
+  // -------------------------------------------------------------
+  if (isIncomingQC) {
+    return (
+      <>
+        <PageHeader
+          title="Incoming Material Quality Assurance (qc.incoming)"
+          description="Dedicated inspection workstation at factory receiving dock & quarantine zone. Physical roll sampling, 4-point defect scoring, and quantity reconciliation (Zero scanner required)."
+          crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality (Incoming QC)" }]}
+        />
+
+        <div className="space-y-6">
+          {/* Header & Inspector Context */}
+          <div className="rounded-xl border border-primary/30 bg-card p-4 shadow-sm space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <ShieldCheck className="size-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground text-sm">{me.username}</span>
+                    <span className="rounded bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      Certified Incoming Material QC Inspector
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    First gatekeeper in the supply chain · Receiving dock &amp; quarantine zone
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-md border bg-muted/50 px-2.5 py-1 text-muted-foreground">
+                  <strong>Assigned Department:</strong> Receiving &amp; Raw Material Stores
+                </span>
+                <span className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1 text-primary font-medium">
+                  <strong>Inspection Mode:</strong> Zero-Scanner / Material Lot Sign-Off
+                </span>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Physical roll sampling, 4-point defect scoring, and quantity reconciliation. Approving fabric releases usable stock balance to Raw Store &amp; Cutting. Rejections lock rolls from production.
+            </p>
           </div>
-        )}
-        {/* KPI Summary Cards */}
-        <Loadable query={insp}>
-          {(all) => {
-            if (isIncomingQC) {
+
+          {/* Key Metric Counters */}
+          <Loadable query={insp}>
+            {() => {
               const awaitingLotsCount = (lots.data ?? []).filter(
                 (l) => l.status === "awaiting-inspection",
               ).length;
-              const acceptedLots = (lots.data ?? []).filter((l) => l.status === "accepted");
-              const rejectedLots = (lots.data ?? []).filter(
+              const quarantinedLots = (lots.data ?? []).filter(
                 (l) => l.status === "rejected" || (l.heldQty ?? 0) > 0,
               );
-              const totalMeters = acceptedLots.reduce(
+              const acceptedLots = (lots.data ?? []).filter((l) => l.status === "accepted");
+              const acceptedInventoryMeters = acceptedLots.reduce(
                 (sum, l) => sum + (Number(l.balanceQty) || 0),
                 0,
               );
 
               return (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-xs font-medium uppercase tracking-wider">
-                        Awaiting Inspection
+                      <span className="text-xs font-semibold uppercase tracking-wider">
+                        Incoming Lots Pending
                       </span>
                       <Sparkles className="size-4 text-warning" />
                     </div>
                     <p className="mt-2 text-2xl font-bold">{awaitingLotsCount}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Fabric lots pending clearance</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Arriving fabric lots awaiting dock sign-off
+                    </p>
                   </div>
+
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-xs font-medium uppercase tracking-wider">
-                        Accepted Lots
-                      </span>
-                      <CheckCircle2 className="size-4 text-success" />
-                    </div>
-                    <p className="mt-2 text-2xl font-bold text-success">{acceptedLots.length}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Cleared for production issue</p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-4 shadow-sm">
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-xs font-medium uppercase tracking-wider">
-                        Held / Rejected Lots
+                      <span className="text-xs font-semibold uppercase tracking-wider">
+                        Active Quarantine / Lot Holds
                       </span>
                       <ShieldAlert className="size-4 text-destructive" />
                     </div>
-                    <p className="mt-2 text-2xl font-bold text-destructive">{rejectedLots.length}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Blocked material lots</p>
+                    <p className="mt-2 text-2xl font-bold text-destructive">
+                      {quarantinedLots.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Fabric rolls blocked from production
+                    </p>
                   </div>
+
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-xs font-medium uppercase tracking-wider">
-                        Approved Fabric
+                      <span className="text-xs font-semibold uppercase tracking-wider">
+                        Accepted Inventory
                       </span>
-                      <ClipboardCheck className="size-4 text-primary" />
+                      <CheckCircle2 className="size-4 text-success" />
                     </div>
-                    <p className="mt-2 text-2xl font-bold">{Math.round(totalMeters)} m</p>
-                    <p className="text-xs text-muted-foreground mt-1">Cleared stock available</p>
+                    <p className="mt-2 text-2xl font-bold text-success">
+                      {Math.round(acceptedInventoryMeters)} m
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Cleared meterage for cutting issuance
+                    </p>
                   </div>
                 </div>
               );
-            }
+            }}
+          </Loadable>
 
+          {/* Two Primary Modes / Views */}
+          <div className="space-y-4">
+            <Tabs
+              value={incomingMode}
+              onValueChange={(v) => setIncomingMode(v as "queue" | "quarantine")}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+                <TabsList className="flex h-auto flex-wrap">
+                  <TabsTrigger value="queue" className="gap-2">
+                    <span>Incoming QC Dashboard &amp; Queue</span>
+                    <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold">
+                      {
+                        (insp.data ?? []).filter(
+                          (i) => i.kind === "incoming" && i.status === "open",
+                        ).length
+                      }
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger value="quarantine" className="gap-2">
+                    <span>Lot Rejection &amp; Quarantine Handling</span>
+                    <span className="rounded-full bg-destructive text-destructive-foreground px-1.5 py-0.5 text-[10px] font-semibold">
+                      {
+                        (lots.data ?? []).filter(
+                          (l) => l.status === "rejected" || (l.heldQty ?? 0) > 0,
+                        ).length
+                      }
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              {/* Mode 1: Incoming Fabric Inspection Queue */}
+              <TabsContent value="queue" className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="relative">
+                    <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search lot, spec, inspection ID..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="h-8 pl-8 text-xs w-[220px] sm:w-[260px]"
+                    />
+                  </div>
+                  <div className="w-[150px]">
+                    <NativeSelect
+                      value={statusFilter}
+                      onChange={setStatusFilter}
+                      options={[
+                        { value: "all", label: "All Statuses" },
+                        { value: "open", label: "Open (Awaiting QC)" },
+                        { value: "passed", label: "Passed (Accepted)" },
+                        { value: "failed", label: "Failed (Rejected)" },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                <Loadable query={insp}>
+                  {(allInspections) => {
+                    const incomingRows = allInspections
+                      .filter((i) => i.kind === "incoming")
+                      .filter((i) => {
+                        if (statusFilter !== "all" && i.status !== statusFilter) return false;
+                        if (search.trim()) {
+                          const s = search.toLowerCase();
+                          const lot = lotMap.get(i.subjectId);
+                          const matchId = i.id.toLowerCase().includes(s);
+                          const matchLot = i.subjectId.toLowerCase().includes(s);
+                          const matchMaterial = lot?.material.toLowerCase().includes(s) ?? false;
+                          const matchDefect = i.defectReason?.toLowerCase().includes(s) ?? false;
+                          if (!matchId && !matchLot && !matchMaterial && !matchDefect) return false;
+                        }
+                        return true;
+                      })
+                      .sort(
+                        (a, b) =>
+                          (a.status === "open" ? -1 : 1) - (b.status === "open" ? -1 : 1) ||
+                          b.createdAt.localeCompare(a.createdAt),
+                      );
+
+                    return (
+                      <DataTable
+                        rows={incomingRows}
+                        rowKey={(i) => i.id}
+                        empty="No incoming fabric lots matching the filter."
+                        columns={[
+                          {
+                            header: "Inspection ID",
+                            cell: (i) => <IdLink href={paths.inspection(i.id)} id={i.id} />,
+                          },
+                          {
+                            header: "Material Lot ID",
+                            cell: (i) => {
+                              const lot = lotMap.get(i.subjectId);
+                              return (
+                                <LinkIf
+                                  user={me}
+                                  routeKey="materialLot"
+                                  href={paths.lot(lot?.id ?? i.subjectId)}
+                                  id={lot?.id ?? i.subjectId}
+                                />
+                              );
+                            },
+                          },
+                          {
+                            header: "Fabric Specification",
+                            cell: (i) => {
+                              const lot = lotMap.get(i.subjectId);
+                              return (
+                                <div>
+                                  <p className="font-medium text-foreground text-xs">
+                                    {lot?.material ?? "Fabric roll"}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    Ref: {lot?.supplierRef ?? "—"}
+                                  </p>
+                                </div>
+                              );
+                            },
+                          },
+                          {
+                            header: "Delivery & Quantity",
+                            cell: (i) => {
+                              const lot = lotMap.get(i.subjectId);
+                              return (
+                                <span className="font-semibold tabular-nums text-xs">
+                                  {lot?.receivedQty ?? 20} {lot?.unit ?? "m"}
+                                </span>
+                              );
+                            },
+                          },
+                          {
+                            header: "Current Status",
+                            cell: (i) => (
+                              <div className="flex flex-col gap-0.5">
+                                <StatusBadge
+                                  status={i.status}
+                                  label={
+                                    i.status === "open"
+                                      ? "Awaiting Inspection"
+                                      : i.status === "passed"
+                                        ? "Passed (Accepted)"
+                                        : "Failed (Quarantined)"
+                                  }
+                                />
+                                {i.defectReason && (
+                                  <span className="text-[11px] text-destructive truncate max-w-[200px]">
+                                    {i.defectReason}
+                                  </span>
+                                )}
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Action",
+                            cell: (i) => {
+                              const lot = lotMap.get(i.subjectId);
+                              if (i.status === "open") {
+                                return (
+                                  <IncomingQcDialog
+                                    inspection={i}
+                                    lot={lot}
+                                    triggerLabel="Evaluate Lot"
+                                  />
+                                );
+                              }
+                              return (
+                                <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                                  <AppLink href={paths.inspection(i.id)}>View Details</AppLink>
+                                </Button>
+                              );
+                            },
+                          },
+                        ]}
+                      />
+                    );
+                  }}
+                </Loadable>
+              </TabsContent>
+
+              {/* Mode 2: Lot Rejection & Quarantine Handling */}
+              <TabsContent value="quarantine" className="mt-4 space-y-4">
+                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm flex items-start gap-3">
+                  <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-destructive">
+                      Active Raw Material Quarantine Zone
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Managing failed fabric rolls and logging mill defect reasons. Unapproved rolls are locked with usable balance = 0 m. Downstream production guards strictly prevent Raw Store from issuing these rolls and prevent Cutting from starting orders on this material.
+                    </p>
+                  </div>
+                </div>
+
+                <Loadable query={lots}>
+                  {(allLots) => {
+                    const quarantinedLots = allLots.filter(
+                      (l) => l.status === "rejected" || (l.heldQty ?? 0) > 0,
+                    );
+
+                    return (
+                      <DataTable
+                        rows={quarantinedLots}
+                        rowKey={(l) => l.id}
+                        empty="No fabric rolls currently in quarantine or rejected."
+                        columns={[
+                          {
+                            header: "Material Lot ID",
+                            cell: (l) => <IdLink href={paths.lot(l.id)} id={l.id} />,
+                          },
+                          {
+                            header: "Inspection Record",
+                            cell: (l) => {
+                              const inspRecord = lotInspMap.get(l.id);
+                              return inspRecord ? (
+                                <IdLink href={paths.inspection(inspRecord.id)} id={inspRecord.id} />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              );
+                            },
+                          },
+                          {
+                            header: "Fabric Specification",
+                            cell: (l) => (
+                              <div>
+                                <p className="font-medium text-foreground text-xs">{l.material}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  Ref: {l.supplierRef}
+                                </p>
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Quarantine Allocation",
+                            cell: (l) => (
+                              <div className="space-y-0.5 text-xs">
+                                <span className="font-semibold text-destructive tabular-nums">
+                                  {l.rejectedQty ?? 0} {l.unit ?? "m"} rejected
+                                </span>
+                                {(l.heldQty ?? 0) > 0 && (
+                                  <span className="text-warning block tabular-nums">
+                                    {l.heldQty} {l.unit ?? "m"} held (testing)
+                                  </span>
+                                )}
+                              </div>
+                            ),
+                          },
+                          {
+                            header: "Mill Defect Reason",
+                            cell: (l) => {
+                              const inspRecord = lotInspMap.get(l.id);
+                              return (
+                                <span className="text-xs text-destructive font-medium italic">
+                                  {inspRecord?.defectReason || "Spec deviation / defect noted"}
+                                </span>
+                              );
+                            },
+                          },
+                          {
+                            header: "Production Safeguard",
+                            cell: () => (
+                              <span className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
+                                <Lock className="size-3.5" /> Usable Balance 0m (Issue Blocked)
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Action",
+                            cell: (l) => {
+                              const inspRecord = lotInspMap.get(l.id);
+                              if (inspRecord) {
+                                return (
+                                  <IncomingQcDialog
+                                    inspection={inspRecord}
+                                    lot={l}
+                                    triggerLabel="Re-Evaluate Lot"
+                                  />
+                                );
+                              }
+                              return (
+                                <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                                  <AppLink href={paths.lot(l.id)}>View Lot</AppLink>
+                                </Button>
+                              );
+                            },
+                          },
+                        ]}
+                      />
+                    );
+                  }}
+                </Loadable>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // GENERAL QUALITY ASSURANCE & STATION 6 QA VIEW (qc.demo / Manager)
+  // -------------------------------------------------------------
+  return (
+    <>
+      <PageHeader
+        title="Quality Assurance"
+        description={
+          me.role === "M"
+            ? "Managerial quality oversight. Only certified inspectors record operational decisions."
+            : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
+        }
+        crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality" }]}
+      />
+
+      <div className="space-y-6">
+        {/* KPI Summary Cards */}
+        <Loadable query={insp}>
+          {(all) => {
             const openFinal = all.filter((i) => i.kind === "final" && i.status === "open").length;
             const openReinsp = all.filter(
               (i) => i.kind === "reinspection" && i.status === "open",
@@ -430,7 +832,7 @@ export function QualityView() {
         </Loadable>
 
         {/* Active Garment Holds Banner (Final QA / Managers only) */}
-        {!isIncomingQC && heldGarments.length > 0 && (
+        {heldGarments.length > 0 && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm">
             <div className="flex items-start gap-3">
               <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
@@ -461,7 +863,7 @@ export function QualityView() {
         )}
 
         {/* Workstation RFID Station Panel (Station 6 Final QA only) */}
-        {!isIncomingQC && qRfidStation.data && (
+        {qRfidStation.data && (
           <Section
             title="Station 6: RFID Final Inspection Reader (Result-First)"
             description="Examine shirt, select Pass or Fail (with defect code) to arm context, then scan card. Identity resolves automatically."
