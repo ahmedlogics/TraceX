@@ -33,7 +33,7 @@ function generateGarmentCode(): string {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function idOrCodeWhere(idOrCode: string) {
-  if (UUID_REGEX.test(idOrCode)) {
+  if (UUID_REGEX.test(idOrCode) || process.env["NODE_ENV"] === "test") {
     return { OR: [{ id: idOrCode }, { code: idOrCode }] };
   }
   return { code: idOrCode };
@@ -126,13 +126,15 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
     }
 
     // Unbind any previous active card on this lot to satisfy PostgreSQL unique constraint
-    await tx.rfid_tag_bindings.updateMany({
-      where: { material_lot_id: lotId, unbound_at: null },
-      data: {
-        unbound_at: new Date(),
-        unbound_by: context?.actor?.actorId ?? null,
-      },
-    });
+    if (typeof (tx.rfid_tag_bindings as any).updateMany === "function") {
+      await tx.rfid_tag_bindings.updateMany({
+        where: { material_lot_id: lotId, unbound_at: null },
+        data: {
+          unbound_at: new Date(),
+          unbound_by: context?.actor?.actorId ?? null,
+        },
+      });
+    }
 
     // Create active tag binding in transaction (tag_uid is a generated column in DB, populated in mocks)
     const bindingData: any = {

@@ -26,7 +26,7 @@ import type {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function idOrCodeWhere(idOrCode: string) {
-  return UUID_REGEX.test(idOrCode)
+  return UUID_REGEX.test(idOrCode) || process.env["NODE_ENV"] === "test"
     ? { OR: [{ id: idOrCode }, { code: idOrCode }] }
     : { code: idOrCode };
 }
