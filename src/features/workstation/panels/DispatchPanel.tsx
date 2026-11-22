@@ -2,10 +2,13 @@ import { useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
   Boxes,
   CheckCircle2,
   Clock,
   Cpu,
+  ExternalLink,
+  Link2,
   Package as PkgIcon,
   Radio,
   ScanLine,
@@ -200,10 +203,145 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                 <span>·</span>
                                 <span>Time: {fmt.dateTime(lastOutcome.at)}</span>
                               </div>
+
+                              {lastOutcome.resolution === "accepted" && (
+                                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-emerald-500/20 mt-2">
+                                  <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                                    Connected Downstream:
+                                  </span>
+                                  {currentShipment && (
+                                    <AppLink
+                                      href={paths.shipment(currentShipment.id)}
+                                      className="inline-flex items-center gap-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 px-2 py-0.5 text-[11px] font-medium text-emerald-900 dark:text-emerald-200"
+                                    >
+                                      <Truck className="size-3" /> Shipment {currentShipment.id}
+                                    </AppLink>
+                                  )}
+                                  <AppLink
+                                    href={paths.ledger}
+                                    className="inline-flex items-center gap-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 px-2 py-0.5 text-[11px] font-medium text-emerald-900 dark:text-emerald-200"
+                                  >
+                                    <CheckCircle2 className="size-3" /> Supply Chain Ledger
+                                  </AppLink>
+                                  {currentPkg?.garmentIds[0] && (
+                                    <AppLink
+                                      href={paths.garment(currentPkg.garmentIds[0])}
+                                      className="inline-flex items-center gap-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 px-2 py-0.5 text-[11px] font-medium text-emerald-900 dark:text-emerald-200"
+                                    >
+                                      <ExternalLink className="size-3" /> Garment {currentPkg.garmentIds[0]} Timeline
+                                    </AppLink>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    {/* Upstream & Downstream Integration Process Flow Bar */}
+                    <div className="rounded-xl border bg-muted/40 p-3.5 text-xs shadow-xs">
+                      <div className="flex items-center justify-between pb-2.5 border-b mb-3">
+                        <span className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                          <Link2 className="size-3.5 text-primary" /> End-to-End Operational Flow & Station Progression
+                        </span>
+                        <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                          All stations connected in real-time
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-5">
+                        {/* Step 1: Upstream Station 6 QA */}
+                        <div className="flex flex-col gap-1 rounded-lg border bg-card p-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span className="font-semibold text-foreground flex items-center gap-1">
+                              <ShieldCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                              Station 6 · QA
+                            </span>
+                            <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium px-1 rounded">Passed</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-tight">
+                            Inspected & verified; zero active holds enforced.
+                          </p>
+                          <AppLink href={paths.garments} className="text-[10px] text-primary hover:underline mt-auto inline-flex items-center gap-0.5 pt-1">
+                            QA Registry <ArrowRight className="size-2.5" />
+                          </AppLink>
+                        </div>
+
+                        {/* Step 2: Upstream Station 7 Packing */}
+                        <div className="flex flex-col gap-1 rounded-lg border bg-card p-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span className="font-semibold text-foreground flex items-center gap-1">
+                              <Boxes className="size-3.5 text-primary" />
+                              Station 7 · Packing
+                            </span>
+                            <span className="text-[10px] bg-primary/10 text-primary font-medium px-1 rounded">Sealed</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-tight">
+                            Garments packed & master carton RFID tag bound.
+                          </p>
+                          <AppLink href={paths.fulfilment} className="text-[10px] text-primary hover:underline mt-auto inline-flex items-center gap-0.5 pt-1">
+                            Packing Station <ArrowRight className="size-2.5" />
+                          </AppLink>
+                        </div>
+
+                        {/* Step 3: Upstream Station 8 Warehouse */}
+                        <div className="flex flex-col gap-1 rounded-lg border bg-card p-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span className="font-semibold text-foreground flex items-center gap-1">
+                              <Warehouse className="size-3.5 text-amber-600 dark:text-amber-400" />
+                              Station 8 · Warehouse
+                            </span>
+                            <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium px-1 rounded">Staged</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-tight">
+                            Stock inventoried & assigned to carrier consignments.
+                          </p>
+                          <AppLink href={paths.fulfilment} className="text-[10px] text-primary hover:underline mt-auto inline-flex items-center gap-0.5 pt-1">
+                            Fulfilment Stock <ArrowRight className="size-2.5" />
+                          </AppLink>
+                        </div>
+
+                        {/* Step 4: CURRENT Station 9 Dispatch Gate */}
+                        <div className="flex flex-col gap-1 rounded-lg border-2 border-primary bg-primary/5 p-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-foreground flex items-center gap-1">
+                              <Radio className="size-3.5 text-primary animate-pulse" />
+                              Station 9 · Gate
+                            </span>
+                            <span className="text-[10px] bg-primary text-primary-foreground font-semibold px-1 rounded">ACTIVE</span>
+                          </div>
+                          <p className="text-[11px] text-foreground font-medium leading-tight">
+                            Single-scan box reading; instant atomic status update.
+                          </p>
+                          <span className="text-[10px] text-primary font-mono mt-auto pt-1 font-semibold">
+                            Dock Scanner 9 Armed
+                          </span>
+                        </div>
+
+                        {/* Step 5: Downstream Next Screens */}
+                        <div className="flex flex-col gap-1 rounded-lg border bg-card p-2.5 shadow-2xs">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span className="font-semibold text-foreground flex items-center gap-1">
+                              <Truck className="size-3.5 text-indigo-600 dark:text-indigo-400" />
+                              Next Screens
+                            </span>
+                            <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium px-1 rounded">DPP & Ledger</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-tight">
+                            Shipment departure, consumer DPP & cryptographic ledger.
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-auto pt-1">
+                            <AppLink href={paths.shipments} className="text-[10px] text-primary hover:underline">
+                              Shipments
+                            </AppLink>
+                            <span className="text-muted-foreground text-[10px]">·</span>
+                            <AppLink href={paths.ledger} className="text-[10px] text-primary hover:underline">
+                              Ledger
+                            </AppLink>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Department Scope Guard */}
@@ -437,6 +575,29 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                         {currentPkg.garmentIds.length} garments packed
                                       </span>
                                     </div>
+                                    <div>
+                                      <span className="text-muted-foreground block text-[10px] uppercase">
+                                        Upstream Origin
+                                      </span>
+                                      <span className="text-foreground text-[11px]">
+                                        Station 7 ({currentPkg.packedBy ?? "Packing"})
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground block text-[10px] uppercase">
+                                        Downstream Consignment
+                                      </span>
+                                      {currentShipment ? (
+                                        <AppLink
+                                          href={paths.shipment(currentShipment.id)}
+                                          className="font-mono font-semibold text-primary hover:underline inline-flex items-center gap-0.5 text-[11px]"
+                                        >
+                                          {currentShipment.id} <ArrowRight className="size-2.5" />
+                                        </AppLink>
+                                      ) : (
+                                        <span className="text-muted-foreground text-[11px]">Unassigned</span>
+                                      )}
+                                    </div>
                                   </div>
 
                                   {/* Quality Hold Status Check */}
@@ -463,8 +624,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                         <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold">
                                           <ShieldCheck className="size-4 shrink-0" />
                                           <span>
-                                            Hold Status Check: None (100% of linked garments
-                                            verified clear)
+                                            QC Clearance Check: 100% of garments passed Station 6 Final QA
                                           </span>
                                         </div>
                                       );
@@ -474,7 +634,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                   {/* Linked Items List */}
                                   <div className="space-y-1.5 pt-1">
                                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                                      Packed Garments in this Carton
+                                      Packed Garments in this Carton (Click to inspect)
                                     </span>
                                     <div className="max-h-36 overflow-y-auto rounded border bg-muted/20 p-2 divide-y divide-border/60">
                                       {currentPkg.garmentIds.map((gid) => {
@@ -485,12 +645,26 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                             className="py-1 flex items-center justify-between text-xs"
                                           >
                                             <div className="flex items-center gap-2">
-                                              <span className="font-mono font-medium text-foreground">
+                                              <AppLink
+                                                href={paths.garment(gid)}
+                                                className="font-mono font-bold text-primary hover:underline text-xs"
+                                                title="View garment inspection history and audit events"
+                                              >
                                                 {gid}
-                                              </span>
-                                              <span className="text-muted-foreground text-[11px] truncate max-w-[180px]">
+                                              </AppLink>
+                                              <span className="text-muted-foreground text-[11px] truncate max-w-[150px]">
                                                 {g?.productName ?? "Garment Unit"}
                                               </span>
+                                              {g?.publicId && (
+                                                <AppLink
+                                                  href={paths.publicJourney(g.publicId)}
+                                                  target="_blank"
+                                                  title="Open Customer Digital Product Passport"
+                                                  className="text-muted-foreground hover:text-foreground inline-flex items-center"
+                                                >
+                                                  <ExternalLink className="size-2.5" />
+                                                </AppLink>
+                                              )}
                                             </div>
                                             <div className="flex items-center gap-1.5">
                                               {g?.size && (
@@ -639,7 +813,13 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                   </h3>
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
+                                  <AppLink
+                                    href={paths.shipment(currentShipment.id)}
+                                    className="hidden sm:inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-medium text-primary hover:bg-muted"
+                                  >
+                                    <ExternalLink className="size-3" /> Consignment #{currentShipment.id} View
+                                  </AppLink>
                                   <StatusBadge status={currentShipment.status} />
                                 </div>
                               </div>

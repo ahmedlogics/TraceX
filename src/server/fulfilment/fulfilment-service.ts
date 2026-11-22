@@ -26,6 +26,7 @@ import type {
 import type { ActorContext } from "../contracts/actor";
 import { ensureStaffUserRecord } from "../quality/quality-service";
 import { publishPublicGarmentPayload } from "../public/public-service";
+import { createInternalCommitment } from "../ledger/commitment-service";
 
 function isValidUuid(id?: string): boolean {
   if (!id) return false;
@@ -1172,23 +1173,86 @@ export async function dispatchBoxScan(
       },
     });
 
-    await tx.trace_events.create({
+    const ev = await tx.trace_events.create({
       data: {
         event_type: "shipment_dispatched",
         subject_revision: 1,
         garment_id: g.id,
         package_id: pkg.id,
         actor_id: staffUserId,
-        details: { stage: "dispatched", container: pkg.code },
+        details: { stage: "dispatched", container: pkg.code, shipmentId },
         occurred_at: now,
         recorded_at: now,
       },
     });
 
     try {
+      await createInternalCommitment(
+        {
+          traceEventId: ev.id,
+          payload: {
+            eventType: "shipment_dispatched",
+            garmentId: g.id,
+            garmentCode: g.code,
+            packageCode: pkg.code,
+            shipmentId,
+            dispatchedAt: now.toISOString(),
+          },
+        },
+        tx,
+      );
+    } catch (commErr) {
+      console.warn(`[DISPATCH_WARN] Ledger commitment skipped for traceEvent ${ev.id}:`, commErr);
+    }
+
+    try {
       await publishPublicGarmentPayload(tx, g.id, staffUserId);
     } catch (pubErr) {
       console.warn(`[DISPATCH_WARN] Public payload publication skipped for garment ${g.id}:`, pubErr);
+    }
+  }
+
+  // Link shipment and advance status if shipmentId provided
+  if (shipmentId) {
+    try {
+      const shp = await tx.shipments.findFirst({
+        where: {
+          OR: [
+            ...(isValidUuid(shipmentId) ? [{ id: shipmentId }] : []),
+            { code: shipmentId },
+          ],
+        },
+      });
+      if (shp) {
+        const existingSp = await tx.shipment_packages.findFirst({
+          where: {
+            shipment_id: shp.id,
+            package_id: pkg.id,
+            deallocated_at: null,
+          },
+        });
+        if (!existingSp) {
+          await tx.shipment_packages.create({
+            data: {
+              shipment_id: shp.id,
+              package_id: pkg.id,
+              allocated_by: staffUserId,
+              allocated_at: now,
+            },
+          });
+        }
+        if (shp.status === "draft") {
+          await tx.shipments.update({
+            where: { id: shp.id },
+            data: {
+              status: "approved",
+              revision: { increment: 1 },
+            },
+          });
+        }
+      }
+    } catch (shpErr) {
+      console.warn("[DISPATCH_WARN] Shipment package link update skipped:", shpErr);
     }
   }
 

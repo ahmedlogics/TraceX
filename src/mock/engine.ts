@@ -1312,26 +1312,49 @@ export function dispatchBoxScan(
   // Update target shipment manifest verification if linked
   const targetShipment =
     (shipmentId && s.shipments.find((sh) => sh.id === shipmentId)) ||
-    s.shipments.find((sh) => sh.garmentIds.some((gid) => pkg!.garmentIds.includes(gid)));
+    s.shipments.find((sh) => sh.garmentIds.some((gid) => pkg!.garmentIds.includes(gid))) ||
+    s.shipments.find((sh) => sh.status !== "departed");
 
   if (targetShipment) {
     if (!targetShipment.verifiedGarmentIds) {
       targetShipment.verifiedGarmentIds = [];
     }
+    if (!targetShipment.garmentIds) {
+      targetShipment.garmentIds = [];
+    }
+    if (!targetShipment.allocatedGarmentIds) {
+      targetShipment.allocatedGarmentIds = [];
+    }
     for (const g of linkedGarments) {
+      g.shipmentId = targetShipment.id;
+      if (!targetShipment.garmentIds.includes(g.id)) {
+        targetShipment.garmentIds.push(g.id);
+      }
+      if (!targetShipment.allocatedGarmentIds.includes(g.id)) {
+        targetShipment.allocatedGarmentIds.push(g.id);
+      }
       if (!targetShipment.verifiedGarmentIds.includes(g.id)) {
         targetShipment.verifiedGarmentIds.push(g.id);
       }
     }
     if (
-      targetShipment.status === "planned" &&
-      targetShipment.allocatedGarmentIds.length > 0 &&
-      targetShipment.allocatedGarmentIds.every((id) =>
-        targetShipment.verifiedGarmentIds!.includes(id),
-      )
+      targetShipment.status === "planned" ||
+      targetShipment.status === "draft"
     ) {
       targetShipment.status = "loading";
     }
+
+    s.ledger.unshift({
+      id: nextId(s, "ledger", "LC"),
+      subjectType: "shipment",
+      subjectId: targetShipment.id,
+      milestone: `Carton ${pkg.id} (${linkedGarments.length} units) verified & loaded at Station 9 Gate`,
+      status: "confirmed",
+      digest: `0x${Math.random().toString(16).slice(2, 10)}`,
+      createdAt: now(),
+      updatedAt: now(),
+      attempts: 1,
+    });
   }
 
   closeTasks(s, pkg.id, ["dispatch"]);

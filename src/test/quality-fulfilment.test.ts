@@ -565,6 +565,24 @@ describe("Member 3: Fulfilment, Warehousing & Outbound Departure Gate", () => {
     expect(pkg.status).toBe("dispatched");
     expect(linkedShirt.stage).toBe("dispatched");
 
+    // Verify downstream integration:
+    // a. Garment has shipment ID linked
+    expect(linkedShirt.shipmentId).toBeDefined();
+    // b. Target shipment has verified the garment
+    const targetShipment = s.shipments.find((sh) => sh.id === linkedShirt.shipmentId)!;
+    expect(targetShipment.verifiedGarmentIds).toContain(linkedShirt.id);
+    // c. Supply chain ledger recorded cryptographic commitments
+    const garmentCommitment = s.ledger.find(
+      (l) => l.subjectType === "garment" && l.subjectId === linkedShirt.id && l.milestone.includes("Station 9"),
+    );
+    expect(garmentCommitment).toBeDefined();
+    expect(garmentCommitment?.status).toBe("confirmed");
+    const shipmentCommitment = s.ledger.find(
+      (l) => l.subjectType === "shipment" && l.subjectId === targetShipment.id,
+    );
+    expect(shipmentCommitment).toBeDefined();
+    expect(shipmentCommitment?.status).toBe("confirmed");
+
     // 6. Check 3: Duplicate Dispatch Guard
     const dupRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
     expect(dupRes.resolution).toBe("rejected_business_rule");
