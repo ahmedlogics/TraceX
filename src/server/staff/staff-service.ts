@@ -427,8 +427,8 @@ export async function getStaffDashboard(
     });
   }
 
-  // Info: Material Lots Awaiting Inspection
-  if (["M", "O", "Q"].includes(user.role)) {
+  // Info: Material Lots Awaiting Inspection (only relevant to Quality inspectors and Managers)
+  if (["M", "Q"].includes(user.role)) {
     awaitingLots.forEach((l) => {
       alerts.push({
         tone: "info",

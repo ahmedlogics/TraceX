@@ -1,13 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { pageHead } from "@/app/head";
-import { TasksView } from "@/features/tasks/TasksView";
+import { paths } from "@/app/paths";
+import { DashboardView } from "@/features/dashboard/DashboardView";
 
 export const Route = createFileRoute("/staff/_workspace/tasks")({
-  staticData: { access: "tasks" },
-  head: () => pageHead("Tasks", "Scoped work queue with claim and assignment."),
-  component: TasksRoute,
+  staticData: { access: "home" },
+  head: () => pageHead("Staff Home", "Role-aware metrics, unified work queue and alerts."),
+  beforeLoad: () => {
+    throw redirect({ to: paths.home });
+  },
+  component: DashboardView,
 });
-
-function TasksRoute() {
-  return <TasksView />;
-}

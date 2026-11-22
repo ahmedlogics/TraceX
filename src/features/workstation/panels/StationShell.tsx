@@ -9,24 +9,28 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmt, PageHeader } from "@/components/wt/layout";
 import { StatusBadge, type Tone } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { rfidStationCodes, rfidStationLabels, stationDepartment } from "@/domain/labels";
-import type { RfidStationCode, ScanOutcome } from "@/domain/types";
+import type { RfidStationCode, ScanOutcome, StaffUser } from "@/domain/types";
 import { useWtQuery } from "@/lib/data/hooks";
 import { UserName } from "@/features/shared/directory";
+import { can } from "@/domain/permissions";
 import { useMe } from "@/features/shared/useMe";
 import { ReceivingPanel } from "./ReceivingPanel";
 import { IssuePanel } from "./IssuePanel";
 import { CuttingPanel } from "./CuttingPanel";
+import { StitchingPanel } from "./StitchingPanel";
 import { RoutinePanel } from "./RoutinePanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
 
-function defaultStationForDept(dept: string): RfidStationCode {
-  switch (dept) {
+function defaultStationForUser(user: StaffUser): RfidStationCode {
+  if (user.username === "receiving.demo") return "fabric_receiving";
+  if (user.username === "rawstore.demo") return "fabric_issue";
+
+  switch (user.department) {
     case "receiving":
       return "fabric_receiving";
     case "raw-store":
@@ -52,17 +56,19 @@ function defaultStationForDept(dept: string): RfidStationCode {
 
 export function StationShell() {
   const me = useMe();
-  const isManager = me.role === "M";
-  const [managerStationCode, setManagerStationCode] = useState<RfidStationCode>(() =>
-    defaultStationForDept(me.department),
-  );
+  const availableStations = rfidStationCodes.filter((code) => can.operateStation(me, code));
+  const activeStations =
+    availableStations.length > 0 ? availableStations : [defaultStationForUser(me)];
 
-  // Non-managers are strictly locked to their assigned department station.
-  // Regular operators cannot switch to any other department or person's workstation.
-  const stationCode = isManager ? managerStationCode : defaultStationForDept(me.department);
+  const [stationCode, setStationCode] = useState<RfidStationCode>(() => {
+    const def = defaultStationForUser(me);
+    return activeStations.includes(def) ? def : activeStations[0]!;
+  });
 
-  const qStation = useWtQuery(["rfid-station", stationCode], (c) =>
-    c.getRfidStationData(stationCode),
+  const effectiveStation = activeStations.includes(stationCode) ? stationCode : activeStations[0]!;
+
+  const qStation = useWtQuery(["rfid-station", effectiveStation], (c) =>
+    c.getRfidStationData(effectiveStation),
     { refetchInterval: 3000 },
   );
 
@@ -79,21 +85,21 @@ export function StationShell() {
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Active RFID Station:
                 </span>
-                {isManager ? (
+                {activeStations.length > 1 ? (
                   <select
-                    value={stationCode}
-                    onChange={(e) => setManagerStationCode(e.target.value as RfidStationCode)}
+                    value={effectiveStation}
+                    onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
                     className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   >
-                    {rfidStationCodes.map((code) => (
+                    {activeStations.map((code) => (
                       <option key={code} value={code}>
-                        {rfidStationLabels[code]}
+                        {rfidStationLabels[code]} ({code})
                       </option>
                     ))}
                   </select>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary">
-                    {rfidStationLabels[stationCode]}
+                    {rfidStationLabels[effectiveStation]} ({effectiveStation})
                   </span>
                 )}
               </div>
@@ -114,12 +120,25 @@ export function StationShell() {
             >
               <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                 <div className="space-y-1">
-                  <p className="wt-eyebrow">
-                    Station #{rfidStationCodes.indexOf(stationCode) + 1} of 9
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="wt-eyebrow">
+                      {activeStations.length > 1
+                        ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
+                        : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
+                    </p>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      code: {effectiveStation}
+                    </span>
+                  </div>
                   <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                     {stData.stationName}
                   </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Assigned department:{" "}
+                    <span className="font-medium text-foreground">
+                      {stationDepartment[effectiveStation]}
+                    </span>
+                  </p>
                 </div>
 
                 <div className="flex flex-col items-start gap-2 md:items-end">
@@ -174,16 +193,15 @@ export function StationShell() {
             </section>
 
             {/* Feature-owned Panel Switch */}
-            {stationCode === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
-            {stationCode === "fabric_issue" && <IssuePanel stationData={stData} />}
-            {stationCode === "cutting" && <CuttingPanel stationData={stData} />}
-            {(stationCode === "stitching" || stationCode === "finishing") && (
-              <RoutinePanel stationData={stData} />
-            )}
-            {stationCode === "final_qc" && <QAPanel stationData={stData} />}
-            {(stationCode === "packing" ||
-              stationCode === "warehouse" ||
-              stationCode === "dispatch") && <LogisticsPanel stationData={stData} />}
+            {effectiveStation === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
+            {effectiveStation === "fabric_issue" && <IssuePanel stationData={stData} />}
+            {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
+            {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
+            {effectiveStation === "finishing" && <RoutinePanel stationData={stData} />}
+            {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
+            {(effectiveStation === "packing" ||
+              effectiveStation === "warehouse" ||
+              effectiveStation === "dispatch") && <LogisticsPanel stationData={stData} />}
           </div>
         );
       }}

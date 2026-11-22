@@ -1122,7 +1122,7 @@ export function routineScan(
     return rejectScan(
       s,
       normUid,
-      "rejected_on_hold",
+      "rejected_business_rule",
       `${g.id} has an active quality hold (${g.hold.reason}). Routine progression blocked until QC release.`,
     );
   }
@@ -1412,7 +1412,7 @@ export function receiveLot(
   actor: StaffUser,
   input: { material: string; supplierRef: string; qty: number; unit?: "m" | "kg" | "pcs" },
 ) {
-  ensure(can.receiveLot(actor), "forbidden", "Only receiving staff can record a lot receipt.");
+  ensure(can.receiveLot(actor), "forbidden", "Only receiving staff or managers can record a lot receipt.");
   ensure(
     input.material.trim() && input.qty > 0,
     "invalid",
