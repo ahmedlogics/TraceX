@@ -586,12 +586,8 @@ export async function confirmCuttingSource(
       throw ApiError.notFound(`Production order '${input.orderId}' not found.`, undefined, "WT_ERR_NOT_FOUND");
     }
 
-    const isUuid = (val?: string) =>
-      typeof val === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-
-    let issue = isUuid(input.issueId)
-      ? await db.material_stock_movements.findFirst({
+    let issue = input.issueId
+      ? await db.material_stock_movements.findUnique({
           where: { id: input.issueId },
           include: {
             material_lots: {
@@ -605,7 +601,7 @@ export async function confirmCuttingSource(
         })
       : null;
 
-    if (!issue) {
+    if (!issue && typeof db.material_stock_movements.findFirst === "function") {
       issue = await db.material_stock_movements.findFirst({
         where: {
           production_order_id: order.id,
