@@ -120,10 +120,10 @@ export function MetricGrid({
   );
 }
 
-export function IdLink({ href, id }: { href: string; id: string }) {
+export function IdLink({ href, id, label }: { href: string; id: string; label?: ReactNode }) {
   return (
     <AppLink href={href} className="wt-id text-primary underline-offset-2 hover:underline">
-      {id}
+      {label ?? id}
     </AppLink>
   );
 }

@@ -42,9 +42,9 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
 
   // Lot-level quantity states if this is an incoming inspection
   const lotQty = d.lot?.receivedQty ?? 20;
-  const [acceptedQty, setAcceptedQty] = useState(d.lot?.acceptedQty ?? lotQty);
-  const [heldQty, setHeldQty] = useState(d.lot?.heldQty ?? 0);
-  const [rejectedQty, setRejectedQty] = useState(d.lot?.rejectedQty ?? 0);
+  const [acceptedQty, setAcceptedQty] = useState<number | string>(d.lot?.acceptedQty ?? lotQty);
+  const [heldQty, setHeldQty] = useState<number | string>(d.lot?.heldQty ?? 0);
+  const [rejectedQty, setRejectedQty] = useState<number | string>(d.lot?.rejectedQty ?? 0);
 
   useEffect(() => {
     setChecklist(i.checklist);
@@ -53,6 +53,12 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
   }, [i.id, i.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allChecked = checklist.every((c) => c.checked);
+  const isLotInspection = i.subjectType === "lot" && !!d.lot;
+  const numAccepted = Number(acceptedQty) || 0;
+  const numHeld = Number(heldQty) || 0;
+  const numRejected = Number(rejectedQty) || 0;
+  const totalCalculated = Math.round((numAccepted + numHeld + numRejected) * 1000) / 1000;
+  const isLotBalanced = !isLotInspection || Math.abs(totalCalculated - lotQty) < 1e-3;
 
   const canRelease = g ? can.releaseHold(me, g, d.latestForSubject, rc) && !isSelfRepairer : false;
 
@@ -63,16 +69,16 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
           c.submitIncomingQc({
             lotId: d.lot!.id,
             inspectionId: i.id,
-            acceptedQty,
-            heldQty,
-            rejectedQty,
+            acceptedQty: numAccepted,
+            heldQty: numHeld,
+            rejectedQty: numRejected,
             checklist,
             notes,
             result,
             defectReason: result === "fail" ? defect : undefined,
           }),
         result === "pass"
-          ? `Incoming inspection ${i.id} passed: ${acceptedQty}m accepted.`
+          ? `Incoming inspection ${i.id} passed: ${numAccepted}m accepted.`
           : `Incoming inspection ${i.id} failed / held.`,
       );
     }
@@ -288,26 +294,47 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
                     <Input
                       id="dt-acc"
                       type="number"
+                      step="any"
+                      min={0}
+                      max={lotQty}
                       value={acceptedQty}
-                      onChange={(e) => setAcceptedQty(Number(e.target.value))}
+                      onChange={(e) => setAcceptedQty(e.target.value)}
                     />
                   </Field>
                   <Field label="Held (Quarantine)" htmlFor="dt-held">
                     <Input
                       id="dt-held"
                       type="number"
+                      step="any"
+                      min={0}
+                      max={lotQty}
                       value={heldQty}
-                      onChange={(e) => setHeldQty(Number(e.target.value))}
+                      onChange={(e) => setHeldQty(e.target.value)}
                     />
                   </Field>
                   <Field label="Rejected" htmlFor="dt-rej">
                     <Input
                       id="dt-rej"
                       type="number"
+                      step="any"
+                      min={0}
+                      max={lotQty}
                       value={rejectedQty}
-                      onChange={(e) => setRejectedQty(Number(e.target.value))}
+                      onChange={(e) => setRejectedQty(e.target.value)}
                     />
                   </Field>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span
+                    className={isLotBalanced ? "text-success font-medium" : "text-destructive font-semibold"}
+                  >
+                    Total accounted: {totalCalculated} / {lotQty} {d.lot?.unit ?? "m"}
+                  </span>
+                  {!isLotBalanced && (
+                    <span className="text-destructive font-medium">
+                      Strict Balance Required: (Accepted + Held + Rejected = {lotQty} {d.lot?.unit ?? "m"}).
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Accepted quantity will become the active issuable stock for production cutting.
@@ -383,7 +410,11 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
 
                   <div className="flex flex-wrap items-center gap-3 pt-2">
                     <Button
-                      disabled={pending || !allChecked}
+                      disabled={
+                        pending ||
+                        !allChecked ||
+                        (isLotInspection && (!isLotBalanced || numAccepted <= 0))
+                      }
                       onClick={() => void submit("pass")}
                       className="bg-success text-success-foreground hover:bg-success/90"
                     >
@@ -391,7 +422,11 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
                     </Button>
                     <Button
                       variant="destructive"
-                      disabled={pending || !defect.trim()}
+                      disabled={
+                        pending ||
+                        !defect.trim() ||
+                        (isLotInspection && !isLotBalanced)
+                      }
                       onClick={() => void submit("fail")}
                     >
                       <XCircle className="size-4 mr-1.5" /> Submit Fail & Open Hold

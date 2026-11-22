@@ -167,6 +167,42 @@ export async function openReaderSession(options: {
     },
   });
 
+  // If opening fabric_issue, automatically arm an action context for the latest approved order
+  if (options.stationCode === "fabric_issue") {
+    const order = await prisma.production_orders.findFirst({
+      where: { status: { in: ["approved", "in_progress"] } },
+      orderBy: { created_at: "desc" },
+    });
+    if (order) {
+      const requiredQty = order.planned_quantity ? Number(order.planned_quantity) * 2.0 : 8.0;
+      const targetExpiry = new Date(Date.now() + 5 * 60 * 1000);
+      const ctxExpiresAt =
+        expiresAt < targetExpiry ? new Date(expiresAt.getTime() - 1000) : targetExpiry;
+
+      const createdCtx = await prisma.rfid_action_contexts.create({
+        data: {
+          reader_session_id: session.id,
+          action_code: "issue_bundle",
+          status: "awaiting_ack",
+          quantity: requiredQty,
+          expires_at: ctxExpiresAt,
+          production_order_id: order.id,
+          answers: { orderId: order.id, orderCode: order.code, qty: requiredQty },
+        },
+      });
+
+      const armedCtx = await prisma.rfid_action_contexts.update({
+        where: { id: createdCtx.id },
+        data: {
+          status: "armed",
+          acknowledged_at: new Date(),
+        },
+      });
+
+      console.log(`- Action Ctx:  issue_bundle armed for ${order.code} (Context ID: ${armedCtx.id})`);
+    }
+  }
+
   console.log(`[SESSION OPENED] ID: ${session.id}`);
   console.log(`- Station:     ${session.station_code} (Reader Index: ${session.reader_index})`);
   console.log(`- Operator:    ${user.username} (${user.displayName}, ${user.role}/${user.department})`);

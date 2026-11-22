@@ -39,6 +39,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Materials & production",
     items: [
       { key: "materialLots", label: "Material lots", href: paths.lots, icon: Boxes },
+      { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
       { key: "garments", label: "Garments", href: paths.garments, icon: Shirt },
     ],
   },

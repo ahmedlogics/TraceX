@@ -427,7 +427,9 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
   const held = s.garments.filter((g) => g.hold);
   const openInsp = s.inspections.filter((i) => i.status === "open");
   const failedLedger = s.ledger.filter((l) => l.status === "failed");
-  const awaitingLots = s.lots.filter((l) => l.status === "awaiting-inspection");
+  const awaitingLots = s.lots.filter(
+    (l) => l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned",
+  );
   const activeShipments = s.shipments.filter((x) => x.status !== "departed");
 
   const metricsByRole: Record<StaffUser["role"], DashboardData["metrics"]> = {

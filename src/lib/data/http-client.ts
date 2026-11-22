@@ -344,19 +344,19 @@ export function createHttpClient(): WearTrailClient {
       return (raw || []).map((t) => {
         if (t.department && t.kind) return t as Task;
         let subjectType: Task["subjectType"] = "garment";
-        let subjectId = t.id;
+        let subjectId = t.subjectCode || t.id;
         if (t.garmentId) {
           subjectType = "garment";
-          subjectId = t.garmentId;
+          subjectId = t.subjectCode || t.garmentCode || t.garmentId;
         } else if (t.materialLotId) {
           subjectType = "lot";
-          subjectId = t.materialLotId;
+          subjectId = t.subjectCode || t.materialLotCode || t.materialLotId;
         } else if (t.productionOrderId) {
           subjectType = "order";
-          subjectId = t.productionOrderId;
+          subjectId = t.subjectCode || t.productionOrderCode || t.productionOrderId;
         } else if (t.shipmentId) {
           subjectType = "shipment";
-          subjectId = t.shipmentId;
+          subjectId = t.subjectCode || t.shipmentCode || t.shipmentId;
         }
         let status: Task["status"] = "open";
         if (t.status === "completed" || t.status === "done") {
@@ -376,6 +376,7 @@ export function createHttpClient(): WearTrailClient {
           department: rawDept as any,
           subjectType,
           subjectId,
+          subjectCode: t.subjectCode || subjectId,
           checkpoint: t.checkpointCode ?? t.checkpoint,
           status,
           assigneeId: t.assigneeId,
@@ -441,10 +442,16 @@ export function createHttpClient(): WearTrailClient {
       await req(`/api/rfid/contexts/${contextId}`, { method: "DELETE" });
     },
     async resolveRfidScan(uid: string): Promise<ScanOutcome> {
-      return await req<ScanOutcome>("/api/rfid/ui-scan", {
+      const res = await req<any>("/api/rfid/ui-scan", {
         method: "POST",
         body: { uid },
       });
+      return {
+        ...res,
+        subjectId: res.subjectCode || res.subjectId,
+        lotCode: res.lotCode || (res.subjectKind === "material_lot" ? res.subjectCode : undefined),
+        garmentCode: res.garmentCode || (res.subjectKind === "garment" ? res.subjectCode : undefined),
+      };
     },
     async routineScan(
       uid: string,

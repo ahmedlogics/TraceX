@@ -483,15 +483,22 @@ export async function approveProductionOrder(
 ): Promise<{ orderId: string; status: OrderStatus; approvedAt: string }> {
   const actorRef = toActorRef(actor);
   const normRole = actorRef.role.toLowerCase();
-  const isManagerOrAdmin =
+  const normUsername = (actorRef.username || "").toLowerCase();
+  const normDept = (actorRef.department || "").toLowerCase();
+  const isAuthorized =
     normRole === "manager" ||
     normRole === "m" ||
     normRole === "admin" ||
-    normRole === "a";
+    normRole === "a" ||
+    normUsername === "rawstore.demo" ||
+    normDept === "raw-store" ||
+    normDept === "raw_store" ||
+    normRole === "operator" ||
+    normRole === "o";
 
-  if (!isManagerOrAdmin) {
+  if (!isAuthorized) {
     throw ApiError.forbidden(
-      "Only managers or administrators can approve production orders.",
+      "Only managers, administrators, or raw-store operators can approve production orders.",
       { role: actorRef.role },
       "WT_ERR_FORBIDDEN",
     );

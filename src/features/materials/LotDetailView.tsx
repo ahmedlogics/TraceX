@@ -49,9 +49,9 @@ function IssueDialog({ lot, orders }: { lot: MaterialLot; orders: ProductionOrde
         <Input
           id="iss-qty"
           type="number"
-          min="0.1"
+          min="0.01"
           max={lot.balanceQty}
-          step="0.1"
+          step="any"
           value={qty}
           onChange={(e) => setQty(e.target.value)}
         />

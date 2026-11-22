@@ -22,6 +22,11 @@ export async function listTasks(
       },
       include: {
         staff_users_work_tasks_assignee_idTostaff_users: true,
+        material_lots: { select: { code: true } },
+        production_orders: { select: { code: true } },
+        garments: { select: { code: true } },
+        packages: { select: { code: true } },
+        shipments: { select: { code: true } },
       },
       orderBy: { created_at: "desc" },
     });
@@ -37,6 +42,13 @@ export async function listTasks(
       productionOrderId: t.production_order_id,
       packageId: t.package_id,
       shipmentId: t.shipment_id,
+      subjectCode:
+        t.material_lots?.code ??
+        t.production_orders?.code ??
+        t.garments?.code ??
+        t.packages?.code ??
+        t.shipments?.code ??
+        null,
       assigneeId: t.assignee_id,
       assigneeName:
         t.staff_users_work_tasks_assignee_idTostaff_users?.display_name ?? null,

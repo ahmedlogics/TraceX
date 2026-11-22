@@ -276,6 +276,44 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
       );
     }
 
+    // Resolve target production order
+    let targetOrderId: string | undefined;
+    let targetOrderCode: string | undefined;
+
+    if (envelope.actionContextId) {
+      const ctx = await tx.rfid_action_contexts.findFirst({
+        where: { id: envelope.actionContextId },
+      });
+      const answers =
+        ctx && typeof ctx.answers === "object" && ctx.answers !== null
+          ? (ctx.answers as Record<string, unknown>)
+          : null;
+      if (ctx?.production_order_id) {
+        targetOrderId = ctx.production_order_id;
+      } else if (answers?.["orderId"]) {
+        targetOrderId = String(answers["orderId"]);
+      }
+    }
+
+    if (!targetOrderId && tx.production_orders && typeof tx.production_orders.findFirst === "function") {
+      const latestOrder = await tx.production_orders.findFirst({
+        where: { status: { in: ["approved", "in_progress"] } },
+        orderBy: { created_at: "desc" },
+      });
+      if (latestOrder) {
+        targetOrderId = latestOrder.id;
+        targetOrderCode = latestOrder.code;
+      }
+    } else if (targetOrderId && tx.production_orders && typeof tx.production_orders.findFirst === "function") {
+      const matchedOrder = await tx.production_orders.findFirst({
+        where: idOrCodeWhere(targetOrderId),
+      });
+      if (matchedOrder) {
+        targetOrderId = matchedOrder.id;
+        targetOrderCode = matchedOrder.code;
+      }
+    }
+
     return {
       kind: "material_lot",
       subjectId: lot.id,
@@ -283,21 +321,122 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
       isNewEnrollment: false,
       tagUid,
       tagBindingId: binding.id,
+      ...(targetOrderId
+        ? { metadata: { targetOrderId, targetOrderCode: targetOrderCode || targetOrderId } }
+        : {}),
     };
   }
 
   async process(
     envelope: VersionedScanEnvelope,
     subject: PreparedScanSubject,
-    _tx: PrismaTransactionClient,
-    _context?: DomainScanContext,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
   ): Promise<ScanOutcomeResult> {
+    const targetOrderId = subject.metadata?.["targetOrderId"]
+      ? String(subject.metadata["targetOrderId"])
+      : undefined;
+    const targetOrderCode = subject.metadata?.["targetOrderCode"]
+      ? String(subject.metadata["targetOrderCode"])
+      : undefined;
+
+    if (targetOrderId && "$executeRaw" in (tx as any)) {
+      const lot = await tx.material_lots.findUnique({
+        where: { id: subject.subjectId },
+      });
+
+      if (lot) {
+        const available = Number(lot.available_accepted_quantity);
+        const issueQty = available > 0 ? available : 1;
+
+        const operatorId =
+          context?.actor?.actorId ||
+          (context?.session as any)?.operatorId ||
+          (context?.session as any)?.operator_id ||
+          lot.received_by ||
+          "00000000-0000-0000-0000-000000000000";
+
+        // Check if movement already exists for this lot & order to maintain idempotency
+        let movement = await tx.material_stock_movements.findFirst({
+          where: {
+            material_lot_id: lot.id,
+            production_order_id: targetOrderId,
+            kind: "issued",
+          },
+        });
+
+        if (!movement) {
+          movement = await tx.material_stock_movements.create({
+            data: {
+              material_lot_id: lot.id,
+              kind: "issued",
+              production_order_id: targetOrderId,
+              quantity: new Prisma.Decimal(issueQty),
+              reason: `Scanned at Station 2: Auto-linked bundle ${lot.code} to order ${targetOrderCode || targetOrderId}`,
+              performed_by: operatorId,
+              performed_at: new Date(),
+            },
+          });
+
+          // Transition order to in_progress if currently approved
+          await tx.production_orders.update({
+            where: { id: targetOrderId },
+            data: { status: "in_progress", revision: { increment: 1 } },
+          });
+        }
+
+        // Provision cutting job and cutting input for Station 3
+        if (tx.cutting_jobs && typeof tx.cutting_jobs.findFirst === "function") {
+          let cuttingJob = await tx.cutting_jobs.findFirst({
+            where: { production_order_id: targetOrderId },
+            orderBy: { performed_at: "desc" },
+          });
+
+          if (!cuttingJob) {
+            cuttingJob = await tx.cutting_jobs.create({
+              data: {
+                code: `CUT-${Date.now().toString(36).toUpperCase()}`,
+                production_order_id: targetOrderId,
+                performed_by: operatorId,
+              },
+            });
+          }
+
+          if (movement && tx.cutting_inputs && typeof tx.cutting_inputs.findFirst === "function") {
+            const existingInput = await tx.cutting_inputs.findFirst({
+              where: {
+                cutting_job_id: cuttingJob.id,
+                issue_id: movement.id,
+              },
+            });
+            if (!existingInput) {
+              await tx.cutting_inputs.create({
+                data: {
+                  cutting_job_id: cuttingJob.id,
+                  production_order_id: targetOrderId,
+                  material_lot_id: lot.id,
+                  issue_id: movement.id,
+                  issue_kind: "issued",
+                  consumed_quantity: new Prisma.Decimal(issueQty),
+                  waste_quantity: new Prisma.Decimal("0"),
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const orderDesc = targetOrderCode ? `Order ${targetOrderCode}` : "Order";
+
     return {
       scanId: envelope.scanId,
       outcome: "accepted",
       outcomeCode: "issue_confirmed",
-      outcomeMessage: "Bundle linked to Order → Issued to Cutting",
-      stationCode: "fabric_issue",
+      outcomeMessage: targetOrderCode
+        ? `Bundle ${subject.subjectCode} linked to ${orderDesc} → Issued to Cutting`
+        : "Bundle linked to Order → Issued to Cutting",
+      stationCode: this.stationCode,
       subjectKind: "material_lot",
       subjectId: subject.subjectId,
       subjectCode: subject.subjectCode,

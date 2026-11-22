@@ -29,10 +29,10 @@ export function ReceiveLotDialog({
 
   return (
     <FormDialog
-      trigger={triggerLabel ?? "Receive fabric lot"}
-      title="Record Fabric Bundle Receipt"
-      description="Enter incoming fabric roll details (cloth type, received amount, supplier). Once recorded, present an RFID card at Station 1 to assign it."
-      submitLabel="Record lot"
+      trigger={triggerLabel ?? "+ Log Fabric Delivery (Receiving Dock)"}
+      title="Log Incoming Raw Fabric Roll (Receiving Dock)"
+      description="Record a physical fabric delivery arriving at the factory gate. The roll is held in receiving quarantine (0 m usable balance) until an RFID tag is bound at Station 1 and quality sign-off is completed by qc.incoming."
+      submitLabel="Log Delivery Receipt"
       onSubmit={async () => {
         const id = await run(
           (c) => c.receiveLot({ material, supplierRef, qty: Number(qty), unit }),
@@ -59,8 +59,8 @@ export function ReceiveLotDialog({
           <Input
             id="rl-qty"
             type="number"
-            min="0.1"
-            step="0.1"
+            min="0.01"
+            step="any"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
           />
@@ -95,7 +95,12 @@ export function LotsView() {
     <>
       <PageHeader
         title="Material Lots & Fabric Register"
-              crumbs={[{ label: "Staff", href: paths.home }, { label: "Material lots" }]}
+        description={
+          me.username === "rawstore.demo" || me.department === "raw-store"
+            ? undefined
+            : "Physical raw fabric deliveries from suppliers. Newly received rolls arrive in quarantine (0 m stock balance) until cleared by qc.incoming. Only cleared rolls can be issued to production orders at Station 2."
+        }
+        crumbs={[{ label: "Staff", href: paths.home }, { label: "Material lots" }]}
         actions={can.receiveLot(me) ? <ReceiveLotDialog /> : undefined}
       />
 

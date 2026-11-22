@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { getPrismaClient, runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
@@ -160,6 +160,72 @@ export class ScanRoutingService implements IScanRoutingService {
             contextIdToValidate = liveContext.id;
           }
         }
+      }
+    }
+
+    if (
+      !contextIdToValidate &&
+      stationCode === "fabric_issue" &&
+      typeof (db as any).rfid_action_contexts?.findFirst === "function"
+    ) {
+      // First check if an armed or awaiting_ack context already exists for this reader session
+      const existingSessionContext = await (db as any).rfid_action_contexts.findFirst({
+        where: {
+          reader_session_id: session.id,
+          closed_at: null,
+          expires_at: { gt: new Date() },
+          status: { in: ["armed", "awaiting_ack"] },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (existingSessionContext) {
+        contextIdToValidate = existingSessionContext.id;
+      }
+    }
+
+    if (
+      !contextIdToValidate &&
+      stationCode === "fabric_issue" &&
+      typeof (db as any).rfid_action_contexts?.create === "function"
+    ) {
+      // Auto-provision an armed issue_bundle context for Station 2 if none was manually armed
+      const order =
+        typeof (db as any).production_orders?.findFirst === "function"
+          ? await (db as any).production_orders.findFirst({
+              where: { status: { in: ["approved", "in_progress", "planned"] } },
+              orderBy: { created_at: "desc" },
+            })
+          : null;
+
+      if (order) {
+        const requiredQty = order.planned_quantity ? Number(order.planned_quantity) * 2.0 : 8.0;
+        const targetExpiry = new Date(Date.now() + 5 * 60 * 1000);
+        const sessionExpiry = new Date(session.expiresAt);
+        const expiresAt =
+          sessionExpiry < targetExpiry ? new Date(sessionExpiry.getTime() - 1000) : targetExpiry;
+
+        const autoCtx = await (db as any).rfid_action_contexts.create({
+          data: {
+            reader_session_id: session.id,
+            action_code: "issue_bundle",
+            status: "awaiting_ack",
+            quantity: new Prisma.Decimal(requiredQty),
+            expires_at: expiresAt,
+            production_order_id: order.id,
+            answers: { orderId: order.id, orderCode: order.code, qty: requiredQty },
+          },
+        });
+
+        await (db as any).rfid_action_contexts.update({
+          where: { id: autoCtx.id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+
+        contextIdToValidate = autoCtx.id;
       }
     }
 

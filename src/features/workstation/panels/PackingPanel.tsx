@@ -698,16 +698,16 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       </div>
                     </div>
 
-                    {/* Section 3: Hardware Simulation & Rapid Operational Testing Bar */}
+                    {/* Section 3: Hardware RFID Reader */}
                     <Section
-                      title="Scanner 7 Hardware Bench Simulator"
-                      description="Simulate real RFID reader card scans on Station 7 to verify the container aggregation workflow and all 5 backend guards."
+                      title="Scanner 7 — Packing Station Reader"
+                      description="Present RFID tag to Scanner 7 to aggregate garments into containers or register box shipping tags."
                     >
                       <div className="rounded-xl border bg-card p-5 space-y-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                           <div className="flex-1">
                             <Field
-                              label="Bench Antenna Reader (Scanner 7 UID)"
+                              label="Container / Garment Tag UID"
                               htmlFor="packing-scan-uid"
                               hint="Present an RFID tag to Scanner 7 or enter tag UID manually."
                             >
@@ -717,6 +717,11 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 onChange={(e) => setScanUid(e.target.value.toUpperCase())}
                                 className="font-mono uppercase text-sm"
                                 placeholder="e.g. 04B5C6D7"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && scanUid.trim() && !pending && isPackingStaff) {
+                                    void handleScanner7Scan(scanUid);
+                                  }
+                                }}
                               />
                             </Field>
                           </div>
@@ -727,95 +732,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             className="font-bold gap-2 shrink-0"
                           >
                             <ScanLine className="size-4" />
-                            Simulate Scan on Scanner 7
+                            Scan at Scanner 7
                           </Button>
-                        </div>
-
-                        {/* Testing Aids & Scenario Chips */}
-                        <div className="space-y-2 pt-2 border-t">
-                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Interactive Fast-Test Scenarios & Guard Verification:
-                          </span>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {/* Fresh Box Tag */}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
-                              onClick={() => {
-                                const clean = generateFreshBoxUid();
-                                setScanUid(clean);
-                                void handleScanner7Scan(clean);
-                              }}
-                            >
-                              <Sparkles className="size-3 mr-1 text-emerald-600" />
-                              Scan Fresh Box Tag
-                            </Button>
-
-                            {/* Ready Garment Scan */}
-                            {readyForPacking[0]?.rfidUid && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="text-xs border-primary/40 text-primary"
-                                onClick={() => {
-                                  const uid = readyForPacking[0]!.rfidUid!;
-                                  setScanUid(uid);
-                                  void handleScanner7Scan(uid);
-                                }}
-                              >
-                                <Tag className="size-3 mr-1" />
-                                Pack Next Ready Shirt ({readyForPacking[0].id})
-                              </Button>
-                            )}
-
-                            {/* Test Rule C: Active Quality Hold */}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
-                              onClick={() => {
-                                setScanUid("04DAEBFC"); // SHIRT-002 seed tag with hold
-                                void handleScanner7Scan("04DAEBFC");
-                              }}
-                            >
-                              <ShieldAlert className="size-3 mr-1 text-destructive" />
-                              Test Held Shirt (Rule C: Hold Block)
-                            </Button>
-
-                            {/* Test Rule D: Invalid Tag Type (Bundle Card) */}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-50"
-                              onClick={() => {
-                                setScanUid("04A1B2C3"); // FAB-001 bundle tag
-                                void handleScanner7Scan("04A1B2C3");
-                              }}
-                            >
-                              <AlertTriangle className="size-3 mr-1 text-amber-600" />
-                              Test Bundle Tag (Rule D: No Bundle Cards)
-                            </Button>
-
-                            {/* Test Rule A: Already Used Tag */}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs border-muted-foreground/30 text-muted-foreground"
-                              onClick={() => {
-                                setScanUid("04A7B8C9"); // Already assigned tag
-                                void handleScanner7Scan("04A7B8C9");
-                              }}
-                            >
-                              <RotateCcw className="size-3 mr-1" />
-                              Test Used Tag (Rule A: Zero History)
-                            </Button>
-                          </div>
                         </div>
                       </div>
                     </Section>

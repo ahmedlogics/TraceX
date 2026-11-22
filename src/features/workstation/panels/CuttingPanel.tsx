@@ -673,57 +673,6 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                   Scan at Scanner 3
                                 </Button>
                               </div>
-
-                              {/* Helper Quick Tap Pills */}
-                              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border/40 text-[11px]">
-                                <span className="text-muted-foreground font-medium">Quick Taps:</span>
-                                {lots.slice(0, 2).map((l) => (
-                                  <Button
-                                    key={l.id}
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 text-[10px] font-mono gap-1"
-                                    onClick={() => {
-                                      const uid = l.rfidUid || "04A1B2C3";
-                                      setScanUid(uid);
-                                      void handleScanner3Scan(uid);
-                                    }}
-                                  >
-                                    <Package className="size-2.5 text-primary" />
-                                    Bundle {l.id} ({l.rfidUid})
-                                  </Button>
-                                ))}
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-6 text-[10px] font-mono gap-1"
-                                  onClick={() => {
-                                    const fresh = generateFreshUid();
-                                    setScanUid(fresh);
-                                    if (isScanningProducts) {
-                                      void handleScanner3Scan(fresh);
-                                    }
-                                  }}
-                                >
-                                  <Sparkles className="size-2.5 text-accent" />
-                                  {isScanningProducts ? "Tap Fresh Garment Tag" : "Generate Fresh UID"}
-                                </Button>
-                                {cuttingReworkCases.length > 0 && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 text-[10px] font-mono text-destructive border-destructive/30 gap-1"
-                                    onClick={() => {
-                                      const repairUid = "04003344";
-                                      setScanUid(repairUid);
-                                      void handleScanner3Scan(repairUid);
-                                    }}
-                                  >
-                                    <Wrench className="size-2.5" />
-                                    Tap Repair Tag (SHIRT-003)
-                                  </Button>
-                                )}
-                              </div>
                             </div>
 
                             {/* Section B: Active Bundle & Order Selection Panel */}

@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
   Cpu,
   Info,
   Layers,
@@ -158,10 +159,78 @@ function ReceivingLotsQueue() {
   );
 }
 
+function IncomingQcQueue() {
+  const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
+
+  return (
+    <Loadable query={qLots}>
+      {(lots) => {
+        // Only show fabric rolls that are awaiting inspection AND have been scanned & bound with an RFID tag at Station 1.
+        // Rolls with unassigned tags remain at Station 1 for receiving.demo to scan and bind.
+        const awaitingQc = lots.filter(
+          (l) => l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned",
+        );
+
+        if (awaitingQc.length === 0) {
+          return (
+            <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
+              <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
+                <CheckCircle2 className="size-4" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                All scanned incoming fabric rolls have been evaluated
+              </p>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                No tagged fabric rolls are currently awaiting incoming inspection in quarantine. New deliveries logged and tagged at Station 1 will appear here.
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="divide-y rounded-lg border bg-card">
+            {awaitingQc.map((lot) => (
+              <div
+                key={lot.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
+              >
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-foreground wt-id">{lot.id}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="font-medium text-foreground">{lot.material}</span>
+                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      <Radio className="size-2.5" /> Tag: {lot.rfidUid}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Supplier: <span className="font-medium text-foreground">{lot.supplierRef}</span> · Amount in Quarantine: <span className="font-medium text-foreground">{lot.receivedQty} {lot.unit ?? "m"}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    Awaiting QC
+                  </span>
+                  <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
+                    <AppLink href={paths.quality}>
+                      Evaluate &amp; Sign-Off <ArrowRight className="size-3" />
+                    </AppLink>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      }}
+    </Loadable>
+  );
+}
+
 export function DashboardView() {
   const me = useMe();
   const q = useWtQuery(["dashboard"], (c) => c.getDashboard());
   const isReceivingUser = me.username === "receiving.demo" || me.department === "receiving";
+  const isQualityUser = me.role === "Q" || me.username === "qc.incoming";
 
   return (
     <div className="space-y-6">
@@ -273,6 +342,20 @@ export function DashboardView() {
                 }
               >
                 <ReceivingLotsQueue />
+              </Section>
+            ) : isQualityUser ? (
+              <Section
+                title="Incoming Fabric Quality Inspection Queue (Awaiting QC Sign-Off)"
+                description="Physical fabric rolls scanned and tagged at Station 1 awaiting inspection and 4-point defect sign-off by qc.incoming."
+                actions={
+                  <Button asChild size="sm" className="gap-1.5">
+                    <AppLink href={paths.quality}>
+                      <ShieldCheck className="size-4" /> Open Quality Gate
+                    </AppLink>
+                  </Button>
+                }
+              >
+                <IncomingQcQueue />
               </Section>
             ) : (
               <Section

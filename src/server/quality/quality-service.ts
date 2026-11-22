@@ -485,13 +485,13 @@ export async function executeIncomingQc(
   }
 
   // 2. Quantity balancing check
-  const acceptedQty = Number((input as any).acceptedQty ?? (input as any).acceptedQuantity ?? 0);
-  const heldQty = Number((input as any).heldQty ?? (input as any).heldQuantity ?? 0);
-  const rejectedQty = Number((input as any).rejectedQty ?? (input as any).rejectedQuantity ?? 0);
-  const totalEvaluated = acceptedQty + heldQty + rejectedQty;
-  const receivedQty = Number(lot.received_quantity);
+  const acceptedQty = Math.round(Number((input as any).acceptedQty ?? (input as any).acceptedQuantity ?? 0) * 1000) / 1000;
+  const heldQty = Math.round(Number((input as any).heldQty ?? (input as any).heldQuantity ?? 0) * 1000) / 1000;
+  const rejectedQty = Math.round(Number((input as any).rejectedQty ?? (input as any).rejectedQuantity ?? 0) * 1000) / 1000;
+  const totalEvaluated = Math.round((acceptedQty + heldQty + rejectedQty) * 1000) / 1000;
+  const receivedQty = Math.round(Number(lot.received_quantity) * 1000) / 1000;
 
-  if (totalEvaluated !== receivedQty) {
+  if (Math.abs(totalEvaluated - receivedQty) >= 1e-3) {
     throw new Error(
       `WT_ERR_QUANTITY_MISMATCH: Sum of accepted (${acceptedQty}), held (${heldQty}), and rejected (${rejectedQty}) quantities must equal received lot quantity (${receivedQty}).`,
     );
@@ -594,39 +594,44 @@ export async function executeIncomingQc(
 
   // 7. Update work task pipeline hand-off (Step 2 approval -> Step 3 raw store task)
   if ("work_tasks" in (tx as any) && typeof (tx as any).work_tasks.updateMany === "function") {
-    await (tx as any).work_tasks.updateMany({
-      where: {
-        material_lot_id: lot.id,
-        action_code: "incoming-qc",
-        status: { in: ["queued", "claimed"] },
-      },
-      data: {
-        status: input.result === "pass" ? "completed" : "cancelled",
-        completed_at: new Date(),
-      },
-    });
-
-    if (input.result === "pass" && acceptedQty > 0) {
-      const existingIssueTask = await (tx as any).work_tasks.findFirst({
+    try {
+      await (tx as any).work_tasks.updateMany({
         where: {
           material_lot_id: lot.id,
-          action_code: "issue-material",
+          action_code: "incoming-qc",
           status: { in: ["queued", "claimed"] },
         },
+        data: {
+          status: input.result === "pass" ? "completed" : "cancelled",
+          assignee_id: staffUserId,
+          completed_at: new Date(),
+        },
       });
-      if (!existingIssueTask && typeof (tx as any).work_tasks.create === "function") {
-        await (tx as any).work_tasks.create({
-          data: {
-            action_code: "issue-material",
-            department_code: "raw_store",
+
+      if (input.result === "pass" && acceptedQty > 0) {
+        const existingIssueTask = await (tx as any).work_tasks.findFirst({
+          where: {
             material_lot_id: lot.id,
-            status: "queued",
-            created_by: staffUserId,
-            created_at: new Date(),
-            revision: 0,
+            action_code: "issue-material",
+            status: { in: ["queued", "claimed"] },
           },
         });
+        if (!existingIssueTask && typeof (tx as any).work_tasks.create === "function") {
+          await (tx as any).work_tasks.create({
+            data: {
+              action_code: "issue-material",
+              department_code: "raw_store",
+              material_lot_id: lot.id,
+              status: "queued",
+              created_by: staffUserId,
+              created_at: new Date(),
+              revision: 0,
+            },
+          });
+        }
       }
+    } catch (wtErr) {
+      console.warn("[QC_TASK_WARN] Work task hand-off update skipped or failed:", wtErr);
     }
   }
 

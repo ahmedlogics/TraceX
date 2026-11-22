@@ -221,11 +221,16 @@ export async function getStaffDashboard(
     where: { submitted_at: null },
   });
 
-  // Query active lots awaiting incoming inspection
+  // Query active lots awaiting incoming inspection (must have tag bound at Station 1)
   const awaitingLots = await prisma.material_lots.findMany({
     where: {
       inspections: {
         none: { outcome: "pass" },
+      },
+      rfid_tag_bindings: {
+        is: {
+          unbound_at: null,
+        },
       },
     },
     select: { id: true, code: true },

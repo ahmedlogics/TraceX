@@ -85,16 +85,16 @@ export function StationShell() {
         return (
           <div className="space-y-6">
             {/* Station Operator Bar */}
-            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Active RFID Station:
+                  Station:
                 </span>
                 {activeStations.length > 1 ? (
                   <select
                     value={effectiveStation}
                     onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                    className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {activeStations.map((code) => (
                       <option key={code} value={code}>
@@ -103,16 +103,20 @@ export function StationShell() {
                     ))}
                   </select>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary">
-                    {rfidStationLabels[effectiveStation]} ({effectiveStation})
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary">
+                    {rfidStationLabels[effectiveStation]}
                   </span>
                 )}
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Hardware Bridge Online
+                </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-muted-foreground">Operator:</span>
                 <span className="font-semibold text-foreground">{me.displayName}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
+                <span className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                   {me.department}
                 </span>
               </div>
@@ -232,7 +236,7 @@ export function StationShell() {
                       <p className="font-semibold text-foreground">
                         {lastOutcome.resolution === "accepted"
                           ? `Scan confirmed (${lastOutcome.uid}): ${
-                              lastOutcome.garmentCode ?? lastOutcome.subjectId
+                              lastOutcome.lotCode ?? lastOutcome.garmentCode ?? lastOutcome.subjectId
                             }${lastOutcome.productName ? ` · ${lastOutcome.productName}` : ""}`
                           : `Scan rejected (${lastOutcome.uid}): ${
                               lastOutcome.rejectReason ?? lastOutcome.resolution

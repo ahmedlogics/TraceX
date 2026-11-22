@@ -13,6 +13,7 @@ export interface TaskDTO {
   productionOrderId?: string | null | undefined;
   packageId?: string | null | undefined;
   shipmentId?: string | null | undefined;
+  subjectCode?: string | null | undefined;
   assigneeId?: string | null | undefined;
   assigneeName?: string | null | undefined;
   createdBy: string;

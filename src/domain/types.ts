@@ -465,6 +465,7 @@ export interface Task {
   department: Department;
   subjectType: "lot" | "order" | "garment" | "shipment" | "inspection" | "rework";
   subjectId: string;
+  subjectCode?: string | null | undefined;
   checkpoint?: SensorId | undefined;
   status: TaskStatus;
   assigneeId?: string | undefined;

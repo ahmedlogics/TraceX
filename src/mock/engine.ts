@@ -1900,7 +1900,7 @@ export function planOrder(
   actor: StaffUser,
   input: { product: string; styleCode: string; qty: number; dueDate: string },
 ) {
-  ensure(can.planOrder(actor), "forbidden", "Only the supply-chain manager can plan orders.");
+  ensure(can.planOrder(actor), "forbidden", "Only authorized planners or raw-store operators can plan orders.");
   ensure(
     input.product.trim() && input.qty > 0,
     "invalid",
@@ -1936,7 +1936,7 @@ export function planOrder(
 }
 
 export function approveOrder(s: DemoState, actor: StaffUser, orderId: string) {
-  ensure(can.approveOrder(actor), "forbidden", "Only the manager can approve orders.");
+  ensure(can.approveOrder(actor), "forbidden", "Only authorized managers or raw-store operators can approve orders.");
   const order = findOrThrow(s.orders, orderId, "Order");
   ensure(
     order.status === "planned" || order.status === "draft",
@@ -2498,10 +2498,16 @@ export function submitIncomingQc(
     };
     s.inspections.push(insp);
   }
+  const accepted = Math.round(Number(input.acceptedQty) * 1000) / 1000;
+  const held = Math.round(Number(input.heldQty) * 1000) / 1000;
+  const rejected = Math.round(Number(input.rejectedQty) * 1000) / 1000;
+  const totalEvaluated = Math.round((accepted + held + rejected) * 1000) / 1000;
+  const lotReceived = Math.round(Number(lot.receivedQty) * 1000) / 1000;
+
   ensure(
-    input.acceptedQty + input.heldQty + input.rejectedQty === lot.receivedQty,
+    Math.abs(totalEvaluated - lotReceived) < 1e-3,
     "invalid",
-    `Evaluated quantities (${input.acceptedQty + input.heldQty + input.rejectedQty}) must equal received lot quantity (${lot.receivedQty}).`,
+    `Evaluated quantities (${totalEvaluated}) must equal received lot quantity (${lotReceived}).`,
   );
   if (input.result === "pass") {
     ensure(
@@ -2510,7 +2516,7 @@ export function submitIncomingQc(
       "Complete every checklist item before passing.",
     );
     ensure(
-      input.acceptedQty > 0,
+      accepted > 0,
       "invalid",
       "Passing inspection requires an accepted quantity > 0.",
     );
@@ -2524,10 +2530,10 @@ export function submitIncomingQc(
   insp.submittedAt = now();
   insp.submittedBy = actor.id;
 
-  lot.acceptedQty = input.acceptedQty;
-  lot.heldQty = input.heldQty;
-  lot.rejectedQty = input.rejectedQty;
-  lot.balanceQty = input.acceptedQty; // Only accepted quantity is issuable
+  lot.acceptedQty = accepted;
+  lot.heldQty = held;
+  lot.rejectedQty = rejected;
+  lot.balanceQty = accepted; // Only accepted quantity is issuable
   lot.status = input.result === "pass" ? "accepted" : "rejected";
   closeTasks(s, lot.id, ["incoming-qc"]);
 

@@ -72,6 +72,32 @@ describe("Member 3: Quality Control & Incoming QC", () => {
     expect(lot.balanceQty).toBe(accepted);
   });
 
+  it("incoming QC accepts and reconciles decimal quantities correctly (e.g. 24.9m with 24m accepted and 0.9m held)", () => {
+    const s = createSeed();
+    const qualityUser = as(s, "quality.demo");
+
+    const lot = s.lots.find((l) => l.id === "FAB-002")!;
+    lot.receivedQty = 24.9;
+    const insp = s.inspections.find((i) => i.subjectId === "FAB-002" && i.status === "open")!;
+
+    E.submitIncomingQc(s, qualityUser, {
+      lotId: lot.id,
+      inspectionId: insp.id,
+      acceptedQty: 24,
+      heldQty: 0.9,
+      rejectedQty: 0,
+      checklist: insp.checklist.map((c) => ({ ...c, checked: true })),
+      notes: "Decimal lot breakdown approved",
+      result: "pass",
+    });
+
+    expect(lot.status).toBe("accepted");
+    expect(lot.acceptedQty).toBe(24);
+    expect(lot.heldQty).toBe(0.9);
+    expect(lot.rejectedQty).toBe(0);
+    expect(lot.balanceQty).toBe(24);
+  });
+
   it("Final QA: rejects bundle card or unexpected-stage garment", () => {
     const s = createSeed();
     const inspector = as(s, "quality.demo");
