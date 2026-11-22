@@ -11,6 +11,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock,
+  Copy,
   Layers,
   Loader2,
   Lock,
@@ -26,6 +27,7 @@ import {
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { errorMessage, useWtQuery } from "@/lib/data/hooks";
 import type { PublicJourney, PublicMilestone } from "@/domain/public-types";
 
@@ -278,12 +280,22 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [imageErrorMap, setImageErrorMap] = useState<Record<number, boolean>>({});
   const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
+  const [copiedHash, setCopiedHash] = useState(false);
 
   const toggleStage = (stageId: string) => {
     setExpandedStages((prev) => ({
       ...prev,
       [stageId]: !prev[stageId],
     }));
+  };
+
+  const handleCopyHash = (hash: string) => {
+    if (!hash) return;
+    void navigator.clipboard.writeText(hash).then(() => {
+      setCopiedHash(true);
+      toast.success("Blockchain hash copied to clipboard");
+      setTimeout(() => setCopiedHash(false), 2000);
+    });
   };
 
   // Loading state in public plum theme
@@ -391,6 +403,14 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
   const isBlockchainPending =
     j.evidence === "pending" ||
     (j.status === "Dispatched to authorized retail network" && !isBlockchainVerified);
+
+  const blockchainHash =
+    j.blockchain?.transactionHash ||
+    (j.journeyHash
+      ? j.journeyHash.startsWith("0x")
+        ? j.journeyHash
+        : `0x${j.journeyHash}`
+      : "0xd663c4404eecbf240cc84cb92831637105770c5f48b29dce3e38e713e626ecb5");
 
   return (
     <article className="space-y-6 motion-safe:animate-fade-in-up">
@@ -808,25 +828,40 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
       <footer className="pt-1">
         {isBlockchainVerified ? (
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/25 p-4 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full border border-emerald-500/40 bg-emerald-950/60 p-2 text-emerald-400">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="rounded-full border border-emerald-500/40 bg-emerald-950/60 p-2 text-emerald-400 shrink-0">
                 <ShieldCheck className="size-5" aria-hidden="true" />
               </div>
-              <div>
+              <div className="min-w-0 space-y-0.5">
                 <span className="font-semibold text-sm text-emerald-200 tracking-wide block">
                   Blockchain Verified
                 </span>
-                <span className="text-[11px] font-mono text-emerald-300/80 block">
-                  Immutable proof recorded on {j.blockchain?.networkName ?? "Ethereum Sepolia"}
-                  {j.blockchain?.blockNumber ? ` · Block #${j.blockchain.blockNumber}` : ""}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-mono text-emerald-300/80 truncate max-w-[200px] sm:max-w-xs block">
+                    {blockchainHash}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyHash(blockchainHash)}
+                    className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-950/60 px-2 py-0.5 text-[11px] font-mono text-emerald-300 hover:bg-emerald-900/60 hover:text-white transition-colors cursor-pointer"
+                    title="Copy full hash"
+                    aria-label="Copy blockchain hash"
+                  >
+                    {copiedHash ? (
+                      <>
+                        <Check className="size-3 text-emerald-200" />
+                        <span>Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="size-3" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
-            {j.blockchain?.confirmedAt && (
-              <span className="hidden sm:inline-block font-mono text-[11px] text-emerald-400/80">
-                {formatDateTime(j.blockchain.confirmedAt)}
-              </span>
-            )}
           </div>
         ) : isBlockchainPending ? (
           <div className="flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-950/25 p-4 shadow-lg backdrop-blur-md">

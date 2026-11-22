@@ -117,7 +117,6 @@ export function OrdersView() {
     <>
       <PageHeader
         title="Production Orders & Planning"
-        description="Digital manufacturing authorizations. Approved orders allow fabric issue from accepted lots and cutting output creation."
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Production orders" }]}
         actions={can.planOrder(me) ? <PlanOrderDialog /> : undefined}
       />

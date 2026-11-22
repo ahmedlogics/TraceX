@@ -1118,6 +1118,15 @@ export function routineScan(
   const g = s.garments.find((x) => x.id === binding.subjectId);
   if (!g) return rejectScan(s, normUid, "rejected_unknown_card", "Garment record not found.");
 
+  if (g.hold) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_on_hold",
+      `${g.id} has an active quality hold (${g.hold.reason}). Routine progression blocked until QC release.`,
+    );
+  }
+
   if (stationCode === "stitching") {
     if (g.stage !== "stitching") {
       return rejectScan(

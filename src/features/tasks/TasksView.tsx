@@ -148,11 +148,6 @@ export function TasksView() {
     <>
       <PageHeader
         title="Tasks & Factory Work Queue"
-        description={
-          me.role === "M"
-            ? "Factory-wide task queue. Review prerequisites, bottlenecks, and assign work to operators."
-            : `Departmental work queue for ${departmentLabels[me.department]}.`
-        }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Tasks" }]}
       />
 

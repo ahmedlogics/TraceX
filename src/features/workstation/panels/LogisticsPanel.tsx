@@ -79,7 +79,7 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                   <div
                     className={`rounded-lg border p-4 shadow-sm transition-all ${
                       lastOutcome.resolution === "accepted"
-                        ? "border-success/40 bg-success/10 text-success-foreground"
+                        ? "border-success/40 bg-success/10 text-foreground"
                         : "border-destructive/40 bg-destructive/10 text-destructive"
                     }`}
                   >

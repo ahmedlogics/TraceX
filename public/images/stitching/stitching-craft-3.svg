@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="deepDenimGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="45%" stop-color="#172554" />
+      <stop offset="100%" stop-color="#1e3a8a" />
+    </linearGradient>
+    <linearGradient id="machineMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0" />
+      <stop offset="40%" stop-color="#cbd5e1" />
+      <stop offset="70%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#64748b" />
+    </linearGradient>
+    <linearGradient id="goldAcc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#fde047" />
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#deepDenimGrad3)" rx="12" />
+
+  <!-- Fabric Layers: Royal Blue & Navy Denim Under Pressure -->
+  <path d="M 0 250 L 600 210 L 600 400 L 0 400 Z" fill="#1e3a8a" opacity="0.9" />
+  <path d="M 0 270 L 600 230 L 600 400 L 0 400 Z" fill="#172554" opacity="0.9" />
+
+  <!-- Contrast Golden Topstitch Seams -->
+  <line x1="0" y1="285" x2="600" y2="245" stroke="#f59e0b" stroke-width="4.5" stroke-dasharray="14 9" stroke-linecap="round" />
+  <line x1="0" y1="285" x2="600" y2="245" stroke="#fef08a" stroke-width="1.8" stroke-dasharray="14 9" stroke-linecap="round" />
+
+  <line x1="0" y1="302" x2="600" y2="262" stroke="#d97706" stroke-width="4" stroke-dasharray="14 9" stroke-linecap="round" />
+  <line x1="0" y1="302" x2="600" y2="262" stroke="#fde047" stroke-width="1.5" stroke-dasharray="14 9" stroke-linecap="round" />
+
+  <!-- Sewing Machine Arm & Presser Foot (Modern Stylized) -->
+  <g transform="translate(240, 40)">
+    <!-- Main Metal Casting -->
+    <path d="M 0 0 L 140 0 L 140 130 L 115 130 L 115 190 L 75 190 L 75 130 L 0 130 Z" fill="url(#machineMetal)" rx="4" />
+    <!-- Golden Accent Striping -->
+    <rect x="0" y="30" width="140" height="8" fill="url(#goldAcc)" />
+    <!-- Needle Bar -->
+    <rect x="90" y="160" width="8" height="70" rx="2" fill="#f8fafc" />
+    <!-- Presser Foot -->
+    <path d="M 60 215 L 125 215 L 135 228 L 50 228 Z" fill="url(#machineMetal)" />
+    <!-- Glowing Needle Point -->
+    <polygon points="90,225 98,225 94,248" fill="#e2e8f0" />
+    <circle cx="94" cy="245" r="16" fill="#f59e0b" fill-opacity="0.4" />
+    <!-- Golden Thread to Seam -->
+    <path d="M 70 80 Q 80 150 94 235 Q 120 255 170 250" stroke="#fde047" stroke-width="3" fill="none" />
+  </g>
+
+  <!-- Creative Atelier Text Badge -->
+  <g transform="translate(30, 30)">
+    <rect width="180" height="34" rx="8" fill="#0f172a" fill-opacity="0.8" stroke="#3b82f6" stroke-width="1.5" />
+    <circle cx="18" cy="17" r="5" fill="#3b82f6" />
+    <text x="32" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#f8fafc" letter-spacing="0.5">
+      PRECISION SEAMING
+    </text>
+  </g>
+
+  <g transform="translate(30, 335)">
+    <rect width="210" height="32" rx="6" fill="#0f172a" fill-opacity="0.8" stroke="#eab308" stroke-width="1" />
+    <text x="105" y="21" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#fde047">
+      INDIGO DENIM &amp; GOLD SEAM
+    </text>
+  </g>
+</svg>

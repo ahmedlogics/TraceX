@@ -52,9 +52,14 @@ function defaultStationForDept(dept: string): RfidStationCode {
 
 export function StationShell() {
   const me = useMe();
-  const [stationCode, setStationCode] = useState<RfidStationCode>(() =>
+  const isManager = me.role === "M";
+  const [managerStationCode, setManagerStationCode] = useState<RfidStationCode>(() =>
     defaultStationForDept(me.department),
   );
+
+  // Non-managers are strictly locked to their assigned department station.
+  // Regular operators cannot switch to any other department or person's workstation.
+  const stationCode = isManager ? managerStationCode : defaultStationForDept(me.department);
 
   const qStation = useWtQuery(["rfid-station", stationCode], (c) =>
     c.getRfidStationData(stationCode),
@@ -68,23 +73,29 @@ export function StationShell() {
 
         return (
           <div className="space-y-6">
-            {/* Station Selector Bar */}
+            {/* Station Operator Bar */}
             <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Active RFID Station:
                 </span>
-                <select
-                  value={stationCode}
-                  onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                  className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {rfidStationCodes.map((code) => (
-                    <option key={code} value={code}>
-                      {rfidStationLabels[code]} ({code})
-                    </option>
-                  ))}
-                </select>
+                {isManager ? (
+                  <select
+                    value={stationCode}
+                    onChange={(e) => setManagerStationCode(e.target.value as RfidStationCode)}
+                    className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {rfidStationCodes.map((code) => (
+                      <option key={code} value={code}>
+                        {rfidStationLabels[code]}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary">
+                    {rfidStationLabels[stationCode]}
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -103,23 +114,12 @@ export function StationShell() {
             >
               <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="wt-eyebrow">
-                      Station #{rfidStationCodes.indexOf(stationCode) + 1} of 9
-                    </p>
-                    <span className="text-xs font-mono text-muted-foreground">
-                      code: {stationCode}
-                    </span>
-                  </div>
+                  <p className="wt-eyebrow">
+                    Station #{rfidStationCodes.indexOf(stationCode) + 1} of 9
+                  </p>
                   <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                     {stData.stationName}
                   </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Assigned department:{" "}
-                    <span className="font-medium text-foreground">
-                      {stationDepartment[stationCode]}
-                    </span>
-                  </p>
                 </div>
 
                 <div className="flex flex-col items-start gap-2 md:items-end">
@@ -146,8 +146,8 @@ export function StationShell() {
                 <div
                   className={`rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
                     lastOutcome.resolution === "accepted"
-                      ? "border-success/40 bg-success-soft text-success-foreground"
-                      : "border-destructive/40 bg-danger-soft text-destructive-foreground"
+                      ? "border-success/40 bg-success-soft text-foreground"
+                      : "border-destructive/40 bg-danger-soft text-foreground"
                   }`}
                 >
                   {lastOutcome.resolution === "accepted" ? (
@@ -156,7 +156,7 @@ export function StationShell() {
                     <XCircle className="size-4 shrink-0 text-destructive mt-0.5" />
                   )}
                   <div className="space-y-0.5">
-                    <p className="font-semibold">
+                    <p className="font-semibold text-foreground">
                       {lastOutcome.resolution === "accepted"
                         ? `Scan confirmed (${lastOutcome.uid}): ${
                             lastOutcome.garmentCode ?? lastOutcome.subjectId
@@ -165,7 +165,7 @@ export function StationShell() {
                             lastOutcome.rejectReason ?? lastOutcome.resolution
                           }`}
                     </p>
-                    <p className="text-[11px] opacity-80">
+                    <p className="text-[11px] text-foreground/80 font-medium">
                       Timestamp: {fmt.dateTime(lastOutcome.at)}
                     </p>
                   </div>

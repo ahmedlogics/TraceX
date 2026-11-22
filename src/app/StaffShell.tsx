@@ -160,9 +160,6 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
                 <DropdownMenuItem onSelect={() => setDataMode(dataMode === "live" ? "mock" : "live")}>
                   Switch to {dataMode === "live" ? "Mock Data" : "Live API"}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void signOut()}>
-                  Switch demo account
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => void signOut()}>
                   <LogOut /> Sign out
@@ -171,14 +168,6 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
             </DropdownMenu>
           </div>
         </header>
-        <div className="border-b bg-muted/30 px-4 py-1.5 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-          <span className="inline-block size-2 rounded-full bg-success" aria-hidden />
-          <span>
-            Verified Staff Workspace · Principal:{" "}
-            <strong className="text-foreground font-semibold">{user.username}</strong> (
-            {roleLabels[user.role]} · {departmentLabels[user.department]})
-          </span>
-        </div>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
           <span className="mb-4 inline-flex sm:hidden">
             <RoleChip user={user} />

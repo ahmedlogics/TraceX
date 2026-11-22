@@ -1006,6 +1006,13 @@ export async function routineProductionScan(
     }
 
     const garment = binding.garments;
+    if (garment.quality_disposition === "held") {
+      throw ApiError.badRequest(
+        `Garment '${garment.code}' has an active quality hold. Routine assembly progression is blocked until cleared by QC.`,
+        { garmentId: garment.id },
+        "WT_ERR_ACTIVE_HOLD",
+      );
+    }
     const currentStage = garment.stage;
     let nextStage: GarmentDTO["stage"] = currentStage;
     let nextExpectedStation = "";
