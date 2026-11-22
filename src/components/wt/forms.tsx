@@ -79,6 +79,7 @@ export function FormDialog({
   children,
   allowed = true,
   disabled,
+  submitDisabled,
 }: {
   trigger: ReactNode;
   triggerVariant?: ButtonProps["variant"] | undefined;
@@ -89,6 +90,7 @@ export function FormDialog({
   children: ReactNode;
   allowed?: boolean | undefined;
   disabled?: boolean | undefined;
+  submitDisabled?: boolean | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -118,7 +120,7 @@ export function FormDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || submitDisabled}>
               {submitLabel}
             </Button>
           </DialogFooter>

@@ -128,7 +128,7 @@ function IncomingQcDialog({
       title={`Incoming Lot Evaluation & Spec Sign-Off: ${inspection.id}`}
       description={`Lot: ${lot?.id ?? inspection.subjectId} (${lot?.material ?? "Fabric"}) · Total: ${totalQty} ${lot?.unit ?? "m"}`}
       submitLabel="Submit Inspection Decision"
-      disabled={!canSubmit}
+      submitDisabled={!canSubmit}
       onSubmit={async () =>
         !!(await run(
           (c) =>
@@ -396,6 +396,18 @@ function IncomingLotsTable({
                       i.kind === "incoming" &&
                       (i.subjectId === l.id || (l as any).code === i.subjectId),
                   );
+
+                  if (!l.rfidUid) {
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        <StatusBadge status="Pending Tag" tone="neutral" />
+                        <span className="text-[11px] text-muted-foreground">
+                          Awaiting Station 1 Tag
+                        </span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div className="flex flex-col gap-0.5">
                       <StatusBadge status={l.status} />
@@ -406,7 +418,7 @@ function IncomingLotsTable({
                       )}
                       {l.status === "awaiting-inspection" && (
                         <span className="text-[11px] font-medium text-warning">
-                          Awaiting Inspection
+                          Ready for QC Sign-Off
                         </span>
                       )}
                       {l.status === "rejected" && (
@@ -426,6 +438,16 @@ function IncomingLotsTable({
               {
                 header: "Action",
                 cell: (l) => {
+                  if (!l.rfidUid) {
+                    return (
+                      <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground">
+                        <AppLink href={paths.workstation}>
+                          <Radio className="size-3 text-primary" /> Tag at Station 1
+                        </AppLink>
+                      </Button>
+                    );
+                  }
+
                   const matchingInsp = (inspQuery.data ?? []).find(
                     (i) =>
                       i.kind === "incoming" &&
