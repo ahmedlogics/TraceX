@@ -48,6 +48,27 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
   const isAuthorized = me.role === "M" || me.department === "stitching";
   const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
 
+  const handleScan = (uidToScan: string) => {
+    const trimmed = uidToScan.trim();
+    if (!trimmed) return;
+    void run(
+      (c) => c.routineScan(trimmed, "stitching"),
+      (outcome) => {
+        setLocalLastOutcome(outcome);
+        if (outcome.resolution === "accepted") {
+          setScanUid("");
+          return `Garment ${
+            outcome.garmentCode ?? outcome.subjectId
+          } (${outcome.productName ?? "Garment"}) stitching completed. Ready for Finishing.`;
+        }
+        return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+      },
+    );
+  };
+
+  const isReadyForStitching = (stage: string) => stage === "stitching" || stage === "cut";
+  const isCompletedStitching = (stage: string) => stage === "finishing" || stage === "stitched";
+
   return (
     <Loadable query={qGarments}>
       {(garments) => (
@@ -55,9 +76,9 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
           {(tasks) => (
             <Loadable query={qRework}>
               {(reworkCases) => {
-                // Filter routine stitching queue: ready from cutting (stitching stage) or finishing
+                // Filter routine stitching queue: ready from cutting (stitching/cut stage) or recently completed (finishing/stitched stage)
                 const stitchingQueue = garments.filter(
-                  (g) => g.stage === "stitching" || g.stage === "finishing",
+                  (g) => isReadyForStitching(g.stage) || isCompletedStitching(g.stage),
                 );
 
                 // Filter rework cases: only QC-failed garments assigned to Stitching
@@ -177,9 +198,9 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                 {isAuthorized && (
                                   <div className="pt-2 space-y-3">
                                     <Field
-                                      label="Garment Card UID"
+                                      label="Garment Card UID (Manual Entry for Testing)"
                                       htmlFor="stitching-scan-uid"
-                                      hint="Present card to reader or enter card UID manually."
+                                      hint="Present card to reader or enter card UID manually. Processed via live backend validation."
                                     >
                                       <Input
                                         id="stitching-scan-uid"
@@ -193,29 +214,13 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                     <div className="flex flex-wrap items-center gap-2">
                                       <Button
                                         disabled={pending || !scanUid.trim()}
-                                        onClick={() =>
-                                          void run(
-                                            (c) => c.routineScan(scanUid.trim(), "stitching"),
-                                            (outcome) => {
-                                              setLocalLastOutcome(outcome);
-                                              if (outcome.resolution === "accepted") {
-                                                setScanUid("");
-                                                return `Garment ${
-                                                  outcome.garmentCode ?? outcome.subjectId
-                                                } (${outcome.productName}) stitching completed. Ready for Finishing.`;
-                                              }
-                                              return `Scan rejected: ${
-                                                outcome.rejectReason ?? outcome.resolution
-                                              }`;
-                                            },
-                                          )
-                                        }
+                                        onClick={() => handleScan(scanUid)}
                                       >
-                                        <ScanLine className="size-4 mr-1.5" /> Record Routine Scan
+                                        <ScanLine className="size-4 mr-1.5" /> Process Routine Scan
                                       </Button>
 
                                       {stitchingQueue.find(
-                                        (g) => g.stage === "stitching" && g.rfidUid,
+                                        (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
                                       ) && (
                                         <Button
                                           variant="secondary"
@@ -223,7 +228,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                           disabled={pending}
                                           onClick={() => {
                                             const next = stitchingQueue.find(
-                                              (g) => g.stage === "stitching" && g.rfidUid,
+                                              (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
                                             );
                                             if (next?.rfidUid) setScanUid(next.rfidUid);
                                           }}
@@ -231,7 +236,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                           Pre-fill Next (
                                           {
                                             stitchingQueue.find(
-                                              (g) => g.stage === "stitching" && g.rfidUid,
+                                              (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
                                             )?.id
                                           }
                                           )
@@ -299,7 +304,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                 {
                                   header: "Quick Scan",
                                   cell: (g) => {
-                                    if (g.stage !== "stitching") {
+                                    if (!isReadyForStitching(g.stage)) {
                                       return (
                                         <span className="text-xs text-muted-foreground italic">
                                           Ready for Finishing
@@ -326,21 +331,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                         variant="outline"
                                         className="h-7 text-xs font-semibold border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-200"
                                         disabled={pending || !isAuthorized}
-                                        onClick={() =>
-                                          void run(
-                                            (c) => c.routineScan(g.rfidUid!, "stitching"),
-                                            (outcome) => {
-                                              setLocalLastOutcome(outcome);
-                                              return outcome.resolution === "accepted"
-                                                ? `Garment ${
-                                                    outcome.garmentCode ?? outcome.subjectId
-                                                  } stitching completed. Advanced to finishing.`
-                                                : `Scan rejected: ${
-                                                    outcome.rejectReason ?? outcome.resolution
-                                                  }`;
-                                            },
-                                          )
-                                        }
+                                        onClick={() => handleScan(g.rfidUid!)}
                                       >
                                         <ScanLine className="size-3 mr-1" /> Tap Card
                                       </Button>

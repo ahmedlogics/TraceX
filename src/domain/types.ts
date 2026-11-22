@@ -246,6 +246,7 @@ export interface ScanOutcome {
   issuedQty?: number | undefined;
   remainingBalance?: number | undefined;
   message?: string | undefined;
+  isHardware?: boolean | undefined;
 }
 
 /** Tag binding: maps a UID to a lot or garment. */

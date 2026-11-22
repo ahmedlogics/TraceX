@@ -26,6 +26,7 @@ import type {
   ReworkCase,
   Role,
   ScanOutcome,
+  ScanResolution,
   SensorId,
   Settings,
   Shipment,
@@ -445,11 +446,57 @@ export function createHttpClient(): WearTrailClient {
         body: { uid },
       });
     },
-    async routineScan(uid: string, stationCode: "stitching" | "finishing" | "dispatch"): Promise<ScanOutcome> {
-      return await req<ScanOutcome>("/api/rfid/routine-scan", {
-        method: "POST",
-        body: { uid, stationCode },
-      });
+    async routineScan(
+      uid: string,
+      stationCode: "stitching" | "finishing" | "warehouse" | "dispatch",
+      binId?: string,
+    ): Promise<ScanOutcome> {
+      try {
+        return await req<ScanOutcome>("/api/rfid/routine-scan", {
+          method: "POST",
+          body: { uid, stationCode, binId },
+        });
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const code = err.code.toLowerCase();
+          let resolution: ScanResolution = "rejected_unknown_card";
+          if (code.includes("stage")) resolution = "rejected_wrong_stage";
+          else if (code.includes("hold")) resolution = "rejected_business_rule";
+          else if (code.includes("duplicate")) resolution = "rejected_duplicate";
+          else if (code.includes("subject")) resolution = "rejected_wrong_subject_type";
+
+          return {
+            uid,
+            resolution,
+            rejectReason: err.message,
+            at: new Date().toISOString(),
+          };
+        }
+        throw err;
+      }
+    },
+    async warehouseIntake(tagUid: string, binId?: string): Promise<ScanOutcome> {
+      try {
+        return await req<ScanOutcome>("/api/rfid/warehouse-intake", {
+          method: "POST",
+          body: { tagUid, binId: binId || "BIN-A1" },
+        });
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const code = err.code.toLowerCase();
+          let resolution: ScanResolution = "rejected_unknown_card";
+          if (code.includes("hold")) resolution = "rejected_business_rule";
+          else if (code.includes("duplicate")) resolution = "rejected_duplicate";
+          else if (code.includes("stage")) resolution = "rejected_wrong_stage";
+          return {
+            uid: tagUid,
+            resolution,
+            rejectReason: err.message,
+            at: new Date().toISOString(),
+          };
+        }
+        throw err;
+      }
     },
     async dispatchBoxScan(boxTagOrId: string, shipmentId?: string): Promise<ScanOutcome> {
       return await req<ScanOutcome>("/api/fulfilment/dispatch-box", {
