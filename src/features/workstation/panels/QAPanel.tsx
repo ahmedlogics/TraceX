@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  AlertCircle,
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
+  Cpu,
+  Layers,
   OctagonAlert,
   Radio,
   RotateCcw,
   ScanLine,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
+  Tag,
+  Trash2,
+  Wrench,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,10 +24,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, ScopeNote } from "@/components/wt/forms";
 import { Section } from "@/components/wt/layout";
-import { StatusBadge } from "@/components/wt/StatusBadge";
+import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import type { ChecklistItem, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
-import { useWtAction } from "@/lib/data/hooks";
+import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
 
 const defaultChecklist: ChecklistItem[] = [
@@ -33,456 +41,751 @@ const defaultChecklist: ChecklistItem[] = [
   },
 ];
 
-interface QcFault {
+interface CommonDefect {
   id: string;
   label: string;
-  category: "stitching" | "cutting" | "finishing";
+  defaultDepartment: "cutting" | "stitching" | "finishing";
 }
 
-const COMMON_QC_FAULTS: QcFault[] = [
-  { id: "f1", label: "Broken / Skipped Stitching", category: "stitching" },
-  { id: "f2", label: "Open Seam or Unraveled Hem", category: "stitching" },
-  { id: "f3", label: "Stitch Tension Puckering / Tight Seams", category: "stitching" },
-  { id: "f4", label: "Dimensional Tolerance Mismatch (Chest/Length)", category: "cutting" },
-  { id: "f5", label: "Pattern Misalignment / Fabric Flaw", category: "cutting" },
-  { id: "f6", label: "Loose / Missing Button or Defective Zipper", category: "finishing" },
-  { id: "f7", label: "Care / Brand Label Misplaced or Missing", category: "finishing" },
-  { id: "f8", label: "Oil / Dirt / Contamination Stain", category: "finishing" },
+const COMMON_DEFECT_OPTIONS: CommonDefect[] = [
+  { id: "d1", label: "Open Seam", defaultDepartment: "stitching" },
+  { id: "d2", label: "Broken / Loose Stitch", defaultDepartment: "stitching" },
+  { id: "d3", label: "Untrimmed Threads", defaultDepartment: "finishing" },
+  { id: "d4", label: "Fabric Flaw / Oil Spot", defaultDepartment: "finishing" },
+  { id: "d5", label: "Shade Mismatch", defaultDepartment: "cutting" },
+  { id: "d6", label: "Misaligned Collar / Pocket", defaultDepartment: "stitching" },
 ];
 
-const REWORK_DEPARTMENTS: { code: string; label: string }[] = [
-  { code: "cutting", label: "Cutting Department (Pattern / Cut Rework)" },
-  { code: "stitching", label: "Stitching / Assembly Department (Sewing Repair)" },
-  { code: "finishing", label: "Finishing & Tagging Department (Trims / Pressing)" },
+const REFER_DEPARTMENTS: { code: "cutting" | "stitching" | "finishing"; label: string }[] = [
+  { code: "cutting", label: "Cutting Department (Pattern / Panel Rework)" },
+  { code: "stitching", label: "Stitching Department (Sewing / Seam Repair)" },
+  { code: "finishing", label: "Finishing Department (Trims / Pressing / Cleaning)" },
 ];
+
+interface InspectionFeedback {
+  type: "passed" | "failed" | "discarded" | "rejected" | "idle";
+  title: string;
+  message: string;
+  garmentCode?: string | undefined;
+  productStyle?: string | undefined;
+  size?: string | undefined;
+  loggedDefect?: string | undefined;
+  assignedDepartment?: string | undefined;
+  rfidUid?: string | undefined;
+  timestamp?: string | undefined;
+}
 
 export function QAPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
-  const [result, setResult] = useState<"pass" | "fail">("pass");
-  const [defectReason, setDefectReason] = useState("");
-  const [defectComment, setDefectComment] = useState("");
-  const [selectedFaults, setSelectedFaults] = useState<string[]>([]);
-  const [targetDept, setTargetDept] = useState<string>("stitching");
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
+
+  // Decision State: "pass" | "fail"
+  const [decision, setDecision] = useState<"pass" | "fail">("pass");
+
+  // Defect Configuration State (when decision === "fail")
+  const [selectedDefects, setSelectedDefects] = useState<string[]>([]);
+  const [customComment, setCustomComment] = useState("");
+  const [referDept, setReferDept] = useState<"cutting" | "stitching" | "finishing">("stitching");
+  const [discardProduct, setDiscardProduct] = useState(false);
+
+  // General notes & checklist
   const [notes, setNotes] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(defaultChecklist);
+
+  // Scanner 6 Hardware Simulation Input
   const [scanUid, setScanUid] = useState("04DAEBFC"); // SHIRT-002 seed tag
-  const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
+  const [feedback, setFeedback] = useState<InspectionFeedback>({
+    type: "idle",
+    title: "Scanner 6 Ready for Inspection",
+    message: "Select Pass or Fail, configure any defect notes, then tap the garment's RFID tag on Scanner 6.",
+  });
 
-  const isInspector = me.role === "Q" || me.department === "quality";
-  const activeCtx = stationData.activeContext;
-  const isCtxForThisStation = activeCtx && activeCtx.stationCode === "final_qc";
+  const isInspector = me.role === "Q" || me.department === "quality" || me.role === "A";
 
-  const allPassChecked = checklist.every((c) => c.checked);
-  const hasFaultSelected = selectedFaults.length > 0;
-  const hasComment = defectComment.trim().length > 0 || defectReason.trim().length > 0;
-  const canPrepareFail = (hasFaultSelected || hasComment) && !!targetDept;
-  const canPrepare = result === "pass" ? allPassChecked : canPrepareFail;
-
-  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
+  // Mandatory Fail-Form Validation:
+  // Must either select at least one common defect OR type text in the comment box.
+  // Must select refer department unless discard is enabled.
+  const hasDefectSelection = selectedDefects.length > 0;
+  const hasCustomComment = customComment.trim().length > 0;
+  const isFailConfigValid =
+    (hasDefectSelection || hasCustomComment) && (discardProduct || Boolean(referDept));
+  const isDecisionReady = decision === "pass" ? checklist.every((c) => c.checked) : isFailConfigValid;
 
   const resetForm = () => {
-    setResult("pass");
-    setDefectReason("");
-    setDefectComment("");
-    setSelectedFaults([]);
-    setTargetDept("stitching");
+    setSelectedDefects([]);
+    setCustomComment("");
+    setReferDept("stitching");
+    setDiscardProduct(false);
     setNotes("");
     setChecklist(defaultChecklist);
   };
 
+  // Centralized Scanner 6 Handler
+  const handleScanner6Scan = async (rawUid: string) => {
+    const uid = rawUid.trim().toUpperCase();
+    if (!uid) return;
+
+    if (!isDecisionReady) {
+      setFeedback({
+        type: "rejected",
+        title: "Scanner 6 Disarmed",
+        message: "Mandatory inspection fields missing. Select a common defect option or enter custom comments before scanning.",
+        rfidUid: uid,
+      });
+      return;
+    }
+
+    // Compile defect reason
+    const selectedLabels = COMMON_DEFECT_OPTIONS.filter((d) => selectedDefects.includes(d.id)).map(
+      (d) => d.label,
+    );
+    let finalDefectReason = selectedLabels.join(", ");
+    if (customComment.trim()) {
+      finalDefectReason = finalDefectReason
+        ? `${finalDefectReason} — ${customComment.trim()}`
+        : customComment.trim();
+    }
+    if (discardProduct) {
+      finalDefectReason = `[SCRAP/DISCARD] ${finalDefectReason || "Defect beyond repair"}`;
+    }
+
+    try {
+      // 1. Prepare Action Context
+      const ctxId = await run((c) =>
+        c.prepareActionContext("final_qc", "submit_qc", {
+          kind: "submit_qc",
+          result: decision,
+          scope: "final",
+          defectReason: decision === "fail" ? finalDefectReason : undefined,
+          assignedDepartment: decision === "fail" && !discardProduct ? referDept : undefined,
+          discard: discardProduct,
+          checklist:
+            decision === "pass"
+              ? checklist
+              : selectedLabels.map((l, i) => ({ id: `df-${i}`, label: l, checked: true })),
+          notes: notes.trim(),
+        }),
+      );
+
+      if (!ctxId) {
+        setFeedback({
+          type: "rejected",
+          title: "Hardware Context Error",
+          message: "Failed to arm Scanner 6 action context. Check reader connectivity.",
+          rfidUid: uid,
+        });
+        return;
+      }
+
+      // 2. Simulate Reader Board Ack
+      await run((c) => c.acknowledgeContext(ctxId));
+
+      // 3. Resolve RFID Scan
+      const outcome = await run((c) => c.resolveRfidScan(uid));
+
+      if (!outcome) {
+        setFeedback({
+          type: "rejected",
+          title: "Scan Incomplete",
+          message: "Scan transaction could not be processed by station engine.",
+          rfidUid: uid,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        return;
+      }
+
+      if (outcome.resolution === "accepted") {
+        if (discardProduct) {
+          setFeedback({
+            type: "discarded",
+            title: `Product Scrapped: ${outcome.garmentCode ?? outcome.subjectId}`,
+            message: "Product Scrapped / Discarded → Decommissioned from line",
+            garmentCode: outcome.garmentCode ?? outcome.subjectId,
+            productStyle: outcome.productName,
+            loggedDefect: finalDefectReason,
+            rfidUid: uid,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        } else if (decision === "pass") {
+          setFeedback({
+            type: "passed",
+            title: `Inspection Passed: ${outcome.garmentCode ?? outcome.subjectId}`,
+            message: "Inspection Passed → Released to Station 7 (Packing)",
+            garmentCode: outcome.garmentCode ?? outcome.subjectId,
+            productStyle: outcome.productName,
+            rfidUid: uid,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        } else {
+          setFeedback({
+            type: "failed",
+            title: `Defect Registered: ${outcome.garmentCode ?? outcome.subjectId}`,
+            message: `Defect Registered → Sent to ${referDept.charAt(0).toUpperCase() + referDept.slice(1)} Repair Queue`,
+            garmentCode: outcome.garmentCode ?? outcome.subjectId,
+            productStyle: outcome.productName,
+            loggedDefect: finalDefectReason,
+            assignedDepartment: referDept,
+            rfidUid: uid,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        }
+        resetForm();
+      } else {
+        setFeedback({
+          type: "rejected",
+          title: "Scan Operation Rejected",
+          message: outcome.rejectReason || `Station rule violated: ${outcome.resolution}`,
+          rfidUid: uid,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
+    } catch (err: any) {
+      setFeedback({
+        type: "rejected",
+        title: "Scan Exception",
+        message: err?.message || "Internal error resolving inspection scan.",
+        rfidUid: uid,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Persistent Scan Feedback Banner */}
-      {lastOutcome && (
-        <div
-          className={`rounded-lg border p-4 shadow-sm transition-all ${
-            lastOutcome.resolution === "accepted"
-              ? "border-success/40 bg-success/10 text-foreground"
-              : "border-destructive/40 bg-destructive/10 text-destructive"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {lastOutcome.resolution === "accepted" ? (
-              <ShieldCheck className="size-5 text-success shrink-0 mt-0.5" />
-            ) : (
-              <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
-            )}
-            <div className="space-y-1">
-              <p className="text-sm font-semibold">
-                {lastOutcome.resolution === "accepted"
-                  ? `Inspection Successfully Recorded for ${lastOutcome.garmentCode ?? lastOutcome.subjectId}`
-                  : "RFID Scan Operation Rejected"}
-              </p>
-              <p className="text-xs opacity-90">
-                {lastOutcome.resolution === "accepted"
-                  ? `Garment identified: ${lastOutcome.productName ?? "Garment"}. Decision attached and committed to audit history.`
-                  : (lastOutcome.rejectReason ?? `Station rule failed: ${lastOutcome.resolution}`)}
-              </p>
-              <div className="flex items-center gap-2 pt-1 text-[11px] font-mono text-muted-foreground">
-                <span>UID: {lastOutcome.uid}</span>
-                <span>·</span>
-                <span>Timestamp: {new Date(lastOutcome.at).toLocaleTimeString()}</span>
-              </div>
+      {/* Header & Station Hardware Status */}
+      <div className="rounded-xl border-2 border-primary/40 bg-card p-5 shadow-sm space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="wt-id rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                STATION 6
+              </span>
+              <span className="text-xs font-semibold text-muted-foreground">
+                Final QC &amp; Rework Gate
+              </span>
             </div>
+            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              Station 6 · Final Quality Inspection (Scanner 6)
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Active Inspector:{" "}
+              <span className="font-semibold text-foreground">
+                {me.displayName} ({me.username})
+              </span>{" "}
+              · Certified Quality Inspector · Department:{" "}
+              <span className="font-mono font-medium text-foreground">
+                {me.department}
+              </span>
+            </p>
+          </div>
+
+          <div className="flex flex-col items-start gap-2 md:items-end">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-success-soft border border-success/30 px-2.5 py-1 text-xs font-bold text-success-foreground">
+                Scanner 6: Armed &amp; Active
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Decision-First &amp; Zero-Search · Physical examination prior to RFID scan
+            </p>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Left: Decision Preparation */}
-        <Section
-          title="1. Physical Inspection Decision"
-          description="Examine the physical shirt, select Pass/Fail, and prepare the decision BEFORE scanning the garment's card."
-        >
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Inspection Outcome
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  type="button"
-                  variant={result === "pass" ? "default" : "outline"}
-                  className={
-                    result === "pass"
-                      ? "border-success bg-success text-success-foreground hover:bg-success/90"
-                      : ""
-                  }
-                  onClick={() => setResult("pass")}
-                >
-                  <CheckCircle2 className="size-4 mr-1.5" /> Pass & Release
-                </Button>
-                <Button
-                  type="button"
-                  variant={result === "fail" ? "default" : "outline"}
-                  className={
-                    result === "fail"
-                      ? "border-destructive bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      : ""
-                  }
-                  onClick={() => setResult("fail")}
-                >
-                  <XCircle className="size-4 mr-1.5" /> Fail & Open Hold
-                </Button>
-              </div>
+      {/* Live Inspection Feedback Box */}
+      <div
+        className={`rounded-xl border p-4 shadow-sm transition-all ${
+          feedback.type === "passed"
+            ? "border-success/50 bg-success-soft text-foreground"
+            : feedback.type === "failed"
+              ? "border-destructive/50 bg-danger-soft text-foreground"
+              : feedback.type === "discarded"
+                ? "border-amber-500/50 bg-amber-500/10 text-foreground"
+                : feedback.type === "rejected"
+                  ? "border-destructive/50 bg-danger-soft text-foreground"
+                  : "border-border bg-card text-foreground"
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5">
+            {feedback.type === "passed" && (
+              <ShieldCheck className="size-5 text-success" />
+            )}
+            {feedback.type === "failed" && (
+              <ShieldAlert className="size-5 text-destructive" />
+            )}
+            {feedback.type === "discarded" && (
+              <Trash2 className="size-5 text-amber-600 dark:text-amber-400" />
+            )}
+            {feedback.type === "rejected" && (
+              <XCircle className="size-5 text-destructive" />
+            )}
+            {feedback.type === "idle" && (
+              <ScanLine className="size-5 text-muted-foreground" />
+            )}
+          </div>
+
+          <div className="flex-1 space-y-1">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold tracking-tight text-foreground">
+                {feedback.title}
+              </h4>
+              {feedback.rfidUid && (
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted">
+                  UID: {feedback.rfidUid}
+                </span>
+              )}
             </div>
+            <p className="text-xs font-semibold">{feedback.message}</p>
 
-            {result === "fail" ? (
-              <>
-                {/* Rework Routing Department Dropdown */}
-                <div className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                  <label htmlFor="qa-target-dept" className="block text-xs font-semibold uppercase tracking-wider text-destructive">
-                    Route Rework To Department (Mandatory on Fail)
+            {(feedback.garmentCode || feedback.productStyle || feedback.loggedDefect || feedback.assignedDepartment) && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                {feedback.garmentCode && (
+                  <span>
+                    Garment ID:{" "}
+                    <strong className="text-foreground font-mono">
+                      {feedback.garmentCode}
+                    </strong>
+                  </span>
+                )}
+                {feedback.productStyle && (
+                  <span>
+                    Style:{" "}
+                    <strong className="text-foreground">
+                      {feedback.productStyle}
+                    </strong>
+                  </span>
+                )}
+                {feedback.assignedDepartment && (
+                  <span>
+                    Routed Dept:{" "}
+                    <strong className="text-destructive uppercase font-bold">
+                      {feedback.assignedDepartment}
+                    </strong>
+                  </span>
+                )}
+                {feedback.loggedDefect && (
+                  <span>
+                    Defect:{" "}
+                    <strong className="text-destructive">
+                      {feedback.loggedDefect}
+                    </strong>
+                  </span>
+                )}
+                {feedback.timestamp && (
+                  <span className="text-muted-foreground">
+                    Time: {feedback.timestamp}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        {/* Left Column: Inspection Decision & Defect Form */}
+        <section className="rounded-xl border bg-card p-5 space-y-5 shadow-xs">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+              Step 1: Physical Examination
+            </span>
+            <h3 className="text-base font-bold text-foreground">
+              Inspection Decision (Zero-Search)
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Examine seams, dimensions, fabric surface, buttons, and labels. Choose outcome below.
+            </p>
+          </div>
+
+          {/* Primary Decision Toggle (Large High-Visibility Buttons) */}
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setDecision("pass");
+                resetForm();
+              }}
+              className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
+                decision === "pass"
+                  ? "border-success bg-success-soft text-success shadow-xs font-bold ring-2 ring-success/20"
+                  : "border-border bg-card text-muted-foreground hover:border-success/50"
+              }`}
+            >
+              <CheckCircle2 className={`size-7 ${decision === "pass" ? "text-success" : "text-muted-foreground"}`} />
+              <div>
+                <span className="text-sm font-bold block">Pass &amp; Release</span>
+                <span className="text-[10px] opacity-80 block">Meets all quality standards</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDecision("fail")}
+              className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
+                decision === "fail"
+                  ? "border-destructive bg-danger-soft text-destructive shadow-xs font-bold ring-2 ring-destructive/20"
+                  : "border-border bg-card text-muted-foreground hover:border-destructive/50"
+              }`}
+            >
+              <XCircle className={`size-7 ${decision === "fail" ? "text-destructive" : "text-muted-foreground"}`} />
+              <div>
+                <span className="text-sm font-bold block">Fail &amp; Route</span>
+                <span className="text-[10px] opacity-80 block">Requires repair or scrapping</span>
+              </div>
+            </button>
+          </div>
+
+          {/* Defect Configuration Panel (Visible ONLY when Fail & Route is active) */}
+          {decision === "fail" ? (
+            <div className="space-y-4 rounded-xl border-2 border-destructive/30 bg-muted/10 p-4 animate-in fade-in-50 duration-200">
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-destructive flex items-center gap-1.5">
+                  <ShieldAlert className="size-4" />
+                  Defect Configuration &amp; Routing
+                </span>
+                <span className="text-[10px] text-muted-foreground font-semibold">
+                  {selectedDefects.length > 0 ? `${selectedDefects.length} defect(s) selected` : "Required"}
+                </span>
+              </div>
+
+              {/* Common Defect Options (Preset Tags for Rapid Selection) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground block">
+                  Common Defect Options (Quick Check)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {COMMON_DEFECT_OPTIONS.map((defect) => {
+                    const isSelected = selectedDefects.includes(defect.id);
+                    return (
+                      <button
+                        key={defect.id}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedDefects((prev) => prev.filter((id) => id !== defect.id));
+                          } else {
+                            setSelectedDefects((prev) => [...prev, defect.id]);
+                            if (!discardProduct) {
+                              setReferDept(defect.defaultDepartment);
+                            }
+                          }
+                        }}
+                        className={`text-left text-xs p-2 rounded-lg border transition-all flex items-center justify-between ${
+                          isSelected
+                            ? "border-destructive bg-danger-soft text-destructive font-bold"
+                            : "border-border bg-card text-foreground hover:border-primary/40"
+                        }`}
+                      >
+                        <span className="truncate pr-1">{defect.label}</span>
+                        {isSelected ? (
+                          <CheckCircle2 className="size-3.5 shrink-0 text-destructive" />
+                        ) : (
+                          <span className="size-3.5 rounded-full border border-muted-foreground/30 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Defect Detail Box */}
+              <Field
+                label="Custom Defect Detail Box"
+                htmlFor="qc-custom-comment"
+                hint={
+                  hasDefectSelection
+                    ? "Optional additional notes explaining specific repair needs."
+                    : "Mandatory if no common defect is selected above: describe fault."
+                }
+              >
+                <Textarea
+                  id="qc-custom-comment"
+                  rows={2}
+                  value={customComment}
+                  onChange={(e) => setCustomComment(e.target.value)}
+                  placeholder="e.g. Broken stitching along left pocket flap seam; unpick and restitch with navy thread"
+                  className="text-xs bg-background"
+                />
+              </Field>
+
+              {/* Discard Product Option (Scrap Toggle) */}
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 flex items-start gap-2.5">
+                <Checkbox
+                  id="discard-toggle"
+                  checked={discardProduct}
+                  onCheckedChange={(checked) => setDiscardProduct(checked === true)}
+                  className="mt-0.5"
+                />
+                <div className="space-y-0.5">
+                  <label
+                    htmlFor="discard-toggle"
+                    className="text-xs font-bold text-amber-900 dark:text-amber-200 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Discard Product (Scrap Permanently)
+                  </label>
+                  <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                    Check if the defect is non-repairable. Bypasses department repair routing and permanently decommissions the garment.
+                  </p>
+                </div>
+              </div>
+
+              {/* Refer Department Dropdown (Hidden/Disabled when Discard Product is checked) */}
+              {!discardProduct && (
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="refer-dept"
+                    className="text-xs font-bold text-foreground block"
+                  >
+                    Refer Department (Mandatory for Rework Routing)
                   </label>
                   <select
-                    id="qa-target-dept"
-                    value={targetDept}
-                    onChange={(e) => setTargetDept(e.target.value)}
-                    className="w-full h-8 rounded-md border border-input bg-card px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    id="refer-dept"
+                    value={referDept}
+                    onChange={(e) => setReferDept(e.target.value as any)}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs font-semibold shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
-                    {REWORK_DEPARTMENTS.map((dept) => (
+                    {REFER_DEPARTMENTS.map((dept) => (
                       <option key={dept.code} value={dept.code}>
                         {dept.label}
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-muted-foreground pt-0.5">
-                    Upon card scan, this garment will appear immediately on the selected department&apos;s repair screen.
+                  <p className="text-[11px] text-muted-foreground">
+                    Garment will automatically appear on the selected department&apos;s repair screen upon card tap.
                   </p>
                 </div>
+              )}
 
-                {/* Common Faults Checklist (Optional Selection) */}
-                <div className="space-y-2 rounded-md border p-3 bg-card">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Common Faults Checklist (Optional)
-                    </p>
-                    <span className="text-[10px] text-muted-foreground">
-                      {selectedFaults.length} selected
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
-                    {COMMON_QC_FAULTS.map((f) => (
-                      <label
-                        key={f.id}
-                        className={`flex items-start gap-2 text-xs cursor-pointer rounded p-1.5 transition-colors border ${
-                          selectedFaults.includes(f.id)
-                            ? "border-destructive/60 bg-destructive/10 text-destructive font-medium"
-                            : "border-border/60 hover:bg-muted/40"
-                        }`}
-                      >
-                        <Checkbox
-                          checked={selectedFaults.includes(f.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedFaults((prev) => [...prev, f.id]);
-                              if (f.category) setTargetDept(f.category);
-                            } else {
-                              setSelectedFaults((prev) => prev.filter((id) => id !== f.id));
-                            }
-                          }}
-                        />
-                        <span className="leading-tight">{f.label}</span>
-                      </label>
-                    ))}
-                  </div>
+              {/* Mandatory Guard Banner if invalid */}
+              {!isFailConfigValid && (
+                <div className="rounded-md border border-destructive/40 bg-danger-soft p-2.5 text-xs text-destructive font-medium flex items-center gap-2">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>
+                    Select at least one common defect option OR type a custom defect description to arm Scanner 6.
+                  </span>
                 </div>
-
-                {/* Defect Comment Box */}
-                <Field
-                  label="Defect Details & Comment Box"
-                  htmlFor="qa-defect-comment"
-                  hint={
-                    hasFaultSelected
-                      ? "Add optional specific notes or repair details."
-                      : "Mandatory if no checklist fault is selected: explain defect."
-                  }
-                >
-                  <Textarea
-                    id="qa-defect-comment"
-                    rows={2}
-                    value={defectComment}
-                    onChange={(e) => setDefectComment(e.target.value)}
-                    placeholder="e.g. Left sleeve cuff open by 3cm; restitch seam with matching thread"
-                    className="text-xs bg-card border-destructive/40"
-                  />
-                </Field>
-
-                {/* Mandatory Guard Notice */}
-                {!hasFaultSelected && !hasComment && (
-                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300">
-                    ⚠️ <strong>Mandatory Requirement:</strong> Please select at least one fault on the checklist OR enter defect details in the comment box to prepare Fail.
-                  </div>
-                )}
-              </>
-            ) : (
-              /* Pass Checklist */
-              <div className="space-y-2 rounded-md border p-3 bg-card">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Garment Inspection Checklist (All Verified on Pass)
-                </p>
+              )}
+            </div>
+          ) : (
+            /* Pass Criteria Checklist */
+            <div className="space-y-2 rounded-xl border p-4 bg-muted/10">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1">
+                Standard Quality Checklist (All Verified on Pass)
+              </span>
+              <div className="space-y-2">
                 {checklist.map((item) => (
-                  <label key={item.id} className="flex items-start gap-2 text-xs cursor-pointer">
+                  <label
+                    key={item.id}
+                    className="flex items-start gap-2.5 text-xs cursor-pointer rounded-md p-1.5 hover:bg-muted/40 transition-colors"
+                  >
                     <Checkbox
                       checked={item.checked}
-                      onCheckedChange={(v) =>
+                      onCheckedChange={(checked) =>
                         setChecklist((prev) =>
-                          prev.map((c) => (c.id === item.id ? { ...c, checked: v === true } : c)),
+                          prev.map((c) =>
+                            c.id === item.id ? { ...c, checked: checked === true } : c,
+                          ),
                         )
                       }
+                      className="mt-0.5"
                     />
-                    <span className="leading-tight">{item.label}</span>
+                    <span className="leading-snug text-foreground/90">{item.label}</span>
                   </label>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            <Field label="Inspection Notes (Optional)" htmlFor="qa-notes">
-              <Textarea
-                id="qa-notes"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Tolerance notes, inspector comments..."
-                className="text-xs bg-card"
-              />
-            </Field>
+          {/* Optional Inspector Notes */}
+          <Field label="Inspector Notes (Optional)" htmlFor="qc-notes">
+            <Input
+              id="qc-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Clean collar alignment, tested button snap tension"
+              className="text-xs bg-background"
+            />
+          </Field>
+        </section>
 
-            {!isInspector && (
-              <ScopeNote>
-                Only certified quality inspectors (Role Q or Quality dept) can prepare and record
-                inspection decisions. Managers have read-only oversight.
-              </ScopeNote>
-            )}
-
-            {isInspector && (
-              <div className="pt-2">
-                <Button
-                  disabled={
-                    pending ||
-                    !canPrepare ||
-                    (isCtxForThisStation && activeCtx.status !== "expired")
-                  }
-                  onClick={() => {
-                    const selectedLabels = COMMON_QC_FAULTS.filter((f) =>
-                      selectedFaults.includes(f.id),
-                    ).map((f) => f.label);
-                    let finalDefect = selectedLabels.join(", ");
-                    if (defectComment.trim()) {
-                      finalDefect = finalDefect
-                        ? `${finalDefect} — ${defectComment.trim()}`
-                        : defectComment.trim();
-                    } else if (defectReason.trim()) {
-                      finalDefect = finalDefect
-                        ? `${finalDefect} — ${defectReason.trim()}`
-                        : defectReason.trim();
-                    }
-
-                    return void run(
-                      (c) =>
-                        c.prepareActionContext("final_qc", "submit_qc", {
-                          kind: "submit_qc",
-                          result,
-                          scope: "final",
-                          defectReason: result === "fail" ? finalDefect : undefined,
-                          assignedDepartment: result === "fail" ? targetDept : undefined,
-                          faults: selectedFaults,
-                          notes: notes.trim(),
-                          checklist:
-                            result === "pass"
-                              ? checklist
-                              : selectedLabels.map((l, i) => ({
-                                  id: `f-${i}`,
-                                  label: l,
-                                  checked: true,
-                                })),
-                        }),
-                      `Prepared one-use ${result.toUpperCase()} decision${
-                        result === "fail" ? ` (routed to ${targetDept})` : ""
-                      }. Ready for reader board card scan.`,
-                    );
-                  }}
-                  className="w-full sm:w-auto"
-                >
-                  <Radio className="size-4 mr-1.5" /> Prepare QC Decision ({result.toUpperCase()})
-                </Button>
+        {/* Right Column: Ready to Scan & Bench Reader Interface */}
+        <section className="space-y-6">
+          {/* Ready to Scan Indicator Card */}
+          <div
+            className={`rounded-xl border-2 p-5 shadow-xs space-y-4 transition-all ${
+              isDecisionReady
+                ? "border-success/60 bg-success-soft text-foreground"
+                : "border-border bg-card text-muted-foreground"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3 w-3">
+                  {isDecisionReady && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                  )}
+                  <span
+                    className={`relative inline-flex rounded-full h-3 w-3 ${
+                      isDecisionReady ? "bg-success" : "bg-muted-foreground/40"
+                    }`}
+                  ></span>
+                </span>
+                <h4 className="text-sm font-bold tracking-tight">
+                  {isDecisionReady ? "Ready — Scan Garment on Scanner 6" : "Scanner 6 Disarmed (Configure Decision First)"}
+                </h4>
               </div>
-            )}
-          </div>
-        </Section>
-
-        {/* Right: Reader Action & Lifecycle */}
-        <Section
-          title="2. Reader Action & Scan Lifecycle"
-          description="Identity resolution: card tap resolves garment UID and binds the prepared decision atomically."
-        >
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Lifecycle State:</span>
-              {isCtxForThisStation ? (
-                <StatusBadge
-                  status={activeCtx.status}
-                  tone={
-                    activeCtx.status === "ready"
-                      ? "success"
-                      : activeCtx.status === "awaiting_ack"
-                        ? "warning"
-                        : activeCtx.status === "confirmed"
-                          ? "success"
-                          : "neutral"
-                  }
-                />
-              ) : (
-                <StatusBadge status="idle" tone="neutral" />
-              )}
+              <span className="font-mono text-xs font-bold uppercase px-2 py-0.5 rounded bg-background">
+                {decision === "pass" ? "PASS MODE" : discardProduct ? "SCRAP MODE" : "FAIL MODE"}
+              </span>
             </div>
 
-            {isCtxForThisStation && activeCtx.status === "awaiting_ack" && (
-              <div className="rounded-lg border border-warning/40 bg-warning/10 p-4 space-y-3">
-                <p className="text-sm font-medium text-warning-foreground">
-                  Decision prepared (
-                  {activeCtx.payload.kind === "submit_qc"
-                    ? (activeCtx.payload as { result: string }).result.toUpperCase()
-                    : ""}
-                  ). Awaiting ESP32 reader board acknowledgement.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    disabled={pending}
-                    onClick={() =>
-                      void run(
-                        (c) => c.acknowledgeContext(activeCtx.id),
-                        "Reader board acknowledged context.",
-                      )
-                    }
-                  >
-                    Simulate Board Acknowledgment
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() =>
-                      void run((c) => c.cancelContext(activeCtx.id), "Context cancelled.")
-                    }
-                  >
-                    Cancel Decision
-                  </Button>
-                </div>
-              </div>
-            )}
+            <p className="text-xs font-medium">
+              {isDecisionReady ? (
+                decision === "pass" ? (
+                  <span>
+                    Decision armed for <strong className="text-success font-bold">PASS &amp; RELEASE</strong>.
+                    Tap shirt RFID card on Scanner 6 to verify manufacturing history and release to Packing.
+                  </span>
+                ) : discardProduct ? (
+                  <span>
+                    Decision armed for <strong className="text-destructive font-bold">SCRAP / DISCARD</strong>.
+                    Tap shirt RFID card to decommission permanently from production line.
+                  </span>
+                ) : (
+                  <span>
+                    Decision armed for <strong className="text-destructive font-bold">FAIL &amp; ROUTE TO {referDept.toUpperCase()}</strong>.
+                    Tap shirt RFID card to lock quality hold and send to repair queue.
+                  </span>
+                )
+              ) : (
+                <span>
+                  Please select at least one defect option or type custom notes to arm Scanner 6.
+                </span>
+              )}
+            </p>
 
-            {isCtxForThisStation && activeCtx.status === "ready" && (
-              <div className="rounded-lg border border-success/40 bg-success/10 p-4 space-y-3">
-                <p className="text-sm font-medium text-success-foreground">
-                  Ready to scan! Present the inspected garment&apos;s RFID card at Station 6 (Final
-                  QC).
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  The physical scan automatically identifies the garment, resolves whether this is a
-                  final inspection or reinspection, and attaches the prepared decision atomically.
-                </p>
-                <div className="space-y-2">
-                  <Field
-                    label="Garment Card UID"
-                    htmlFor="qa-scan-uid"
-                    hint="UID read by RC522 antenna."
-                  >
+            {/* Fast RFID Tag Input / Antenna Simulator */}
+            <div className="space-y-3 pt-2 border-t border-border/40">
+              <div className="space-y-1.5">
+                <label htmlFor="scan-uid-input" className="text-xs font-bold text-foreground block">
+                  Garment RFID Card (Antenna Reader)
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
                     <Input
-                      id="qa-scan-uid"
+                      id="scan-uid-input"
                       value={scanUid}
                       onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                      className="font-mono bg-card"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && isDecisionReady && !pending) {
+                          void handleScanner6Scan(scanUid);
+                        }
+                      }}
                       placeholder="e.g. 04DAEBFC"
+                      className="font-mono font-bold tracking-wider text-sm bg-background pl-9"
                     />
-                  </Field>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      disabled={pending || !scanUid.trim()}
-                      onClick={() =>
-                        void run(
-                          async (c) => {
-                            const outcome = await c.resolveRfidScan(scanUid.trim());
-                            setLocalLastOutcome(outcome);
-                            if (outcome.resolution === "accepted") {
-                              resetForm();
-                            }
-                            return outcome;
-                          },
-                          (outcome) =>
-                            outcome.resolution === "accepted"
-                              ? `Inspection confirmed for ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName})!`
-                              : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
-                        )
-                      }
-                    >
-                      <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() =>
-                        void run((c) => c.cancelContext(activeCtx.id), "Context cancelled.")
-                      }
-                    >
-                      Cancel
-                    </Button>
+                    <Radio className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                   </div>
+
+                  <Button
+                    onClick={() => void handleScanner6Scan(scanUid)}
+                    disabled={pending || !isDecisionReady || !scanUid.trim()}
+                    className="gap-2 font-bold shrink-0"
+                  >
+                    <ScanLine className="size-4" />
+                    Scan at Scanner 6
+                  </Button>
                 </div>
               </div>
-            )}
 
-            {!isCtxForThisStation && (
-              <div className="rounded-lg border bg-muted/20 p-4 text-xs text-muted-foreground">
-                No active QC context armed. To inspect a shirt, select Pass or Fail on the left and
-                click &ldquo;Prepare QC Decision&rdquo;.
+              {/* Quick Tap Helper Pills */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+                <span className="text-muted-foreground font-medium">Quick Taps:</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] font-mono gap-1"
+                  onClick={() => {
+                    setScanUid("04DAEBFC");
+                    void handleScanner6Scan("04DAEBFC");
+                  }}
+                  disabled={pending || !isDecisionReady}
+                >
+                  <Tag className="size-2.5 text-primary" />
+                  SHIRT-002 (04DAEBFC) · Awaiting QC
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[10px] font-mono gap-1"
+                  onClick={() => {
+                    setScanUid("04003344");
+                    void handleScanner6Scan("04003344");
+                  }}
+                  disabled={pending || !isDecisionReady}
+                >
+                  <Wrench className="size-2.5 text-destructive" />
+                  SHIRT-003 (04003344) · Rework
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-6 text-[10px] font-mono text-destructive border-destructive/20 gap-1"
+                  onClick={() => {
+                    setScanUid("04A1B2C3");
+                    void handleScanner6Scan("04A1B2C3");
+                  }}
+                  disabled={pending || !isDecisionReady}
+                >
+                  Raw Bundle Tag (04A1B2C3)
+                </Button>
               </div>
-            )}
+            </div>
           </div>
-        </Section>
+
+          {/* Validation Logic Reference Card */}
+          <div className="rounded-xl border bg-card p-4 space-y-3 shadow-xs">
+            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Cpu className="size-3.5 text-primary" />
+              Scanner 6 Backend Guards &amp; Verification Rules
+            </h4>
+            <div className="space-y-2 text-[11px] text-muted-foreground leading-relaxed">
+              <div className="flex items-start gap-2">
+                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                <span>
+                  <strong>Full Upstream Prerequisite:</strong> Garment must sequentially complete Cutting ➔ Stitching ➔ Finishing. Skipped stations trigger immediate rejection.
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                <span>
+                  <strong>Single-Pass Guard:</strong> A garment that has already passed Final QC cannot be re-scanned.
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                <span>
+                  <strong>Reinspection Exception:</strong> Repaired garments can be evaluated if the assigned shop recorded repair completion. Inspector cannot evaluate their own repair.
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="size-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                <span>
+                  <strong>Random Card Guard:</strong> Unassigned cards or raw fabric bundle cards are rejected with no garment record found.
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

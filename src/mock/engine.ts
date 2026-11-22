@@ -809,7 +809,7 @@ function handleSubmitQc(
       s,
       uid,
       "rejected_unknown_card",
-      `UID ${uid} is not recognised. Scan the garment's RFID card.`,
+      "Rejected: Unrecognised product tag — No active garment record found.",
       ctx.id,
     );
   if (binding.subjectType !== "garment")
@@ -817,11 +817,41 @@ function handleSubmitQc(
       s,
       uid,
       "rejected_wrong_subject_type",
-      "Expected a garment card. Got a bundle card.",
+      `Rejected: Expected garment card at Station 6; tag ${uid} is bound to ${binding.subjectType} ${binding.subjectId}. Unrecognised product tag.`,
       ctx.id,
     );
   const g = s.garments.find((x) => x.id === binding.subjectId);
-  if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  if (!g)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_unknown_card",
+      "Rejected: Unrecognised product tag — No active garment card record found.",
+      ctx.id,
+    );
+
+  // Rule B: Full Upstream Station History Prerequisite (must have completed Finishing)
+  if (g.stage === "cutting" || g.stage === "stitching") {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_stage",
+      `Rejected: Garment ${g.id} has not completed Finishing Station (expected 'finishing' or 'final-qc', current stage '${g.stage}').`,
+      ctx.id,
+    );
+  }
+
+  // Rule C: Single-Pass Guard
+  if (g.disposition === "passed" && g.stage !== "rework" && !g.hold) {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_duplicate",
+      `Ignored / Rejected: Garment ${g.id} has already passed Final QC.`,
+      ctx.id,
+    );
+  }
+
   // Stage validation: must be finishing or final-qc/rework
   if (g.stage !== "finishing" && g.stage !== "final-qc" && g.stage !== "rework") {
     return rejectScan(
@@ -832,18 +862,27 @@ function handleSubmitQc(
       ctx.id,
     );
   }
-  // Find the open inspection for this garment
-  const insp = s.inspections
+
+  // Find the open inspection for this garment or synthesize if missing
+  let insp = s.inspections
     .filter((i) => i.subjectType === "garment" && i.subjectId === g.id && i.status === "open")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  if (!insp)
-    return rejectScan(
-      s,
-      uid,
-      "rejected_business_rule",
-      `No open inspection found for ${g.id}. Inspection may already be submitted.`,
-      ctx.id,
-    );
+  if (!insp) {
+    const inspId = nextId(s, "inspection", "INSP");
+    insp = {
+      id: inspId,
+      kind: "final",
+      subjectType: "garment",
+      subjectId: g.id,
+      status: "open",
+      assigneeId: actor.id,
+      checklist: finalChecklist(),
+      notes: "",
+      createdAt: now(),
+    };
+    s.inspections.push(insp);
+  }
+
   // Independent inspection rule: inspector cannot be the repair performer
   if (insp.kind === "reinspection") {
     const rc = s.rework.find(
@@ -886,6 +925,9 @@ function handleSubmitQc(
   insp.submittedBy = actor.id;
   closeTasks(s, g.id, ["final-qc-presentation"]);
   const kindLabel = insp.kind === "reinspection" ? "Reinspection" : "Final inspection";
+  const isDiscard = Boolean((ctx.payload as any)?.discard);
+  const assignedDept = (ctx.payload as any)?.assignedDepartment;
+
   if (payload.result === "pass") {
     g.disposition = "passed";
     if (!g.hold) {
@@ -903,6 +945,24 @@ function handleSubmitQc(
       garmentEvent(s, g.id, `${kindLabel} passed — hold awaits explicit release`, actor, insp.id);
     }
     audit(s, actor, "quality", `${kindLabel} passed via RFID scan`, "garment", g.id, insp.id);
+  } else if (isDiscard) {
+    g.disposition = "failed";
+    g.stage = "final-qc";
+    g.hold = {
+      reason: insp.defectReason || "Product Scrapped / Discarded",
+      since: now(),
+      inspectionId: insp.id,
+    };
+    garmentEvent(s, g.id, `${kindLabel} failed — garment scrapped & permanently decommissioned`, actor, insp.defectReason);
+    audit(
+      s,
+      actor,
+      "quality",
+      `Product scrapped / discarded via RFID scan`,
+      "garment",
+      g.id,
+      insp.id,
+    );
   } else {
     g.disposition = "failed";
     g.stage = "rework";
@@ -914,7 +974,7 @@ function handleSubmitQc(
       existing.status = "awaiting-assignment";
       existing.defectReason = insp.defectReason!;
       existing.inspectionId = insp.id;
-      existing.assignedDepartment = undefined;
+      existing.assignedDepartment = assignedDept;
       existing.history.push({
         at: now(),
         label: `Reinspection failed: ${insp.defectReason}`,
@@ -923,7 +983,6 @@ function handleSubmitQc(
       caseId = existing.id;
     } else {
       caseId = nextId(s, "rework", "RW");
-      const assignedDept = (ctx.payload as any)?.assignedDepartment;
       s.rework.push({
         id: caseId,
         garmentId: g.id,
@@ -965,6 +1024,13 @@ function handleSubmitQc(
     );
   }
   consumeContext(s, ctx);
+
+  const outcomeMessage = isDiscard
+    ? "Product Scrapped / Discarded → Decommissioned from line"
+    : payload.result === "pass"
+      ? "Inspection Passed → Released to Station 7 (Packing)"
+      : `Defect Registered → Sent to ${assignedDept ? assignedDept.charAt(0).toUpperCase() + assignedDept.slice(1) : "Repair"} Repair Queue`;
+
   const outcome: ScanOutcome = {
     uid,
     resolution: "accepted",
@@ -972,6 +1038,7 @@ function handleSubmitQc(
     subjectId: g.id,
     garmentCode: g.id,
     productName: g.productName,
+    message: outcomeMessage,
     at: now(),
   };
   appendScanLog(s, outcome);

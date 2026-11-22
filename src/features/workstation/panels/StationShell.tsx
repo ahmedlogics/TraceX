@@ -115,9 +115,10 @@ export function StationShell() {
               </div>
             </div>
 
-            {/* Station Status Banner (Dedicated panels for Station 2, Station 3 & Station 9 handle their own layout) */}
+            {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 9 handle their own layout) */}
             {effectiveStation !== "fabric_issue" &&
               effectiveStation !== "cutting" &&
+              effectiveStation !== "final_qc" &&
               effectiveStation !== "dispatch" && (
               <section
                 aria-label="Active Station Context"

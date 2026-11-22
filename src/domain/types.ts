@@ -194,6 +194,7 @@ export interface SubmitQcPayload {
   scope?: "incoming" | "final" | "reinspection" | undefined;
   checklist: ChecklistItem[];
   notes: string;
+  discard?: boolean | undefined;
 }
 
 export interface PackGarmentPayload {
