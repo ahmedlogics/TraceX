@@ -165,7 +165,7 @@ export interface AssignBundleCardPayload {
 
 export interface ConfirmIssuePayload {
   kind: "confirm_issue";
-  lotId: string;
+  lotId?: string | undefined;
   orderId: string;
   qty: number;
 }
@@ -217,7 +217,11 @@ export type ScanResolution =
   | "rejected_unknown_card"
   | "rejected_wrong_subject_type"
   | "rejected_wrong_stage"
+  | "rejected_qc_not_passed"
   | "rejected_duplicate"
+  | "rejected_duplicate_order"
+  | "rejected_depleted"
+  | "rejected_insufficient_stock"
   | "rejected_no_context"
   | "rejected_expired_context"
   | "rejected_business_rule"
@@ -236,6 +240,11 @@ export interface ScanOutcome {
   /** Human-readable rejection reason. */
   rejectReason?: string | undefined;
   at: string;
+  orderId?: string | undefined;
+  lotCode?: string | undefined;
+  issuedQty?: number | undefined;
+  remainingBalance?: number | undefined;
+  message?: string | undefined;
 }
 
 /** Tag binding: maps a UID to a lot or garment. */

@@ -219,26 +219,58 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
   async prepare(
     envelope: VersionedScanEnvelope,
     tx: PrismaTransactionClient,
-    _context?: DomainScanContext,
+    context?: DomainScanContext,
   ): Promise<PreparedScanSubject> {
     const tagUid = normalizeTagUid(envelope.tagUid);
     const binding = await tx.rfid_tag_bindings.findFirst({
       where: { tag_uid: tagUid, unbound_at: null },
-      include: { material_lots: true },
+      include: {
+        material_lots: {
+          include: {
+            inspections: {
+              where: { outcome: "pass" },
+            },
+          },
+        },
+      },
     });
 
+    // Check 1: Card Exists & Bound to a Bundle?
     if (!binding || !binding.material_lot_id || !binding.material_lots) {
       throw ApiError.badRequest(
-        `Card ${tagUid} is not actively bound to a material lot.`,
+        "Rejected: UID not recognised or has no bundle history.",
         { tagUid },
         "WT_ERR_WRONG_SUBJECT_TYPE",
       );
     }
 
+    const lot = binding.material_lots;
+
+    // Check 2: Did Lot Pass qc.incoming Inspection?
+    const hasPassingInspection = (lot.inspections?.length ?? 0) > 0;
+    const availableQty = Number(lot.available_accepted_quantity);
+
+    if (!hasPassingInspection && availableQty <= 0) {
+      throw ApiError.badRequest(
+        "Rejected: Lot has not passed Incoming QC inspection.",
+        { tagUid, lotCode: lot.code },
+        "WT_ERR_QC_NOT_PASSED",
+      );
+    }
+
+    // Check 4a: Depletion check
+    if (availableQty <= 0) {
+      throw ApiError.badRequest(
+        "Rejected: Bundle fully consumed (Balance: 0m).",
+        { tagUid, lotCode: lot.code },
+        "WT_ERR_DEPLETED",
+      );
+    }
+
     return {
       kind: "material_lot",
-      subjectId: binding.material_lots.id,
-      subjectCode: binding.material_lots.code,
+      subjectId: lot.id,
+      subjectCode: lot.code,
       isNewEnrollment: false,
       tagUid,
       tagBindingId: binding.id,
@@ -255,7 +287,7 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
       scanId: envelope.scanId,
       outcome: "accepted",
       outcomeCode: "issue_confirmed",
-      outcomeMessage: `Fabric issue confirmed for lot ${subject.subjectCode}`,
+      outcomeMessage: "Bundle linked to Order → Issued to Cutting",
       stationCode: "fabric_issue",
       subjectKind: "material_lot",
       subjectId: subject.subjectId,
