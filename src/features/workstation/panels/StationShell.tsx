@@ -125,19 +125,19 @@ export function StationShell() {
               {/* Aesthetic stitching backdrop blend for stitching workstation */}
               {effectiveStation === "stitching" && (
                 <div
-                  className="pointer-events-none absolute right-0 top-0 bottom-0 w-64 md:w-80 select-none overflow-hidden"
+                  className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center justify-end select-none overflow-hidden pr-1"
                   style={{
                     maskImage:
-                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
+                      "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
                     WebkitMaskImage:
-                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
+                      "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
                   }}
                 >
                   <img
                     src="/images/stitching/vintage-sewing-aesthetic.jpg"
-                    alt=""
+                    alt="Vintage stitching machine"
                     aria-hidden="true"
-                    className="h-full w-full object-cover object-right opacity-30 mix-blend-multiply dark:opacity-15 dark:mix-blend-luminosity"
+                    className="h-full w-auto max-w-[260px] object-contain object-right opacity-90 brightness-105 contrast-105"
                   />
                 </div>
               )}
