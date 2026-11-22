@@ -46,7 +46,17 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
     try {
       const user = await authenticate(cleanUsername, password);
       toast.success(`Signed in as ${user.displayName || user.username}`);
-      await navigate(target, { replace: true });
+
+      let destination = target;
+      if (!redirectTo || redirectTo === paths.home) {
+        if (cleanUsername.toLowerCase() === "qc.incoming") {
+          destination = paths.quality;
+        } else if (cleanUsername.toLowerCase() === "qc.demo") {
+          destination = paths.workstation;
+        }
+      }
+
+      await navigate(destination, { replace: true });
     } catch (err) {
       const msg = errorMessage(err);
       setErrorMsg(msg);
@@ -155,9 +165,9 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
               <p className="font-medium text-foreground">Staff Demo Credentials:</p>
               <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[11px]">
                 <span>• admin.demo</span>
-                <span>• quality.demo</span>
+                <span>• qc.demo (Station 6 QA)</span>
+                <span>• qc.incoming (Fabric QC)</span>
                 <span>• manager.demo</span>
-                <span>• dispatch.demo</span>
               </div>
               <p className="pt-1 text-[11px]">
                 Password: <span className="font-mono font-medium text-foreground">weartrail123!</span>

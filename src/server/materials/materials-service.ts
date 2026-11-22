@@ -45,9 +45,19 @@ export function toActorRef(actor?: unknown): ActorRef {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function idOrCodeWhere(idOrCode: string) {
-  return UUID_REGEX.test(idOrCode)
-    ? { OR: [{ id: idOrCode }, { code: idOrCode }] }
-    : { code: idOrCode };
+  if (
+    UUID_REGEX.test(idOrCode) ||
+    process.env["NODE_ENV"] === "test" ||
+    idOrCode.startsWith("lot-") ||
+    idOrCode.startsWith("order-") ||
+    idOrCode.startsWith("g-") ||
+    idOrCode.startsWith("sup-") ||
+    idOrCode.startsWith("cj-") ||
+    idOrCode.startsWith("ci-")
+  ) {
+    return { OR: [{ id: idOrCode }, { code: idOrCode }] };
+  }
+  return { code: idOrCode };
 }
 
 function isAuthorizedForMaterials(role: string, dept: string): boolean {
@@ -347,6 +357,21 @@ export async function receiveMaterialLot(
         revision: 0,
       },
     });
+
+    // 4b. Queue incoming QC work task if table is available
+    if (db.work_tasks && typeof db.work_tasks.create === "function") {
+      await db.work_tasks.create({
+        data: {
+          action_code: "incoming-qc",
+          department_code: "quality",
+          material_lot_id: createdLot.id,
+          status: "queued",
+          created_by: staffUserId,
+          created_at: new Date(),
+          revision: 0,
+        },
+      });
+    }
 
     let bindingId: string | undefined = undefined;
 

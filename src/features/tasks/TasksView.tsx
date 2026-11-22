@@ -141,37 +141,73 @@ export function TasksSection() {
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
   const { run, pending } = useWtAction();
   const [status, setStatus] = useState("active");
+  const [deptFilter, setDeptFilter] = useState("all");
   const [search, setSearch] = useState("");
 
-  return (
-    <Loadable query={qTasks}>
-      {(tasks) => (
-        <Loadable query={qLots}>
-          {(lots) => (
-            <Loadable query={qOrders}>
-              {(orders) => (
-                <Loadable query={qGarments}>
-                  {(garments) => {
-                    const openCount = tasks.filter((t) => t.status === "open").length;
-                    const claimedCount = tasks.filter((t) => t.status === "claimed").length;
-                    const myDeptCount = tasks.filter(
-                      (t) => t.department === me.department && t.status !== "done",
-                    ).length;
-                    const doneCount = tasks.filter((t) => t.status === "done").length;
+  const isManager = me.role === "M" || me.role === "A";
+  const isIncomingQC = me.username === "qc.incoming";
 
-                    const rows = tasks.filter((t) => {
-                      const matchesStatus =
-                        status === "all" ||
-                        (status === "active" ? t.status !== "done" : t.status === status);
-                      const matchesDept =
-                        me.role === "M" || me.role === "A" || t.department === me.department;
-                      const matchesSearch =
-                        search.trim() === "" ||
-                        `${t.id} ${t.title} ${t.subjectId} ${t.department}`
-                          .toLowerCase()
-                          .includes(search.toLowerCase());
-                      return matchesStatus && matchesDept && matchesSearch;
-                    });
+  const deptOptions = isManager
+    ? [
+        { value: "all", label: "All Departments" },
+        { value: "receiving", label: "Receiving" },
+        { value: "raw-store", label: "Raw Store" },
+        { value: "cutting", label: "Cutting" },
+        { value: "stitching", label: "Stitching" },
+        { value: "finishing", label: "Finishing" },
+        { value: "quality", label: "Quality" },
+        { value: "packing", label: "Packing" },
+        { value: "warehouse", label: "Warehouse" },
+        { value: "dispatch", label: "Dispatch" },
+      ]
+    : isIncomingQC
+    ? [
+        { value: "all", label: "All Incoming Areas" },
+        { value: "receiving", label: "Receiving" },
+        { value: "raw-store", label: "Raw Store" },
+        { value: "quality", label: "Quality" },
+      ]
+    : [{ value: me.department, label: departmentLabels[me.department] || me.department }];
+
+  return (
+    <>
+      <PageHeader
+        title="Tasks & Factory Work Queue"
+        description={
+          me.role === "M"
+            ? "Factory-wide task queue. Review prerequisites, bottlenecks, and assign work to operators."
+            : `Departmental work queue for ${departmentLabels[me.department]}.`
+        }
+        crumbs={[{ label: "Staff", href: paths.home }, { label: "Tasks" }]}
+      />
+
+      <Loadable query={qTasks}>
+        {(tasks) => (
+          <Loadable query={qLots}>
+            {(lots) => (
+              <Loadable query={qOrders}>
+                {(orders) => (
+                  <Loadable query={qGarments}>
+                    {(garments) => {
+                      const openCount = tasks.filter((t) => t.status === "open").length;
+                      const claimedCount = tasks.filter((t) => t.status === "claimed").length;
+                      const myDeptCount = tasks.filter(
+                        (t) => t.department === me.department && t.status !== "done",
+                      ).length;
+                      const doneCount = tasks.filter((t) => t.status === "done").length;
+
+                      const rows = tasks.filter((t) => {
+                        const matchesStatus =
+                          status === "all" ||
+                          (status === "active" ? t.status !== "done" : t.status === status);
+                        const matchesDept = deptFilter === "all" || t.department === deptFilter;
+                        const matchesSearch =
+                          search.trim() === "" ||
+                          `${t.id} ${t.title} ${t.subjectId} ${t.department}`
+                            .toLowerCase()
+                            .includes(search.toLowerCase());
+                        return matchesStatus && matchesDept && matchesSearch;
+                      });
 
                     return (
                       <div className="space-y-6">
@@ -215,29 +251,37 @@ export function TasksSection() {
                           </div>
                         </div>
 
-                        {/* Filter Controls */}
-                        <FilterBar>
-                          <SearchInput
-                            value={search}
-                            onChange={setSearch}
-                            placeholder="Search tasks, title, or subject ID"
-                            label="Search tasks"
-                          />
-                          <div className="w-full sm:w-44">
-                            <NativeSelect
-                              ariaLabel="Filter by status"
-                              value={status}
-                              onChange={setStatus}
-                              options={[
-                                { value: "active", label: "Active (Open & Claimed)" },
-                                { value: "open", label: "Open Only" },
-                                { value: "claimed", label: "Claimed Only" },
-                                { value: "done", label: "Completed" },
-                                { value: "all", label: "All Statuses" },
-                              ]}
+                          {/* Filter Controls */}
+                          <FilterBar>
+                            <SearchInput
+                              value={search}
+                              onChange={setSearch}
+                              placeholder="Search tasks, title, or subject ID"
+                              label="Search tasks"
                             />
-                          </div>
-                        </FilterBar>
+                            <div className="w-full sm:w-44">
+                              <NativeSelect
+                                ariaLabel="Filter by status"
+                                value={status}
+                                onChange={setStatus}
+                                options={[
+                                  { value: "active", label: "Active (Open & Claimed)" },
+                                  { value: "open", label: "Open Only" },
+                                  { value: "claimed", label: "Claimed Only" },
+                                  { value: "done", label: "Completed" },
+                                  { value: "all", label: "All Statuses" },
+                                ]}
+                              />
+                            </div>
+                            <div className="w-full sm:w-48">
+                              <NativeSelect
+                                ariaLabel="Filter by department"
+                                value={deptFilter}
+                                onChange={setDeptFilter}
+                                options={deptOptions}
+                              />
+                            </div>
+                          </FilterBar>
 
                         <DataTable
                           rows={rows}
@@ -311,53 +355,53 @@ export function TasksSection() {
                                 else if (t.subjectType === "lot") domainHref = paths.lot(t.subjectId);
                                 else if (t.subjectType === "garment") domainHref = paths.garment(t.subjectId);
 
-                                return (
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    {can.claimTask(me, t) && (
-                                      <Button
-                                        size="sm"
-                                        disabled={pending}
-                                        onClick={() => void run((c) => c.claimTask(t.id), `${t.id} claimed.`)}
-                                      >
-                                        Claim
-                                      </Button>
-                                    )}
-                                    {can.assignTask(me) && t.status !== "done" && <AssignDialog task={t} />}
-                                    {domainHref && (
-                                      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                                        <AppLink href={domainHref}>
-                                          View <ArrowRight className="size-3 ml-0.5" />
-                                        </AppLink>
-                                      </Button>
-                                    )}
-                                    {stCode && t.status !== "done" && (
-                                      <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                                        <AppLink href={paths.workstation}>
-                                          Station <ArrowRight className="size-3 ml-0.5" />
-                                        </AppLink>
-                                      </Button>
-                                    )}
-                                  </div>
-                                );
+                                  return (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {can.claimTask(me, t) && (
+                                        <Button
+                                          size="sm"
+                                          disabled={pending}
+                                          onClick={() => void run((c) => c.claimTask(t.id), `${t.id} claimed.`)}
+                                        >
+                                          Claim
+                                        </Button>
+                                      )}
+                                      {can.assignTask(me) && t.status !== "done" && <AssignDialog task={t} />}
+                                      {domainHref && (
+                                        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                                          <AppLink href={domainHref}>
+                                            View <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      )}
+                                      {stCode && t.status !== "done" && (
+                                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                                          <AppLink href={paths.workstation}>
+                                            Station <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                },
                               },
-                            },
-                          ]}
-                        />
-                      </div>
-                    );
-                  }}
-                </Loadable>
-              )}
-            </Loadable>
-          )}
-        </Loadable>
-      )}
-    </Loadable>
+                            ]}
+                          />
+                        </div>
+                      );
+                    }}
+                  </Loadable>
+                )}
+              </Loadable>
+            )}
+          </Loadable>
+        )}
+      </Loadable>
+    </>
   );
 }
 
 export function TasksView() {
-  const me = useMe();
   return (
     <>
       <PageHeader

@@ -826,17 +826,29 @@ function handleSubmitQc(
       caseId = existing.id;
     } else {
       caseId = nextId(s, "rework", "RW");
+      const assignedDept = (ctx.payload as any)?.assignedDepartment;
       s.rework.push({
         id: caseId,
         garmentId: g.id,
         inspectionId: insp.id,
         defectReason: insp.defectReason!,
-        status: "awaiting-assignment",
+        status: assignedDept ? "assigned" : "awaiting-assignment",
+        assignedDepartment: assignedDept,
+        assignedBy: assignedDept ? actor.id : undefined,
         createdAt: now(),
         history: [
-          { at: now(), label: `Opened from ${insp.id}: ${insp.defectReason}`, actorId: actor.id },
+          { at: now(), label: `Opened from ${insp.id}: ${insp.defectReason}${assignedDept ? ` (assigned to ${assignedDept})` : ""}`, actorId: actor.id },
         ],
       });
+      if (assignedDept) {
+        addTask(s, {
+          kind: "rework",
+          title: `Repair ${g.id} (${caseId})`,
+          department: assignedDept,
+          subjectType: "rework",
+          subjectId: caseId,
+        });
+      }
     }
     g.hold = {
       reason: insp.defectReason!,
@@ -1165,7 +1177,7 @@ export function routineScan(
         s,
         normUid,
         "rejected_wrong_stage",
-        `${g.id} is at '${g.stage}', not 'finishing'.`,
+        `Wrong Stage: Garment ${g.id} is at '${g.stage}', not 'finishing'. Expected stitching completion first.`,
       );
     }
     const recent = s.garmentEvents.filter(

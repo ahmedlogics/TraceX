@@ -61,21 +61,62 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   shipments: ["M", "L"],
   shipment: ["M", "L"],
   ledger: ["A", "M"],
-  audit: ["A", "M", "Q"],
-  reports: ["A", "M", "Q"],
+  audit: ["A", "M"],
+  reports: ["A", "M"],
   adminUsers: ["A"],
   settings: ["A", "M"],
 };
 
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   if (!user || user.status !== "active") return false;
+
+  // Receiving operators only handle materials/receiving, not production orders
   if (
     (user.username === "receiving.demo" || user.department === "receiving") &&
     (key === "productionOrders" || key === "productionOrder")
   ) {
     return false;
   }
-  return routeAccess[key].includes(user.role);
+
+  // Strict role + department scoping for Quality Inspector role (Q)
+  if (user.role === "Q") {
+    const isIncomingQc =
+      user.username?.toLowerCase() === "qc.incoming" ||
+      user.department?.toLowerCase() === "receiving" ||
+      user.department?.toLowerCase() === "raw-store" ||
+      (user.department as string)?.toLowerCase() === "raw_store";
+
+    if (isIncomingQc) {
+      // Incoming Material QC Inspector: strictly Home, Tasks, Material Lots, and Quality (incoming sign-offs)
+      const incomingAllowed: RouteKey[] = [
+        "account",
+        "home",
+        "tasks",
+        "materialLots",
+        "materialLot",
+        "quality",
+        "inspection",
+      ];
+      return incomingAllowed.includes(key);
+    }
+
+    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Tasks, Workstation, Garments, Quality, and Rework
+    const finalQcAllowed: RouteKey[] = [
+      "account",
+      "home",
+      "tasks",
+      "workstation",
+      "garments",
+      "garment",
+      "quality",
+      "inspection",
+      "rework",
+      "reworkCase",
+    ];
+    return finalQcAllowed.includes(key);
+  }
+
+  return routeAccess[key]?.includes(user.role) ?? false;
 }
 
 const is = (u: StaffUser, role: Role, dept?: Department) =>

@@ -31,13 +31,13 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
       {(lots) => {
         const unassignedLots = lots.filter((l) => !l.rfidUid);
         const lotId =
-          selectedLotId && lots.some((l) => l.id === selectedLotId)
+          selectedLotId && unassignedLots.some((l) => l.id === selectedLotId)
             ? selectedLotId
-            : unassignedLots[0]?.id || lots[0]?.id || "";
-        const currentLot = lots.find((l) => l.id === lotId);
+            : unassignedLots[0]?.id || "";
+        const currentLot = unassignedLots.find((l) => l.id === lotId);
         const activeCtx = stationData.activeContext;
         const isCtxForThisStation = activeCtx && activeCtx.stationCode === "fabric_receiving";
-        const hasCard = !!currentLot?.rfidUid;
+        const hasCard = false;
 
         return (
           <div className="space-y-6">
@@ -54,27 +54,21 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                   ) : undefined
                 }
               >
-                {lots.length === 0 ? (
-                  <EmptyState title="No fabric lots recorded" />
+                {unassignedLots.length === 0 ? (
+                  <EmptyState title="No unassigned lots awaiting RFID cards">
+                    All recorded fabric lots have active bundle cards assigned. Create a new fabric lot to assign an RFID card.
+                  </EmptyState>
                 ) : (
                   <div className="space-y-4">
-                    <Field label="Fabric lot" htmlFor="rcv-lot">
+                    <Field label="Newly created fabric lot (card pending)" htmlFor="rcv-lot">
                       <NativeSelect
                         id="rcv-lot"
                         value={lotId}
                         onChange={(v) => setSelectedLotId(v)}
-                        options={[
-                          ...unassignedLots.map((l) => ({
-                            value: l.id,
-                            label: `[NEW · Card Pending] ${l.id} — ${l.material} (${l.balanceQty} ${l.unit ?? "m"})`,
-                          })),
-                          ...lots
-                            .filter((l) => !!l.rfidUid)
-                            .map((l) => ({
-                              value: l.id,
-                              label: `${l.id} — ${l.material} (${l.balanceQty} ${l.unit ?? "m"} · UID: ${l.rfidUid})`,
-                            })),
-                        ]}
+                        options={unassignedLots.map((l) => ({
+                          value: l.id,
+                          label: `${l.id} — ${l.material} (${l.balanceQty} ${l.unit ?? "m"})`,
+                        }))}
                       />
                     </Field>
 

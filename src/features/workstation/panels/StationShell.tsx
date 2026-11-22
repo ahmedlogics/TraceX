@@ -22,7 +22,7 @@ import { ReceivingPanel } from "./ReceivingPanel";
 import { IssuePanel } from "./IssuePanel";
 import { CuttingPanel } from "./CuttingPanel";
 import { StitchingPanel } from "./StitchingPanel";
-import { RoutinePanel } from "./RoutinePanel";
+import { FinishingPanel } from "./FinishingPanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
 
@@ -106,8 +106,8 @@ export function StationShell() {
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-muted-foreground">Operator:</span>
-                <span className="font-semibold">{me.displayName}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                <span className="font-semibold text-foreground">{me.displayName}</span>
+                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
                   {me.department}
                 </span>
               </div>
@@ -115,40 +115,16 @@ export function StationShell() {
 
             {/* Station Status Banner */}
             <section
-              aria-label="Station header"
-              className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 space-y-4 shadow-xs ${
-                effectiveStation === "stitching"
-                  ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
-                  : "bg-card"
-              }`}
+              aria-label="Active Station Context"
+              className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-xs"
             >
-              {/* Aesthetic stitching backdrop blend for stitching workstation */}
-              {effectiveStation === "stitching" && (
-                <div
-                  className="pointer-events-none absolute right-0 top-0 bottom-0 w-64 md:w-80 select-none overflow-hidden"
-                  style={{
-                    maskImage:
-                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
-                    WebkitMaskImage:
-                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
-                  }}
-                >
-                  <img
-                    src="/images/stitching/vintage-sewing-aesthetic.jpg"
-                    alt=""
-                    aria-hidden="true"
-                    className="h-full w-full object-cover object-right opacity-30 mix-blend-multiply dark:opacity-15 dark:mix-blend-luminosity"
-                  />
-                </div>
-              )}
-
               <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="wt-eyebrow">
                       {activeStations.length > 1
                         ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
-                        : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
+                        : "Assigned Workstation"}
                     </p>
                     <span className="text-xs font-mono text-muted-foreground">
                       code: {effectiveStation}
@@ -185,7 +161,7 @@ export function StationShell() {
               {/* Durable Scan Feedback */}
               {lastOutcome && (
                 <div
-                  className={`rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
+                  className={`mt-4 rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
                     lastOutcome.resolution === "accepted"
                       ? "border-success/40 bg-success-soft text-foreground"
                       : "border-destructive/40 bg-danger-soft text-foreground"
@@ -219,7 +195,7 @@ export function StationShell() {
             {effectiveStation === "fabric_issue" && <IssuePanel stationData={stData} />}
             {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
             {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
-            {effectiveStation === "finishing" && <RoutinePanel stationData={stData} />}
+            {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
             {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
             {(effectiveStation === "packing" ||
               effectiveStation === "warehouse" ||

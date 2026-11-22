@@ -26,8 +26,10 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
   const nextStage = isStitching ? "finishing" : "final-qc";
 
   const isAuthorized =
-    me.role === "M" ||
-    (isStitching && me.department === "stitching") ||
+    me.role === "A" ||
+    me.role === "O" ||
+    me.role === "P" ||
+    (isStitching && (me.department === "stitching" || me.department === "finishing")) ||
     (!isStitching && me.department === "finishing");
 
   return (

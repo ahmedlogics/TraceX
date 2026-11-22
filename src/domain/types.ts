@@ -189,6 +189,9 @@ export interface SubmitQcPayload {
   kind: "submit_qc";
   result: "pass" | "fail";
   defectReason?: string | undefined;
+  assignedDepartment?: string | undefined;
+  faults?: string[] | undefined;
+  scope?: "incoming" | "final" | "reinspection" | undefined;
   checklist: ChecklistItem[];
   notes: string;
 }

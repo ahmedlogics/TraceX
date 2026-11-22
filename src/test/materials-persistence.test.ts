@@ -451,6 +451,18 @@ function createMockDb(): { db: PrismaTransactionClient; state: MockDbState } {
         if (data.unbound_by) b.unbound_by = data.unbound_by;
         return b;
       },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0;
+        for (const b of state.rfid_tag_bindings) {
+          if (where.material_lot_id && b.material_lot_id !== where.material_lot_id) continue;
+          if (where.garment_id && b.garment_id !== where.garment_id) continue;
+          if (where.unbound_at === null && b.unbound_at !== null) continue;
+          if (data.unbound_at) b.unbound_at = data.unbound_at;
+          if (data.unbound_by !== undefined) b.unbound_by = data.unbound_by;
+          count++;
+        }
+        return { count };
+      },
     },
     work_tasks: {
       findMany: async () => state.work_tasks,
