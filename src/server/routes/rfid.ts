@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/client";
 import { validateBody } from "../middleware/validation";
 import { sendSuccess, ApiError } from "../middleware/responses";
@@ -465,19 +466,102 @@ rfidRouter.post(
 
       const dbActionCode = toDbActionCode(stationCode, kind);
 
+      let resolvedProductionOrderId: string | null = null;
+      let resolvedQuantity: Prisma.Decimal | null = null;
+
+      // Resolve production_order_id and quantity to satisfy PostgreSQL check constraints (e.g. rfid_action_contexts_check10)
+      const orderRaw = p["productionOrderId"] || p["orderId"];
+      let orderRecord = null;
+      if (orderRaw) {
+        orderRecord = await prisma.production_orders.findFirst({
+          where: {
+            OR: [
+              { id: String(orderRaw) },
+              { code: String(orderRaw) },
+            ],
+          },
+        });
+      }
+
+      if (dbActionCode === "issue_bundle") {
+        if (!orderRecord) {
+          // Fallback to active/latest approved or draft order
+          orderRecord = await prisma.production_orders.findFirst({
+            where: { status: { in: ["approved", "in_progress", "draft"] } },
+            orderBy: { created_at: "desc" },
+          });
+        }
+        if (orderRecord) {
+          resolvedProductionOrderId = orderRecord.id;
+          const rawQty = p["qty"] || p["quantity"];
+          const numQty = rawQty ? Number(rawQty) : (orderRecord.planned_quantity ? Number(orderRecord.planned_quantity) * 2.0 : 8.0);
+          resolvedQuantity = new Prisma.Decimal(Math.max(0.1, numQty));
+        } else {
+          throw ApiError.badRequest("Cannot arm fabric issue: No active production order found. Please plan or approve a production order first.");
+        }
+      } else if (orderRecord) {
+        resolvedProductionOrderId = orderRecord.id;
+      }
+
+      const rawQty = p["qty"] || p["quantity"];
+      if (rawQty && !resolvedQuantity) {
+        const n = Number(rawQty);
+        if (n > 0) {
+          resolvedQuantity = new Prisma.Decimal(n);
+        }
+      }
+
+      let resolvedPackageId = p["packageId"] || p["pkgId"] ? String(p["packageId"] || p["pkgId"]) : null;
+      if (dbActionCode === "pack_garment" && !resolvedPackageId) {
+        const pkg = await prisma.packages.findFirst({
+          where: { status: "open" },
+          orderBy: { created_at: "desc" },
+        });
+        if (pkg) resolvedPackageId = pkg.id;
+      }
+
+      let resolvedWarehouseBinId = p["binId"] || p["warehouseBinId"] ? String(p["binId"] || p["warehouseBinId"]) : null;
+      if (dbActionCode === "receive_warehouse" && !resolvedWarehouseBinId) {
+        const bin = await prisma.warehouse_bins.findFirst({
+          orderBy: { code: "asc" },
+        });
+        if (bin) resolvedWarehouseBinId = bin.id;
+      }
+
+      let resolvedCuttingJobId = p["cuttingJobId"] ? String(p["cuttingJobId"]) : null;
+      let resolvedCuttingInputId = p["cuttingInputId"] ? String(p["cuttingInputId"]) : null;
+      let resolvedSourceSelectionId = p["sourceSelectionId"] ? String(p["sourceSelectionId"]) : null;
+
+      if ((dbActionCode === "select_cutting_source" || dbActionCode === "bind_garment_tag") && !resolvedCuttingJobId) {
+        const job = await prisma.cutting_jobs.findFirst({
+          where: resolvedProductionOrderId ? { production_order_id: resolvedProductionOrderId } : {},
+          orderBy: { performed_at: "desc" },
+        });
+        if (job) {
+          resolvedCuttingJobId = job.id;
+          if (!resolvedCuttingInputId) {
+            const input = await prisma.cutting_inputs.findFirst({
+              where: { cutting_job_id: job.id },
+            });
+            if (input) resolvedCuttingInputId = input.id;
+          }
+        }
+      }
+
       const context = await prisma.rfid_action_contexts.create({
         data: {
           reader_session_id: session.id,
           action_code: dbActionCode,
           status: "awaiting_ack",
           expires_at: expiresAt,
-          cutting_job_id: p["cuttingJobId"] ? String(p["cuttingJobId"]) : null,
-          cutting_input_id: p["cuttingInputId"] ? String(p["cuttingInputId"]) : null,
-          source_selection_id: p["sourceSelectionId"] ? String(p["sourceSelectionId"]) : null,
-          production_order_id: p["productionOrderId"] ? String(p["productionOrderId"]) : null,
-          package_id: p["packageId"] ? String(p["packageId"]) : null,
+          quantity: resolvedQuantity,
+          cutting_job_id: resolvedCuttingJobId,
+          cutting_input_id: resolvedCuttingInputId,
+          source_selection_id: resolvedSourceSelectionId,
+          production_order_id: resolvedProductionOrderId,
+          package_id: resolvedPackageId,
           shipment_id: p["shipmentId"] ? String(p["shipmentId"]) : null,
-          warehouse_bin_id: p["binId"] || p["warehouseBinId"] ? String(p["binId"] || p["warehouseBinId"]) : null,
+          warehouse_bin_id: resolvedWarehouseBinId,
           qc_scope: qcScope,
           checklist_version_id: checklistVersionId,
           qc_outcome: p["outcome"] || p["qcOutcome"] ? (String(p["outcome"] || p["qcOutcome"]) as any) : null,

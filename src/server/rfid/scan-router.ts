@@ -193,7 +193,7 @@ export class ScanRoutingService implements IScanRoutingService {
       const order =
         typeof (db as any).production_orders?.findFirst === "function"
           ? await (db as any).production_orders.findFirst({
-              where: { status: { in: ["approved", "in_progress", "planned"] } },
+              where: { status: { in: ["approved", "in_progress", "draft"] } },
               orderBy: { created_at: "desc" },
             })
           : null;
