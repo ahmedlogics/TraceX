@@ -61,13 +61,6 @@ export function DashboardView() {
             </AppLink>
           </Button>
         )}
-        {canAccessRoute(me, "productionOrders") && (
-          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
-            <AppLink href={paths.orders}>
-              <Scissors className="size-3.5 text-primary" /> Orders
-            </AppLink>
-          </Button>
-        )}
         {canAccessRoute(me, "quality") && (
           <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.quality}>

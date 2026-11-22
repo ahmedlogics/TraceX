@@ -111,18 +111,13 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                         </Tabs>
                       </div>
 
-                      {/* Station & Hardware Status Pill */}
-                      <div className="flex flex-wrap items-center gap-3 text-xs">
-                        <div className="flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-success-foreground font-medium">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-                          </span>
-                          <span>Bench Scanner Active: GPIO 16 (Reader 5)</span>
-                        </div>
-                        <div className="text-muted-foreground">
-                          Operator: <span className="font-semibold text-foreground">{me.displayName}</span> ({me.department})
-                        </div>
+                      {/* Hardware Scanner Status Pill */}
+                      <div className="flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-xs text-success-foreground font-medium">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                        </span>
+                        <span>Bench Scanner Active: GPIO 16 (Reader 5)</span>
                       </div>
                     </div>
 
@@ -175,8 +170,8 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                         <div className="grid gap-6 lg:grid-cols-2">
                           {/* Continuous Reader & Quick Tap Bench */}
                           <Section
-                            title="Station 5 / S4 · Finishing Bench Scanner"
-                            description="Continuous RFID ingestion for trimming, pressing, buttoning, and garment completion."
+                            title="Bench Scanner"
+                            description="RFID card tap advances garment from finishing to final QC."
                           >
                             <div className="space-y-4">
                               <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
@@ -186,14 +181,14 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                                       <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                                     </span>
-                                    <p className="text-sm font-semibold text-foreground">Continuous Routine Reader Active</p>
+                                    <p className="text-sm font-semibold text-foreground">Continuous Reader Active</p>
                                   </div>
                                   <span className="text-[11px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
                                     GPIO 16 · Reader 5
                                   </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                  No per-shirt paperwork required. Present any assembled garment card at the bench antenna.
+                                  Present garment card at the bench reader.
                                   Advancement: <span className="font-semibold text-foreground">finishing</span> &rarr;{" "}
                                   <span className="font-semibold text-foreground">final-qc</span>.
                                 </p>
