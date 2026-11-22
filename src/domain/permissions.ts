@@ -78,6 +78,14 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return false;
   }
 
+  // Cutting operators operate on their workstation table by scanning bundle cards, not production orders screen
+  if (
+    (user.username === "cutting.demo" || user.department === "cutting") &&
+    (key === "productionOrders" || key === "productionOrder")
+  ) {
+    return false;
+  }
+
   // Warehouse operators only handle warehouse inventory and intake, not full factory garment production lists
   if (
     (user.username === "warehouse.demo" || user.department === "warehouse") &&

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowRight, ExternalLink, Layers, OctagonAlert, Radio, Scissors, Tag } from "lucide-react";
+import { ArrowRight, Check, Copy, ExternalLink, Layers, OctagonAlert, Radio, Scissors, Sparkles, Tag } from "lucide-react";
+import { toast } from "sonner";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
@@ -106,17 +107,15 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                     </Button>
                   )}
                   {canReplaceCard && <ReplaceCardDialog garmentId={g.id} currentUid={g.rfidUid} />}
-                  {published && (
-                    <Button asChild variant="outline" size="sm">
-                      <AppLink
-                        href={paths.publicJourney(g.publicId)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Public page <ExternalLink className="size-3.5 ml-1" />
-                      </AppLink>
-                    </Button>
-                  )}
+                  <Button asChild variant="default" size="sm" className="bg-primary text-primary-foreground shadow-xs">
+                    <AppLink
+                      href={paths.publicJourney(g.publicId || g.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Sparkles className="size-3.5 mr-1" /> NFC Digital Passport <ExternalLink className="size-3.5 ml-1" />
+                    </AppLink>
+                  </Button>
                 </div>
               }
             />
@@ -267,6 +266,27 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                     },
                     { label: "Garment Size", value: g.size ?? "—" },
                     { label: "Public Tracking Ref", value: <span className="wt-id font-mono">{g.publicId}</span> },
+                    {
+                      label: "NFC Tag Link (Mobile Tap)",
+                      value: (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono text-primary font-bold">
+                            /p/{g.publicId || g.id}
+                          </code>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                            onClick={() => {
+                              const fullUrl = `${window.location.origin}/p/${g.publicId || g.id}`;
+                              navigator.clipboard.writeText(fullUrl);
+                              toast.success(`Copied NFC link: ${fullUrl}`);
+                            }}
+                          >
+                            <Copy className="size-3" /> Copy URL
+                          </button>
+                        </div>
+                      ),
+                    },
                   ]}
                 />
               </Section>

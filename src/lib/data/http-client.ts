@@ -652,9 +652,10 @@ export function createHttpClient(): WearTrailClient {
     },
     async recordCuttingOutput(input: {
       orderId: string;
-      issueId: string;
+      issueId?: string | undefined;
       fabricUsed: number;
       size: string;
+      tagUid?: string | undefined;
     }): Promise<string> {
       const res = await req<string | { garmentCode?: string; id?: string }>(
         `/api/production/orders/${encodeURIComponent(input.orderId)}/cutting-outputs`,

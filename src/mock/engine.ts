@@ -1952,7 +1952,13 @@ export function approveOrder(s: DemoState, actor: StaffUser, orderId: string) {
 export function recordCuttingOutput(
   s: DemoState,
   actor: StaffUser,
-  input: { orderId: string; issueId: string; fabricUsed: number; size: string },
+  input: {
+    orderId: string;
+    issueId?: string | undefined;
+    fabricUsed: number;
+    size: string;
+    tagUid?: string | undefined;
+  },
 ) {
   ensure(
     actor.role === "P" && actor.department === "cutting" && actor.status === "active",
@@ -1960,7 +1966,22 @@ export function recordCuttingOutput(
     "Only cutting staff can record cutting outputs.",
   );
   const order = findOrThrow(s.orders, input.orderId, "Order");
-  const issue = findOrThrow(s.issues, input.issueId, "Material issue");
+  let issue = input.issueId ? s.issues.find((i) => i.id === input.issueId) : undefined;
+  if (!issue) {
+    issue = s.issues.find((i) => i.orderId === order.id);
+  }
+  if (!issue) {
+    const lot = s.lots.find((l) => l.status === "accepted") || s.lots[0]!;
+    issue = {
+      id: nextId(s, "issue", "ISS"),
+      lotId: lot.id,
+      orderId: order.id,
+      qty: Math.max(input.fabricUsed * Math.max(1, order.plannedQty), 20),
+      at: now(),
+      by: actor.id,
+    };
+    s.issues.push(issue);
+  }
   ensure(issue.orderId === order.id, "conflict", "That material issue belongs to another order.");
   const used = s.cuttingOutputs
     .filter((c) => c.issueId === issue.id)
@@ -1993,10 +2014,22 @@ export function recordCuttingOutput(
     productName: `${order.product} — ${input.size}`,
     size: input.size,
     cuttingOutputId: cutId,
+    rfidUid: input.tagUid || undefined,
     stage: "stitching",
     disposition: "not-inspected",
     hold: null,
   });
+  if (input.tagUid) {
+    s.rfidTagBindings.push({
+      id: nextId(s, "binding", "BIND"),
+      uid: input.tagUid,
+      subjectType: "garment",
+      subjectId: garmentId,
+      boundAt: now(),
+      boundBy: actor.id,
+      active: true,
+    });
+  }
   garmentEvent(
     s,
     garmentId,

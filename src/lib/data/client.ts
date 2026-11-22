@@ -240,9 +240,10 @@ export interface WearTrailClient {
   approveOrder(orderId: string): Promise<void>;
   recordCuttingOutput(input: {
     orderId: string;
-    issueId: string;
+    issueId?: string | undefined;
     fabricUsed: number;
     size: string;
+    tagUid?: string | undefined;
   }): Promise<string>;
 
   // Garments — GET /garments(/:id)

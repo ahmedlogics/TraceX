@@ -586,18 +586,78 @@ export async function confirmCuttingSource(
       throw ApiError.notFound(`Production order '${input.orderId}' not found.`, undefined, "WT_ERR_NOT_FOUND");
     }
 
-    const issue = await db.material_stock_movements.findUnique({
-      where: { id: input.issueId },
-      include: {
-        material_lots: {
+    const isUuid = (val?: string) =>
+      typeof val === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+    let issue = isUuid(input.issueId)
+      ? await db.material_stock_movements.findFirst({
+          where: { id: input.issueId },
           include: {
-            rfid_tag_bindings: {
-              where: { unbound_at: null },
+            material_lots: {
+              include: {
+                rfid_tag_bindings: {
+                  where: { unbound_at: null },
+                },
+              },
+            },
+          },
+        })
+      : null;
+
+    if (!issue) {
+      issue = await db.material_stock_movements.findFirst({
+        where: {
+          production_order_id: order.id,
+          kind: "issued",
+        },
+        include: {
+          material_lots: {
+            include: {
+              rfid_tag_bindings: {
+                where: { unbound_at: null },
+              },
             },
           },
         },
-      },
-    });
+        orderBy: { performed_at: "desc" },
+      });
+    }
+
+    if (!issue) {
+      const lot = await db.material_lots.findFirst({
+        where: {
+          available_accepted_quantity: { gt: 0 },
+        },
+        include: {
+          rfid_tag_bindings: {
+            where: { unbound_at: null },
+          },
+        },
+        orderBy: { received_at: "desc" },
+      });
+      if (lot) {
+        issue = await db.material_stock_movements.create({
+          data: {
+            material_lot_id: lot.id,
+            production_order_id: order.id,
+            kind: "issued",
+            quantity: new Prisma.Decimal(input.consumedQty || 2),
+            reason: `Auto-issued for cutting order ${order.code}`,
+            performed_by: order.created_by,
+          },
+          include: {
+            material_lots: {
+              include: {
+                rfid_tag_bindings: {
+                  where: { unbound_at: null },
+                },
+              },
+            },
+          },
+        });
+      }
+    }
 
     if (!issue || issue.kind !== "issued") {
       throw ApiError.notFound(

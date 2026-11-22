@@ -253,9 +253,29 @@ export async function getPublicJourney(
     }
   }
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+  const normalizedUid = cleanId.replace(/[\s:-]/g, "").toUpperCase();
+
   // 2. Fall back to live database projection for active garments
   let garment: any = await prisma.garments.findFirst({
-    where: { public_id: cleanId },
+    where: {
+      OR: [
+        { public_id: cleanId },
+        { code: { equals: cleanId, mode: "insensitive" } },
+        ...(isUuid ? [{ id: cleanId }] : []),
+        {
+          rfid_tag_bindings: {
+            is: {
+              OR: [
+                { tag_identifier: { equals: cleanId, mode: "insensitive" } },
+                { tag_uid: { equals: normalizedUid, mode: "insensitive" } },
+              ],
+              unbound_at: null,
+            },
+          },
+        },
+      ],
+    },
     include: {
       cutting_jobs: {
         include: {

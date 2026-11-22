@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, Clock, OctagonAlert, Package, Radio, Scissors, Tag } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, ExternalLink, OctagonAlert, Package, Radio, Scissors, Tag } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
@@ -194,11 +194,18 @@ export function GarmentsView() {
                   {
                     header: "Actions",
                     cell: (g) => (
-                      <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                        <AppLink href={paths.garment(g.id)}>
-                          View <ArrowRight className="size-3 ml-1" />
-                        </AppLink>
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                          <AppLink href={paths.garment(g.id)}>
+                            View <ArrowRight className="size-3 ml-1" />
+                          </AppLink>
+                        </Button>
+                        <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
+                          <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
+                            <ExternalLink className="size-3 mr-1" /> Passport
+                          </AppLink>
+                        </Button>
+                      </div>
                     ),
                   },
                 ]}
