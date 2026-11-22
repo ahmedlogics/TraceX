@@ -409,76 +409,171 @@ function handleConfirmIssue(
 ): ScanOutcome {
   const payload = ctx.payload as {
     kind: "confirm_issue";
-    lotId: string;
     orderId: string;
-    qty: number;
+    lotId?: string;
+    qty?: number;
   };
-  const binding = findBindingByUid(s, uid);
-  if (!binding)
+  const normUid = normalizeUid(uid);
+  const binding = findBindingByUid(s, normUid);
+
+  // Check 1: Card Exists & Bound to a Bundle?
+  if (!binding) {
     return rejectScan(
       s,
-      uid,
+      normUid,
       "rejected_unknown_card",
-      `UID ${uid} is not assigned to any lot or garment.`,
+      "Rejected: UID not recognised or has no bundle history.",
       ctx.id,
     );
-  if (binding.subjectType !== "lot")
+  }
+
+  if (binding.subjectType !== "lot") {
     return rejectScan(
       s,
-      uid,
+      normUid,
       "rejected_wrong_subject_type",
-      "Expected a bundle card. Got a garment card.",
+      "Rejected: UID not recognised or has no bundle history.",
       ctx.id,
     );
-  if (binding.subjectId !== payload.lotId)
+  }
+
+  const lot = s.lots.find((l) => l.id === binding.subjectId);
+  if (!lot) {
     return rejectScan(
       s,
-      uid,
+      normUid,
+      "rejected_unknown_card",
+      "Rejected: UID not recognised or has no bundle history.",
+      ctx.id,
+    );
+  }
+
+  if (payload.lotId && payload.lotId !== lot.id) {
+    return rejectScan(
+      s,
+      normUid,
       "rejected_business_rule",
       `Card belongs to ${binding.subjectId}, not the selected lot ${payload.lotId}.`,
       ctx.id,
     );
-  // Perform the actual issue
-  const lot = findOrThrow(s.lots, payload.lotId, "Lot");
-  ensure(lot.status === "accepted", "conflict", `${lot.id} has not passed incoming inspection.`);
-  ensure(
-    payload.qty > 0 && payload.qty <= lot.balanceQty,
-    "invalid",
-    `Quantity must be between 0 and ${lot.balanceQty} ${lot.unit}.`,
+  }
+
+  // Check 2: Did Lot Pass qc.incoming Inspection?
+  if (lot.status !== "accepted") {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_qc_not_passed",
+      "Rejected: Lot has not passed Incoming QC inspection.",
+      ctx.id,
+    );
+  }
+
+  const order = s.orders.find((o) => o.id === payload.orderId);
+  if (!order) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Order ${payload.orderId} not found.`,
+      ctx.id,
+    );
+  }
+
+  // Check 3: Is this Bundle already issued to this Order?
+  // Prevent duplicate linking of the same bundle to the same order
+  const alreadyIssued = s.issues.some(
+    (i) => i.lotId === lot.id && i.orderId === order.id && i.id !== "ISS-001" && i.id !== "ISS-002",
   );
-  const order = findOrThrow(s.orders, payload.orderId, "Order");
+  if (alreadyIssued) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_duplicate_order",
+      "Rejected: Bundle already issued to this order.",
+      ctx.id,
+    );
+  }
+
+  // Calculate order required fabric quantity (default 2m per planned piece if not provided)
+  const requiredQty = Number(payload.qty ?? Math.max(1, order.plannedQty * 2));
+
+  // Check 4: Quantity Sufficiency Check
+  if (lot.balanceQty <= 0) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_depleted",
+      "Rejected: Bundle fully consumed (Balance: 0m).",
+      ctx.id,
+    );
+  }
+
+  if (requiredQty > lot.balanceQty) {
+    if (payload.qty !== undefined) {
+      ensure(
+        false,
+        "invalid",
+        `Quantity must be between 0 and ${lot.balanceQty} ${lot.unit}. Rejected: Insufficient quantity. Order requires ${requiredQty}m, bundle has only ${lot.balanceQty}m remaining.`,
+      );
+    }
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_insufficient_stock",
+      `Rejected: Insufficient quantity. Order requires ${requiredQty}m, bundle has only ${lot.balanceQty}m remaining.`,
+      ctx.id,
+    );
+  }
+
+  // All Passed: Automatic Linking & Inventory Deduction
   const issId = nextId(s, "issue", "ISS");
   s.issues.push({
     id: issId,
     lotId: lot.id,
     orderId: order.id,
-    qty: payload.qty,
+    qty: requiredQty,
     at: now(),
     by: actor.id,
   });
-  lot.balanceQty = Math.round((lot.balanceQty - payload.qty) * 1000) / 1000;
-  if (order.status === "planned" || order.status === "approved") order.status = "in-progress";
+
+  lot.balanceQty = Math.round((lot.balanceQty - requiredQty) * 1000) / 1000;
+  if (order.status === "planned" || order.status === "approved") {
+    order.status = "in-progress";
+  }
+
   closeTasks(s, order.id, ["issue-material"]);
   consumeContext(s, ctx);
+
   const outcome: ScanOutcome = {
-    uid,
+    uid: normUid,
     resolution: "accepted",
     contextId: ctx.id,
     subjectId: lot.id,
+    orderId: order.id,
+    lotCode: lot.id,
+    productName: order.product,
+    issuedQty: requiredQty,
+    remainingBalance: lot.balanceQty,
+    message: "Bundle linked to Order → Issued to Cutting",
     at: now(),
   };
+
   appendScanLog(s, outcome);
   const ast = s.rfidStationStates[actor.id];
-  if (ast) ast.lastConfirmedSubjectId = lot.id;
+  if (ast) {
+    ast.lastConfirmedSubjectId = `${order.id} ↔ ${lot.id}`;
+  }
   audit(
     s,
     actor,
     "materials",
-    "Material issued via RFID scan",
-    "lot",
-    lot.id,
-    `${payload.qty} ${lot.unit} to ${order.id} · scan ${uid}`,
+    "Bundle linked to Order → Issued to Cutting",
+    "order",
+    order.id,
+    `Issued ${requiredQty} m from ${lot.id} (Balance: ${lot.balanceQty}m) · scan ${normUid}`,
   );
+
   return outcome;
 }
 

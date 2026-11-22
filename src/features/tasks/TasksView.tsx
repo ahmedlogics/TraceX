@@ -374,7 +374,21 @@ export function TasksSection() {
                                           </AppLink>
                                         </Button>
                                       )}
-                                      {stCode && t.status !== "done" && (
+                                      {t.kind === "incoming-qc" && (
+                                        <Button asChild size="sm" className="h-7 text-xs">
+                                          <AppLink href={paths.quality}>
+                                            Evaluate <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      )}
+                                      {t.kind === "issue-material" && t.status !== "done" && (
+                                        <Button asChild size="sm" className="h-7 text-xs">
+                                          <AppLink href={paths.workstation}>
+                                            Issue Fabric <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      )}
+                                      {stCode && !isIncomingQC && t.status !== "done" && (
                                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
                                           <AppLink href={paths.workstation}>
                                             Station <ArrowRight className="size-3 ml-0.5" />
