@@ -22,7 +22,7 @@ import type {
 } from "@/domain/types";
 import { DEMO_DEFAULT_PASSWORD, hashPassword } from "@/domain/crypto-auth";
 
-export const DEMO_STATE_VERSION = 6;
+export const DEMO_STATE_VERSION = 7;
 
 const user = (
   id: string,

@@ -384,6 +384,7 @@ function handleAssignBundleCard(
     });
   bindCard(s, actor, uid, "lot", lot.id);
   consumeContext(s, ctx);
+  closeTasks(s, lot.id, ["receive-lot"]);
   const outcome: ScanOutcome = {
     uid,
     resolution: "accepted",
@@ -543,6 +544,7 @@ function handleConfirmIssue(
   }
 
   closeTasks(s, order.id, ["issue-material"]);
+  closeTasks(s, lot.id, ["issue-material"]);
   consumeContext(s, ctx);
 
   const outcome: ScanOutcome = {
@@ -1596,6 +1598,7 @@ export function issueMaterial(
   lot.balanceQty = Math.round((lot.balanceQty - input.qty) * 1000) / 1000;
   if (order.status === "planned" || order.status === "approved") order.status = "in-progress";
   closeTasks(s, order.id, ["issue-material"]);
+  closeTasks(s, lot.id, ["issue-material"]);
   audit(
     s,
     actor,
@@ -2230,6 +2233,17 @@ export function submitIncomingQc(
   lot.balanceQty = input.acceptedQty; // Only accepted quantity is issuable
   lot.status = input.result === "pass" ? "accepted" : "rejected";
   closeTasks(s, lot.id, ["incoming-qc"]);
+
+  if (input.result === "pass" && input.acceptedQty > 0) {
+    addTask(s, {
+      kind: "issue-material",
+      title: `Issue ${lot.id} (${lot.material}) to cutting`,
+      department: "raw-store",
+      subjectType: "lot",
+      subjectId: lot.id,
+      checkpoint: "RAW_ISSUE",
+    });
+  }
   audit(
     s,
     actor,

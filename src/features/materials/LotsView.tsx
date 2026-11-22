@@ -239,7 +239,7 @@ export function LotsView() {
                   },
                   {
                     header: "Incoming QC",
-                    cell: (l) => <StatusBadge status={l.status} label={l.status === "accepted" ? "Accepted" : undefined} />,
+                    cell: (l) => <StatusBadge status={l.status} />,
                   },
                   {
                     header: "Actions",
