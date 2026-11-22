@@ -133,7 +133,7 @@ function mapInspection(i: any) {
 function mapReworkCase(r: any) {
   let status: "awaiting-assignment" | "assigned" | "repaired" | "closed" = "awaiting-assignment";
   if (r.status === "assigned") status = "assigned";
-  else if (r.status === "repaired") status = "repaired";
+  else if (r.status === "repaired" || r.status === "repair_recorded") status = "repaired";
   else if (r.status === "closed") status = "closed";
 
   const garmentId = r.garment_holds?.garments?.code || r.garment_id || "";
@@ -341,7 +341,9 @@ qualityRouter.post("/inspections/:id/result", async (req: Request, res: Response
 qualityRouter.get("/rework", async (req: Request, res: Response) => {
   try {
     const status = getQueryParam(req.query["status"]);
-    const departmentCode = getQueryParam(req.query["departmentCode"]);
+    const departmentCode =
+      getQueryParam(req.query["departmentCode"]) ||
+      (req.actor?.role === "production" ? req.actor.department : undefined);
 
     const raw = await runInTransaction((tx) =>
       listReworkCases(tx, {
