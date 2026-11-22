@@ -172,50 +172,6 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                     {/* ------------------------------------------------------------- */}
                     {activeMode === "production" && (
                       <div className="space-y-6">
-                        {/* Finishing Bench Operations Visual Guide */}
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                          <div className="flex items-center gap-3 rounded-lg border bg-card p-2.5 shadow-2xs hover:border-primary/40 transition-colors">
-                            <img
-                              src="/finishing/trimming.jpg"
-                              alt="Thread Trimming"
-                              className="size-11 rounded-md object-cover border shrink-0 bg-muted"
-                              loading="lazy"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Stage 1</span>
-                              <h4 className="text-xs font-semibold text-foreground truncate">Thread Trimming</h4>
-                              <p className="text-[11px] text-muted-foreground truncate">Precision snips & seam cleaning</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 rounded-lg border bg-card p-2.5 shadow-2xs hover:border-primary/40 transition-colors">
-                            <img
-                              src="/finishing/pressing.jpg"
-                              alt="Steam Pressing"
-                              className="size-11 rounded-md object-cover border shrink-0 bg-muted"
-                              loading="lazy"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Stage 2</span>
-                              <h4 className="text-xs font-semibold text-foreground truncate">Steam Pressing</h4>
-                              <p className="text-[11px] text-muted-foreground truncate">Crease-free steam iron finish</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 rounded-lg border bg-card p-2.5 shadow-2xs hover:border-primary/40 transition-colors">
-                            <img
-                              src="/finishing/tagging.jpg"
-                              alt="Care Label & RFID"
-                              className="size-11 rounded-md object-cover border shrink-0 bg-muted"
-                              loading="lazy"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Stage 3</span>
-                              <h4 className="text-xs font-semibold text-foreground truncate">Care Tag & RFID Tap</h4>
-                              <p className="text-[11px] text-muted-foreground truncate">Bench scan → Advance to QC</p>
-                            </div>
-                          </div>
-                        </div>
                         <div className="grid gap-6 lg:grid-cols-2">
                           {/* Continuous Reader & Quick Tap Bench */}
                           <Section
