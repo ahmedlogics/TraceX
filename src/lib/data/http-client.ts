@@ -339,7 +339,49 @@ export function createHttpClient(): WearTrailClient {
       return await req<DashboardData>("/api/staff/dashboard", { method: "GET" });
     },
     async listTasks(): Promise<Task[]> {
-      return await req<Task[]>("/api/tasks", { method: "GET" });
+      const raw = await req<any[]>("/api/tasks", { method: "GET" });
+      return (raw || []).map((t) => {
+        if (t.department && t.kind) return t as Task;
+        let subjectType: Task["subjectType"] = "garment";
+        let subjectId = t.id;
+        if (t.garmentId) {
+          subjectType = "garment";
+          subjectId = t.garmentId;
+        } else if (t.materialLotId) {
+          subjectType = "lot";
+          subjectId = t.materialLotId;
+        } else if (t.productionOrderId) {
+          subjectType = "order";
+          subjectId = t.productionOrderId;
+        } else if (t.shipmentId) {
+          subjectType = "shipment";
+          subjectId = t.shipmentId;
+        }
+        let status: Task["status"] = "open";
+        if (t.status === "completed" || t.status === "done") {
+          status = "done";
+        } else if (t.status === "claimed" || t.status === "in_progress") {
+          status = "claimed";
+        }
+        const rawDept = (t.departmentCode || t.department || "").replace(/_/g, "-");
+        return {
+          id: t.id,
+          kind: (t.actionCode || t.kind || "incoming-qc") as Task["kind"],
+          title:
+            t.title ||
+            (t.actionCode
+              ? t.actionCode.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+              : `Task ${t.id}`),
+          department: rawDept as any,
+          subjectType,
+          subjectId,
+          checkpoint: t.checkpointCode ?? t.checkpoint,
+          status,
+          assigneeId: t.assigneeId,
+          createdAt: t.createdAt,
+          completedAt: t.completedAt,
+        };
+      });
     },
     async claimTask(taskId: string): Promise<void> {
       await req(`/api/tasks/${encodeURIComponent(taskId)}/claim`, { method: "POST" });

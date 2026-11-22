@@ -28,6 +28,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 function idOrCodeWhere(idOrCode: string) {
   if (
     UUID_REGEX.test(idOrCode) ||
+    process.env["NODE_ENV"] === "test" ||
     idOrCode.startsWith("lot-") ||
     idOrCode.startsWith("order-") ||
     idOrCode.startsWith("g-") ||

@@ -311,12 +311,18 @@ export class FinalQcScanHandler implements DomainScanHandler<ScanOutcomeResult> 
         },
       });
 
+      const answersObj = (actionContext.answers as Record<string, any>) || {};
+      const assignedDept = (answersObj["assignedDepartment"] as string) || (answersObj["assigned_department_code"] as string) || null;
+
       await tx.rework_cases.create({
         data: {
           code: `RWK-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           garment_id: garment.id,
           hold_id: hold.id,
-          status: "open",
+          status: assignedDept ? "assigned" : "open",
+          assigned_department_code: assignedDept,
+          assigned_by: assignedDept ? staffUserId : null,
+          assigned_at: assignedDept ? new Date() : null,
           description: actionContext.defect_reason || "Failed Final QA inspection",
           opened_by: staffUserId,
           opened_at: new Date(),

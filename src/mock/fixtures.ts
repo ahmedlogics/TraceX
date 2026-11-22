@@ -199,6 +199,22 @@ export function createSeed(): DemoState {
       "quality",
       "Incoming inspection, final inspection and reinspection",
     ),
+    user(
+      "u-qc-demo",
+      "qc.demo",
+      "Final QA Inspector",
+      "Q",
+      "quality",
+      "Final garment quality inspection and RFID workstation",
+    ),
+    user(
+      "u-qc-incoming",
+      "qc.incoming",
+      "Ira Incoming QC",
+      "Q",
+      "receiving",
+      "Incoming fabric bundle lot sign-offs and material QA",
+    ),
     user("u-packing", "packing.demo", "Parker Packing", "L", "packing", "Packing department"),
     user(
       "u-warehouse",

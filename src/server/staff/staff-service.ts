@@ -199,6 +199,9 @@ export async function getStaffDashboard(
   const scopedOpenTasks = domainTasks.filter((t) => {
     if (user.role === "M") return true;
     if (t.assigneeId === user.id) return true;
+    if (user.username === "qc.incoming") {
+      return t.kind === "incoming-qc" || t.department === "quality";
+    }
     return t.department === user.department;
   });
 
@@ -336,6 +339,33 @@ export async function getStaffDashboard(
     }
 
     case "Q": {
+      const isIncoming =
+        user.username?.toLowerCase() === "qc.incoming" ||
+        user.department?.toLowerCase() === "receiving" ||
+        user.department?.toLowerCase() === "raw-store" ||
+        (user.department as string)?.toLowerCase() === "raw_store";
+
+      if (isIncoming) {
+        const acceptedLotsCount = await prisma.material_lots.count({
+          where: {
+            inspections: { some: { outcome: "pass" } },
+          },
+        });
+        const rejectedLotsCount = await prisma.material_lots.count({
+          where: {
+            inspections: { some: { outcome: "fail" } },
+          },
+        });
+
+        metrics = [
+          { label: "My open tasks", value: scopedOpenTasks.length },
+          { label: "Lots awaiting inspection", value: awaitingLots.length },
+          { label: "Cleared fabric lots", value: acceptedLotsCount },
+          { label: "Held / rejected lots", value: rejectedLotsCount },
+        ];
+        break;
+      }
+
       const reinspectionsCount = await prisma.inspections.count({
         where: {
           submitted_at: null,
@@ -379,8 +409,16 @@ export async function getStaffDashboard(
   // Derive Alerts
   const alerts: DashboardData["alerts"] = [];
 
-  // Danger: Quality Holds
-  if (["M", "Q", "P", "L"].includes(user.role)) {
+  // Danger: Quality Holds (Final QA, Line Operators, Managers, Logistics)
+  // Skip garment holds for incoming fabric QC inspectors as they do not oversee garments
+  const isIncomingQcUser =
+    user.role === "Q" &&
+    (user.username?.toLowerCase() === "qc.incoming" ||
+      user.department?.toLowerCase() === "receiving" ||
+      user.department?.toLowerCase() === "raw-store" ||
+      (user.department as string)?.toLowerCase() === "raw_store");
+
+  if (!isIncomingQcUser && ["M", "Q", "P", "L"].includes(user.role)) {
     activeHolds.forEach((h) => {
       alerts.push({
         tone: "danger",
