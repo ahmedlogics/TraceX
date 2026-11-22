@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -168,6 +168,88 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [step, selectedOrderId, scannedLotId, selectedSize, qLots.data, qGarments.data, run]);
 
+  // Background listener for ESP32 hardware scans on Station 3 reader via stationData
+  const lastSeenScanAt = useRef<string | null>(stationData?.lastScanOutcome?.at ?? null);
+  useEffect(() => {
+    if (!stationData?.lastScanOutcome) return;
+    const outcome = stationData.lastScanOutcome;
+    if (outcome.at && outcome.at !== lastSeenScanAt.current) {
+      lastSeenScanAt.current = outcome.at;
+      const uid = outcome.uid?.trim().toUpperCase();
+      if (!uid) return;
+
+      if (step === "awaiting_bundle") {
+        const lots = qLots.data ?? [];
+        const matchingLot = lots.find(
+          (l) =>
+            l.rfidUid?.toUpperCase() === uid ||
+            l.id.toUpperCase() === uid ||
+            (l.rfidUid && l.rfidUid.toUpperCase().includes(uid)),
+        );
+        if (!matchingLot) {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected — Unrecognised Bundle Tag",
+            message: `Tag UID '${uid}' is not registered as a fabric roll card. Present a valid fabric roll card issued from Station 2.`,
+          });
+          return;
+        }
+        if (matchingLot.status !== "accepted") {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected — Bundle Not Accepted by QC",
+            message: `Bundle ${matchingLot.id} has status '${matchingLot.status}'. Only fabric rolls inspected and accepted at dock QC can be issued to cutting.`,
+          });
+          return;
+        }
+        setScannedLotId(matchingLot.id);
+        setStep("bundle_orders");
+        setAlertMessage({
+          type: "success",
+          title: `Fabric Bundle Loaded: ${matchingLot.id}`,
+          message: `Loaded roll details for ${matchingLot.material} (${matchingLot.balanceQty || matchingLot.receivedQty}m available). Select an order to cut.`,
+        });
+      } else if (step === "scanning_products" && selectedOrderId && scannedLotId) {
+        const garments = qGarments.data ?? [];
+        const lots = qLots.data ?? [];
+        const existingGarment = garments.find((g) => g.rfidUid === uid);
+        if (existingGarment) {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected — Card Already Active",
+            message: `Tag UID '${uid}' is already assigned to garment ${existingGarment.id}. Please use a fresh, unassigned RFID card.`,
+          });
+          return;
+        }
+        const existingLot = lots.find((l) => l.rfidUid === uid);
+        if (existingLot) {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected — Fabric Bundle Card Presented",
+            message: `Tag UID '${uid}' is the fabric bundle card for lot ${existingLot.id}. Present a fresh garment card for product serialization.`,
+          });
+          return;
+        }
+        void run(
+          (c) =>
+            c.recordCuttingOutput({
+              orderId: selectedOrderId,
+              fabricUsed: 2.0,
+              size: selectedSize,
+              tagUid: uid,
+            }),
+          `Enrolled garment at Scanner 3. Linked to Bundle ${scannedLotId} → Order ${selectedOrderId}`,
+        ).then((garmentCode) => {
+          setAlertMessage({
+            type: "success",
+            title: `Garment Cut & Enrolled: ${garmentCode || "Success"}`,
+            message: `Panel set serialized with tag ${uid}. Lineage: Lot ${scannedLotId} ➔ Order ${selectedOrderId} ➔ ${garmentCode}. Advanced to Stitching.`,
+          });
+        });
+      }
+    }
+  }, [stationData?.lastScanOutcome, step, selectedOrderId, scannedLotId, selectedSize, qLots.data, qGarments.data, run]);
+
   return (
     <Loadable query={qOrders}>
       {(orders) => (
@@ -240,7 +322,6 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
 
                       // Valid Bundle Scanned: Transition to "Bundle Orders" screen
                       setScannedLotId(matchingLot.id);
-                      setBundleTagInput("");
                       setStep("bundle_orders");
                       setAlertMessage({
                         type: "success",
@@ -254,7 +335,6 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                     // -------------------------------------------------------------
                     const handleSelectOrder = (order: ProductionOrder) => {
                       setSelectedOrderId(order.id);
-                      setProductTagInput(generateFreshUid());
                       setStep("scanning_products");
                       setAlertMessage({
                         type: "info",
@@ -304,7 +384,6 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                         );
 
                         // Success feedback
-                        setProductTagInput(generateFreshUid());
                         setAlertMessage({
                           type: "success",
                           title: `Garment Cut & Enrolled: ${garmentCode || "Success"}`,
@@ -486,27 +565,62 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                             </div>
 
                             {/* Direct Action Button — No text input box */}
-                            <div className="pt-2">
+                            <div className="pt-2 flex flex-col items-center gap-2">
                               <Button
                                 size="lg"
                                 disabled={pending}
                                 onClick={() => {
-                                  const nextLot = availableInspectedLots[0];
-                                  if (nextLot && nextLot.rfidUid) {
-                                    handleScanBundleCard(nextLot.rfidUid);
-                                  } else {
-                                    setAlertMessage({
-                                      type: "info",
-                                      title: "Scanner 3 Armed",
-                                      message: "Present physical fabric bundle card to the reader.",
-                                    });
-                                  }
+                                  setAlertMessage({
+                                    type: "info",
+                                    title: "Scanner 3 Armed & Ready",
+                                    message: "Awaiting physical fabric bundle tag tap on Scanner 3 (or tap any available bundle chip below).",
+                                  });
+
+                                  // Start polling loop to capture hardware scan from ESP32 on Station 3
+                                  void run(
+                                    async (c) => {
+                                      const startTime = Date.now();
+                                      while (Date.now() - startTime < 35000) {
+                                        const data = await c.getRfidStationData("cutting");
+                                        if (data.lastScanOutcome) {
+                                          const outcomeTime = new Date(data.lastScanOutcome.at).getTime();
+                                          if (outcomeTime >= startTime - 2000) {
+                                            const scannedTag = data.lastScanOutcome.uid;
+                                            if (scannedTag) {
+                                              handleScanBundleCard(scannedTag);
+                                              return data.lastScanOutcome;
+                                            }
+                                          }
+                                        }
+                                        await new Promise((r) => setTimeout(r, 600));
+                                      }
+                                      return null;
+                                    },
+                                    "Awaiting hardware bundle tag scan...",
+                                  );
                                 }}
                                 className="h-12 px-8 text-sm font-bold gap-2.5 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
                               >
-                                <ScanLine className="size-5" />
-                                Scan Bundle Tag
+                                {pending ? (
+                                  <>
+                                    <span className="relative flex h-2.5 w-2.5 mr-1">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                    </span>
+                                    <span>Awaiting Hardware Bundle Scan (Scanner 3)...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ScanLine className="size-5" />
+                                    <span>Scan Bundle Tag</span>
+                                  </>
+                                )}
                               </Button>
+                              {pending && (
+                                <p className="text-xs text-muted-foreground animate-pulse">
+                                  Present physical bundle card to reader antenna, or click an inspected bundle chip below.
+                                </p>
+                              )}
                             </div>
 
                             {/* Available Inspected Bundles (One-Click Tap for Hardware / Demo) */}
