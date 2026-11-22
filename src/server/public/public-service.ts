@@ -797,7 +797,7 @@ export async function publishPublicGarmentPayload(
   // Construct allowable public milestones
   const milestones: PublicMilestone[] = [];
 
-  const lotInput = garment.garment_material_inputs[0]?.cutting_inputs?.material_stock_movements?.material_lots;
+  const lotInput = garment.garment_material_inputs?.[0]?.cutting_inputs?.material_stock_movements?.material_lots;
   if (lotInput) {
     milestones.push({
       key: "fabric-sourced",
@@ -817,7 +817,7 @@ export async function publishPublicGarmentPayload(
     description: MILESTONE_DESCRIPTIONS["garment-cut"],
   });
 
-  const assemblyEvent = garment.trace_events.find(
+  const assemblyEvent = garment.trace_events?.find(
     (e) => e.event_type === "finishing_completed" || e.event_type === "assembly_completed",
   );
   if (assemblyEvent) {
@@ -843,7 +843,7 @@ export async function publishPublicGarmentPayload(
   }
 
   if (garment.stage === "dispatched") {
-    const dispatchEvent = garment.trace_events.find((e) => e.event_type === "shipment_dispatched");
+    const dispatchEvent = garment.trace_events?.find((e) => e.event_type === "shipment_dispatched");
     const dispatchDate = dispatchEvent?.occurred_at ?? new Date();
     milestones.push({
       key: "dispatched",

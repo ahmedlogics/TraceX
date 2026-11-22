@@ -22,6 +22,7 @@ import {
   allocatePackageToShipment,
   verifyShipmentGarment,
   confirmShipmentDeparture,
+  dispatchBoxScan,
   listPackages,
   listShipments,
 } from "../server/fulfilment/fulfilment-service";
@@ -1028,6 +1029,60 @@ describe("Member 3: Real Quality & Fulfilment Persistence Suite", () => {
 
       const g = await tx.garments.findUnique({ where: { id: SHIRT_101_ID } });
       expect(g!.stage).toBe("dispatched");
+    });
+
+    it("Station 9: Authoritative dispatchBoxScan enforces 4 validation checks and atomic updates", async () => {
+      // 1. Pack and seal carton
+      await packGarment(tx, logisticsStaff, { packageId: pkgId, garmentId: SHIRT_101_ID });
+      await sealPackage(tx, logisticsStaff, pkgId);
+
+      // Check 1: Unrecognised Box Tag
+      const unrecognised = await dispatchBoxScan(tx, dispatchStaff, "UNKNOWN-TAG-999");
+      expect(unrecognised.outcome).toBe("rejected");
+      expect(unrecognised.resolution).toBe("rejected_unknown_card");
+
+      // Check 2: Cannot dispatch empty box
+      const emptyPkg = await createPackage(tx, logisticsStaff);
+      const emptyRes = await dispatchBoxScan(tx, dispatchStaff, emptyPkg.code);
+      expect(emptyRes.outcome).toBe("rejected");
+      expect(emptyRes.resolution).toBe("rejected_business_rule");
+      expect(emptyRes.rejectReason).toMatch(/Cannot dispatch empty box/i);
+
+      // Check 4: Active Quality Hold Blocker
+      const hold = await tx.garment_holds.create({
+        data: {
+          id: "hold-qa-box-check",
+          garment_id: SHIRT_101_ID,
+          kind: "quality",
+          reason: "Fabric spot defect",
+          opened_by: USER_INSPECTOR_ID,
+        },
+      });
+      const holdRes = await dispatchBoxScan(tx, dispatchStaff, pkgId);
+      expect(holdRes.outcome).toBe("rejected");
+      expect(holdRes.rejectReason).toMatch(/Blocked.*active Quality Hold/i);
+
+      // Clear hold
+      await tx.garment_holds.update({
+        where: { id: hold.id },
+        data: { released_at: new Date(), released_by: USER_INSPECTOR_ID },
+      });
+
+      // All Passed: Instant Atomic Status Advancement
+      const acceptRes = await dispatchBoxScan(tx, dispatchStaff, pkgId);
+      expect(acceptRes.outcome).toBe("accepted");
+      expect(acceptRes.resolution).toBe("accepted");
+
+      // Verify DB updates
+      const updatedPkg = await tx.packages.findUnique({ where: { id: pkgId } });
+      expect(updatedPkg!.status).toBe("dispatched");
+      const updatedGarment = await tx.garments.findUnique({ where: { id: SHIRT_101_ID } });
+      expect(updatedGarment!.stage).toBe("dispatched");
+
+      // Check 3: Duplicate Dispatch Guard
+      const dupRes = await dispatchBoxScan(tx, dispatchStaff, pkgId);
+      expect(dupRes.outcome).toBe("rejected");
+      expect(dupRes.rejectReason).toMatch(/Box Already Dispatched/i);
     });
   });
 
