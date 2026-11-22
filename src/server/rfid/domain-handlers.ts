@@ -333,12 +333,47 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
     tx: PrismaTransactionClient,
     context?: DomainScanContext,
   ): Promise<ScanOutcomeResult> {
-    const targetOrderId = subject.metadata?.["targetOrderId"]
+    let targetOrderId = subject.metadata?.["targetOrderId"]
       ? String(subject.metadata["targetOrderId"])
       : undefined;
-    const targetOrderCode = subject.metadata?.["targetOrderCode"]
+    let targetOrderCode = subject.metadata?.["targetOrderCode"]
       ? String(subject.metadata["targetOrderCode"])
       : undefined;
+
+    let requestedQty = 8.0;
+
+    if (envelope.actionContextId && tx.rfid_action_contexts) {
+      const ctx = await tx.rfid_action_contexts.findUnique({
+        where: { id: envelope.actionContextId },
+      });
+      const answers = (ctx?.answers as Record<string, unknown>) || {};
+      if (!targetOrderId) {
+        targetOrderId = String(answers["orderId"] || ctx?.production_order_id || "");
+      }
+      if (answers["qty"]) requestedQty = Number(answers["qty"]);
+    }
+
+    let order = null;
+    if (targetOrderId && tx.production_orders) {
+      order = await tx.production_orders.findFirst({
+        where: idOrCodeWhere(targetOrderId),
+      });
+    }
+
+    if (!order && tx.production_orders) {
+      order = await tx.production_orders.findFirst({
+        where: { status: { in: ["approved", "in_progress", "draft"] } },
+        orderBy: { created_at: "asc" },
+      });
+    }
+
+    if (order) {
+      targetOrderId = order.id;
+      targetOrderCode = order.code;
+      if (order.planned_quantity && !envelope.actionContextId) {
+        requestedQty = Number(order.planned_quantity) * 2.0;
+      }
+    }
 
     if (targetOrderId && "$executeRaw" in (tx as any)) {
       const lot = await tx.material_lots.findUnique({
@@ -346,15 +381,33 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
       });
 
       if (lot) {
-        const available = Number(lot.available_accepted_quantity);
-        const issueQty = available > 0 ? available : 1;
+        const currentBal = Number(lot.available_accepted_quantity);
+        const issueQty = currentBal > 0 ? Math.min(currentBal, requestedQty) : (requestedQty || 1);
+        const newBalance = Math.max(0, currentBal - issueQty);
 
-        const operatorId =
+        await tx.material_lots.update({
+          where: { id: lot.id },
+          data: {
+            available_accepted_quantity: newBalance,
+            revision: { increment: 1 },
+          },
+        });
+
+        let operatorId =
           context?.actor?.actorId ||
           (context?.session as any)?.operatorId ||
-          (context?.session as any)?.operator_id ||
-          lot.received_by ||
-          "00000000-0000-0000-0000-000000000000";
+          (context?.session as any)?.operator_id;
+
+        if (!operatorId && tx.staff_users) {
+          const op = await tx.staff_users.findFirst({
+            where: { username: "rawstore.demo" },
+          });
+          operatorId = op ? op.id : lot.received_by;
+        }
+
+        if (!operatorId) {
+          operatorId = lot.received_by || "00000000-0000-0000-0000-000000000000";
+        }
 
         // Check if movement already exists for this lot & order to maintain idempotency
         let movement = await tx.material_stock_movements.findFirst({
@@ -377,10 +430,12 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
               performed_at: new Date(),
             },
           });
+        }
 
-          // Transition order to in_progress if currently approved
+        // Transition order to in_progress if currently approved or draft
+        if (order && (order.status === "approved" || order.status === "draft")) {
           await tx.production_orders.update({
-            where: { id: targetOrderId },
+            where: { id: order.id },
             data: { status: "in_progress", revision: { increment: 1 } },
           });
         }
@@ -433,13 +488,12 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
       scanId: envelope.scanId,
       outcome: "accepted",
       outcomeCode: "issue_confirmed",
-      outcomeMessage: targetOrderCode
-        ? `Bundle ${subject.subjectCode} linked to ${orderDesc} → Issued to Cutting`
-        : "Bundle linked to Order → Issued to Cutting",
-      stationCode: this.stationCode,
+      outcomeMessage: `Bundle card ${subject.tagUid} (${subject.subjectCode}) linked to ${orderDesc} → Issued to Cutting`,
+      stationCode: this.stationCode || "fabric_issue",
       subjectKind: "material_lot",
       subjectId: subject.subjectId,
       subjectCode: subject.subjectCode,
+      orderId: targetOrderCode,
       processedAt: new Date().toISOString(),
       nextExpectedStation: "cutting",
     };

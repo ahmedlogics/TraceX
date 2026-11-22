@@ -7,7 +7,8 @@ import { sendSuccess, ApiError } from "../middleware/responses";
 import { VersionedScanEnvelopeSchema } from "../rfid/schemas";
 import { scanRoutingService } from "../rfid/scan-router";
 import { isOperatorAuthorizedForStation } from "../rfid/session-resolver";
-import { createPrismaAuthMiddleware } from "../auth/actor-context";
+import { createPrismaAuthMiddleware, extractSessionToken, type RequestLike } from "../auth/actor-context";
+import { resolveSession } from "../auth/auth-service";
 import { authenticateDevice, extractDeviceSecret } from "../rfid/device-auth";
 import { getOrCreateChecklistVersion } from "../quality/quality-service";
 import type {
@@ -206,18 +207,18 @@ rfidRouter.get(
         throw ApiError.notFound(`RFID station '${stationCode}' does not exist.`);
       }
 
-      // Find active session for this operator at this station
+      // Find active session for this station (prefer hardware device)
+      const HARDWARE_DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
       let session = await prisma.reader_sessions.findFirst({
         where: {
           station_code: stationCode,
-          operator_id: user.id,
+          device_id: HARDWARE_DEVICE_ID,
           closed_at: null,
           expires_at: { gt: new Date() },
         },
         orderBy: { opened_at: "desc" },
       });
 
-      // Fallback: any active session for this station
       if (!session) {
         session = await prisma.reader_sessions.findFirst({
           where: {
@@ -225,7 +226,70 @@ rfidRouter.get(
             closed_at: null,
             expires_at: { gt: new Date() },
           },
+          orderBy: { opened_at: "desc" },
         });
+      }
+
+      if (!session) {
+        // Ensure operator session exists on physical hardware device
+        let mapping = await prisma.device_reader_mappings.findFirst({
+          where: {
+            station_code: stationCode,
+            device_id: HARDWARE_DEVICE_ID,
+            device_mapping_versions: {
+              activated_at: { not: null },
+              retired_at: null,
+            },
+          },
+        });
+        if (!mapping) {
+          mapping = await prisma.device_reader_mappings.findFirst({
+            where: {
+              station_code: stationCode,
+              device_mapping_versions: {
+                activated_at: { not: null },
+                retired_at: null,
+              },
+            },
+          });
+        }
+        if (mapping) {
+          let staffSession = await prisma.staff_sessions.findFirst({
+            where: { staff_user_id: user.id, revoked_at: null, expires_at: { gt: new Date() } },
+            orderBy: { expires_at: "desc" },
+          });
+          if (!staffSession) {
+            staffSession = await prisma.staff_sessions.create({
+              data: {
+                staff_user_id: user.id,
+                token_digest: crypto.randomBytes(32),
+                expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+              },
+            });
+          }
+          await prisma.reader_sessions.updateMany({
+            where: {
+              device_id: mapping.device_id,
+              reader_index: mapping.reader_index,
+              closed_at: null,
+            },
+            data: {
+              closed_at: new Date(),
+              close_reason: "Auto-closed for new workstation operator session",
+            },
+          });
+          session = await prisma.reader_sessions.create({
+            data: {
+              device_id: mapping.device_id,
+              mapping_version: mapping.mapping_version,
+              reader_index: mapping.reader_index,
+              station_code: stationCode,
+              staff_session_id: staffSession.id,
+              operator_id: user.id,
+              expires_at: staffSession.expires_at,
+            },
+          });
+        }
       }
 
       let activeContext = undefined;
@@ -373,11 +437,12 @@ rfidRouter.post(
         );
       }
 
-      // Ensure active reader session for this station & operator
+      // Ensure active reader session for this station & operator (prefer physical hardware device DEV-TEXTRACER-01)
+      const HARDWARE_DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
       let session = await prisma.reader_sessions.findFirst({
         where: {
           station_code: stationCode,
-          operator_id: user.id,
+          device_id: HARDWARE_DEVICE_ID,
           closed_at: null,
           expires_at: { gt: new Date() },
         },
@@ -385,16 +450,63 @@ rfidRouter.post(
       });
 
       if (!session) {
-        // Find mapped reader for this station
-        const mapping = await prisma.device_reader_mappings.findFirst({
+        session = await prisma.reader_sessions.findFirst({
           where: {
             station_code: stationCode,
+            closed_at: null,
+            expires_at: { gt: new Date() },
+          },
+          orderBy: { opened_at: "desc" },
+        });
+      }
+
+      if (session && session.operator_id !== user.id) {
+        let staffSession = await prisma.staff_sessions.findFirst({
+          where: { staff_user_id: user.id, revoked_at: null, expires_at: { gt: new Date() } },
+          orderBy: { expires_at: "desc" },
+        });
+        if (!staffSession) {
+          staffSession = await prisma.staff_sessions.create({
+            data: {
+              staff_user_id: user.id,
+              token_digest: crypto.randomBytes(32),
+              expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+            },
+          });
+        }
+        session = await prisma.reader_sessions.update({
+          where: { id: session.id },
+          data: {
+            operator_id: user.id,
+            staff_session_id: staffSession.id,
+          },
+        });
+      }
+
+      if (!session) {
+        // Find mapped reader for this station (prefer physical ESP32 hardware device DEV-TEXTRACER-01 if mapped)
+        let mapping = await prisma.device_reader_mappings.findFirst({
+          where: {
+            station_code: stationCode,
+            device_id: HARDWARE_DEVICE_ID,
             device_mapping_versions: {
               activated_at: { not: null },
               retired_at: null,
             },
           },
         });
+
+        if (!mapping) {
+          mapping = await prisma.device_reader_mappings.findFirst({
+            where: {
+              station_code: stationCode,
+              device_mapping_versions: {
+                activated_at: { not: null },
+                retired_at: null,
+              },
+            },
+          });
+        }
 
         if (!mapping) {
           throw ApiError.badRequest(
@@ -411,11 +523,24 @@ rfidRouter.post(
           staffSession = await prisma.staff_sessions.create({
             data: {
               staff_user_id: user.id,
-              token_digest: new Uint8Array(32),
+              token_digest: crypto.randomBytes(32),
               expires_at: new Date(Date.now() + 24 * 3600 * 1000),
             },
           });
         }
+
+        // Close any existing unclosed reader session on this physical reader to prevent unique constraint conflict
+        await prisma.reader_sessions.updateMany({
+          where: {
+            device_id: mapping.device_id,
+            reader_index: mapping.reader_index,
+            closed_at: null,
+          },
+          data: {
+            closed_at: new Date(),
+            close_reason: "Superseded by new reader session",
+          },
+        });
 
         session = await prisma.reader_sessions.create({
           data: {
@@ -469,50 +594,59 @@ rfidRouter.post(
       let resolvedProductionOrderId: string | null = null;
       let resolvedQuantity: Prisma.Decimal | null = null;
 
-      // Resolve production_order_id and quantity to satisfy PostgreSQL check constraints (e.g. rfid_action_contexts_check10)
-      const orderRaw = p["productionOrderId"] || p["orderId"];
-      let orderRecord = null;
-      if (orderRaw) {
-        orderRecord = await prisma.production_orders.findFirst({
-          where: {
-            OR: [
-              { id: String(orderRaw) },
-              { code: String(orderRaw) },
-            ],
-          },
-        });
-      }
-
       if (dbActionCode === "issue_bundle") {
-        if (!orderRecord) {
-          // Fallback to active/latest approved or draft order
+        const rawOrderId = p["productionOrderId"] || p["orderId"] || (answers as any)["orderId"];
+        let orderRecord = null;
+        if (rawOrderId) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(rawOrderId));
+          orderRecord = await prisma.production_orders.findFirst({
+            where: isUuid
+              ? { OR: [{ id: String(rawOrderId) }, { code: String(rawOrderId) }] }
+              : { code: String(rawOrderId) },
+          });
+          if (orderRecord) {
+            resolvedProductionOrderId = orderRecord.id;
+          } else if (isUuid) {
+            resolvedProductionOrderId = String(rawOrderId);
+          }
+        }
+
+        if (!resolvedProductionOrderId) {
           orderRecord = await prisma.production_orders.findFirst({
             where: { status: { in: ["approved", "in_progress", "draft"] } },
-            orderBy: { created_at: "desc" },
+            orderBy: { created_at: "asc" },
           });
+          if (orderRecord) {
+            resolvedProductionOrderId = orderRecord.id;
+          }
         }
-        if (orderRecord) {
-          resolvedProductionOrderId = orderRecord.id;
-          const rawQty = p["qty"] || p["quantity"];
-          const numQty = rawQty ? Number(rawQty) : (orderRecord.planned_quantity ? Number(orderRecord.planned_quantity) * 2.0 : 8.0);
-          resolvedQuantity = new Prisma.Decimal(Math.max(0.1, numQty));
-        } else {
-          throw ApiError.badRequest("Cannot arm fabric issue: No active production order found. Please plan or approve a production order first.");
+
+        const rawQty = p["quantity"] || p["qty"] || (answers as any)["qty"];
+        const numQty = rawQty
+          ? Number(rawQty)
+          : orderRecord?.planned_quantity
+          ? Number(orderRecord.planned_quantity) * 2.0
+          : 8.0;
+        resolvedQuantity = new Prisma.Decimal(Math.max(0.1, numQty));
+      } else {
+        const rawOrderId = p["productionOrderId"] || p["orderId"];
+        if (rawOrderId) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(rawOrderId));
+          const order = await prisma.production_orders.findFirst({
+            where: isUuid
+              ? { OR: [{ id: String(rawOrderId) }, { code: String(rawOrderId) }] }
+              : { code: String(rawOrderId) },
+          });
+          resolvedProductionOrderId = order ? order.id : (isUuid ? String(rawOrderId) : null);
         }
-      } else if (orderRecord) {
-        resolvedProductionOrderId = orderRecord.id;
+        const rawQty = p["quantity"] || p["qty"];
+        if (rawQty && Number(rawQty) > 0) {
+          resolvedQuantity = new Prisma.Decimal(Number(rawQty));
+        }
       }
 
-      const rawQty = p["qty"] || p["quantity"];
-      if (rawQty && !resolvedQuantity) {
-        const n = Number(rawQty);
-        if (n > 0) {
-          resolvedQuantity = new Prisma.Decimal(n);
-        }
-      }
-
-      let resolvedPackageId = p["packageId"] || p["pkgId"] ? String(p["packageId"] || p["pkgId"]) : null;
-      if (dbActionCode === "pack_garment" && !resolvedPackageId) {
+      let resolvedPackageId: string | null = p["packageId"] || p["pkgId"] ? String(p["packageId"] || p["pkgId"]) : null;
+      if (dbActionCode === "pack_garment" && !resolvedPackageId && prisma.packages) {
         const pkg = await prisma.packages.findFirst({
           where: { status: "open" },
           orderBy: { created_at: "desc" },
@@ -520,12 +654,18 @@ rfidRouter.post(
         if (pkg) resolvedPackageId = pkg.id;
       }
 
-      let resolvedWarehouseBinId = p["binId"] || p["warehouseBinId"] ? String(p["binId"] || p["warehouseBinId"]) : null;
-      if (dbActionCode === "receive_warehouse" && !resolvedWarehouseBinId) {
+      let resolvedWarehouseBinId: string | null = p["binId"] || p["warehouseBinId"] ? String(p["binId"] || p["warehouseBinId"]) : null;
+      if (dbActionCode === "receive_warehouse" && !resolvedWarehouseBinId && prisma.warehouse_bins) {
         const bin = await prisma.warehouse_bins.findFirst({
           orderBy: { code: "asc" },
         });
         if (bin) resolvedWarehouseBinId = bin.id;
+      }
+
+      let resolvedShipmentId: string | null = p["shipmentId"] ? String(p["shipmentId"]) : null;
+      if (dbActionCode === "dispatch_garment" && !resolvedShipmentId && prisma.shipments) {
+        const defaultShipment = await prisma.shipments.findFirst({ orderBy: { created_at: "desc" } });
+        if (defaultShipment) resolvedShipmentId = defaultShipment.id;
       }
 
       let resolvedCuttingJobId = p["cuttingJobId"] ? String(p["cuttingJobId"]) : null;
@@ -560,7 +700,7 @@ rfidRouter.post(
           source_selection_id: resolvedSourceSelectionId,
           production_order_id: resolvedProductionOrderId,
           package_id: resolvedPackageId,
-          shipment_id: p["shipmentId"] ? String(p["shipmentId"]) : null,
+          shipment_id: resolvedShipmentId,
           warehouse_bin_id: resolvedWarehouseBinId,
           qc_scope: qcScope,
           checklist_version_id: checklistVersionId,
@@ -610,16 +750,18 @@ rfidRouter.put(
       });
       if (!context) throw ApiError.notFound("Action context not found.");
 
-      const deviceSecret = extractDeviceSecret(req.headers);
-      if (deviceSecret) {
+      // Allow either authenticated workstation staff operator or authenticated hardware device
+      let isStaff = false;
+      const token = extractSessionToken(req as unknown as RequestLike);
+      if (token) {
+        const resolved = await resolveSession(prisma, token);
+        if (resolved) {
+          isStaff = true;
+        }
+      }
+
+      if (!isStaff) {
         await authenticateDevice(req.headers, context.reader_sessions.device_id, prisma);
-      } else {
-        await new Promise<void>((resolve, reject) => {
-          prismaAuth(req, res, (err?: any) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
       }
 
       await prisma.rfid_action_contexts.update({

@@ -436,7 +436,10 @@ export function createHttpClient(): WearTrailClient {
       return res.contextId;
     },
     async acknowledgeContext(contextId: string): Promise<void> {
-      await req(`/api/rfid/contexts/${contextId}/ack`, { method: "PUT" });
+      await req(`/api/rfid/contexts/${contextId}/ack`, {
+        method: "PUT",
+        headers: { "x-ui-simulation": "true" },
+      });
     },
     async cancelContext(contextId: string): Promise<void> {
       await req(`/api/rfid/contexts/${contextId}`, { method: "DELETE" });

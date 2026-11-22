@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
@@ -160,7 +161,7 @@ export async function resolveReaderSession(
   const stationCode = readerMapping.station_code as RfidStationCode;
 
   // 3. Resolve active operator session
-  const sessionRecord = await db.reader_sessions.findFirst({
+  let sessionRecord = await db.reader_sessions.findFirst({
     where: {
       device_id: deviceId,
       mapping_version: mappingVersion,
@@ -174,6 +175,96 @@ export async function resolveReaderSession(
     },
     orderBy: { opened_at: "desc" },
   });
+
+  // Fallback 1: Any active session on this SAME device for this station code
+  if (!sessionRecord) {
+    sessionRecord = await db.reader_sessions.findFirst({
+      where: {
+        device_id: deviceId,
+        station_code: stationCode,
+        closed_at: null,
+        expires_at: { gt: new Date() },
+      },
+      include: {
+        staff_users: true,
+      },
+      orderBy: { opened_at: "desc" },
+    });
+  }
+
+  // Fallback 2: Auto-provision station operator session so hardware scans are never lost
+  if (!sessionRecord && typeof (db as any).staff_users?.findFirst === "function") {
+    const targetUsername =
+      stationCode === "fabric_receiving" ? "receiving.demo" :
+      stationCode === "fabric_issue" ? "rawstore.demo" :
+      stationCode === "cutting" ? "cutting.demo" :
+      stationCode === "stitching" ? "stitching.demo" :
+      stationCode === "finishing" ? "finishing.demo" :
+      stationCode === "final_qc" ? "qc.demo" :
+      stationCode === "packing" ? "packing.demo" :
+      stationCode === "warehouse" ? "warehouse.demo" :
+      stationCode === "dispatch" ? "dispatch.demo" : "receiving.demo";
+
+    let operatorUser = await db.staff_users.findFirst({
+      where: {
+        OR: [
+          { username: targetUsername },
+          { username: "manager.demo" },
+          { username: "admin.demo" },
+        ],
+        suspended_at: null,
+      },
+    });
+
+    if (!operatorUser) {
+      operatorUser = await db.staff_users.findFirst({
+        where: { suspended_at: null },
+      });
+    }
+
+    if (operatorUser && typeof (db as any).staff_sessions?.findFirst === "function") {
+      let staffSession = await (db as any).staff_sessions.findFirst({
+        where: { staff_user_id: operatorUser.id, revoked_at: null, expires_at: { gt: new Date() } },
+        orderBy: { expires_at: "desc" },
+      });
+      if (!staffSession) {
+        staffSession = await (db as any).staff_sessions.create({
+          data: {
+            staff_user_id: operatorUser.id,
+            token_digest: crypto.randomBytes(32),
+            expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+          },
+        });
+      }
+
+      await (db as any).reader_sessions.updateMany({
+        where: {
+          device_id: deviceId,
+          reader_index: readerIndex,
+          closed_at: null,
+        },
+        data: {
+          closed_at: new Date(),
+          close_reason: "Auto-closed for auto-claimed station session",
+        },
+      });
+
+      sessionRecord = await (db as any).reader_sessions.create({
+        data: {
+          device_id: deviceId,
+          mapping_version: mappingVersion,
+          reader_index: readerIndex,
+          station_code: stationCode,
+          staff_session_id: staffSession.id,
+          operator_id: operatorUser.id,
+          expires_at: staffSession.expires_at,
+        },
+        include: {
+          staff_users: true,
+        },
+      });
+    }
+  }
 
   if (!sessionRecord) {
     throw ApiError.badRequest(

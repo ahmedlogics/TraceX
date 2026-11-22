@@ -1900,7 +1900,7 @@ export function planOrder(
   actor: StaffUser,
   input: { product: string; styleCode: string; qty: number; dueDate: string },
 ) {
-  ensure(can.planOrder(actor), "forbidden", "Only authorized planners or raw-store operators can plan orders.");
+  ensure(can.planOrder(actor), "forbidden", "Only authorized managers or raw store staff can plan orders.");
   ensure(
     input.product.trim() && input.qty > 0,
     "invalid",
@@ -1936,7 +1936,7 @@ export function planOrder(
 }
 
 export function approveOrder(s: DemoState, actor: StaffUser, orderId: string) {
-  ensure(can.approveOrder(actor), "forbidden", "Only authorized managers or raw-store operators can approve orders.");
+  ensure(can.approveOrder(actor), "forbidden", "Only authorized managers or raw store staff can approve orders.");
   const order = findOrThrow(s.orders, orderId, "Order");
   ensure(
     order.status === "planned" || order.status === "draft",

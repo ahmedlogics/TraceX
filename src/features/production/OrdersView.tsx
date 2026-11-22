@@ -14,7 +14,13 @@ import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useDirectory, UserName } from "@/features/shared/directory";
 import { useMe } from "@/features/shared/useMe";
 
-function PlanOrderDialog() {
+export function PlanOrderDialog({
+  triggerLabel,
+  onSuccess,
+}: {
+  triggerLabel?: React.ReactNode;
+  onSuccess?: (orderId: string) => void;
+} = {}) {
   const me = useMe();
   const { run } = useWtAction();
   const qSpecs = useWtQuery(["product-specs"], (c) => c.listProductSpecs());
@@ -25,26 +31,33 @@ function PlanOrderDialog() {
   const [dueDate, setDue] = useState("2026-12-15");
   const [autoApprove, setAutoApprove] = useState(true);
 
+  const defaultTrigger = (
+    <span className="inline-flex items-center gap-1.5 font-semibold">
+      <FilePlus2 className="size-4" /> Create Production Order
+    </span>
+  );
+
   return (
     <FormDialog
-      trigger={
-        <span className="inline-flex items-center gap-1.5 font-semibold">
-          <FilePlus2 className="size-4" /> Create Production Order
-        </span>
-      }
+      trigger={triggerLabel ?? defaultTrigger}
       triggerVariant="default"
       title="Create Production Order"
-      description="Create a digital production order authorizing garment manufacture. Approved orders can immediately be issued fabric at Station 2."
+      description="Orders are digital instructions authorizing garment manufacture. Orders have NO RFID cards; individual garment cards are bound at Cutting. Approved orders can immediately be issued fabric at Station 2."
       submitLabel="Create & Authorize Order"
       onSubmit={async () => {
-        const orderId = await run(
+        const id = await run(
           (c) => c.planOrder({ product, styleCode, qty: Number(qty), dueDate }),
-          (id) => `${id} created successfully.`,
+          (orderId) => `${orderId} created successfully.`,
         );
-        if (orderId && autoApprove && can.approveOrder(me)) {
-          await run((c) => c.approveOrder(orderId), `${orderId} approved and ready for fabric issue.`);
+        if (id) {
+          const resolvedId = typeof id === "string" ? id : (id as any).orderId || String(id);
+          if (autoApprove && can.approveOrder(me)) {
+            await run((c) => c.approveOrder(resolvedId), `${resolvedId} approved and ready for fabric issue.`);
+          }
+          onSuccess?.(resolvedId);
+          return true;
         }
-        return !!orderId;
+        return false;
       }}
     >
       <Loadable query={qSpecs}>

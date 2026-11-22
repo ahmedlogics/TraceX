@@ -155,14 +155,12 @@ export const can = {
     u.status === "active" &&
     (u.role === "M" ||
       u.role === "A" ||
-      u.username === "rawstore.demo" ||
-      (u.role === "O" && u.department === "raw-store")),
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
   approveOrder: (u: StaffUser) =>
     u.status === "active" &&
     (u.role === "M" ||
       u.role === "A" ||
-      u.username === "rawstore.demo" ||
-      (u.role === "O" && u.department === "raw-store")),
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
   claimTask: (u: StaffUser, t: Task) =>
     u.role !== "M" && u.department === t.department && t.status === "open",
   assignTask: (u: StaffUser) => is(u, "M"),

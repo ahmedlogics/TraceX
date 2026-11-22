@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, Radio, ScanLine, Sparkles, XCircle } from "lucide-react";
+import { CheckCircle2, Radio, ScanLine, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
@@ -8,21 +8,18 @@ import { fmt, IdLink, KeyValue, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
 import type { RfidStationData } from "@/lib/data/client";
+import type { ScanOutcome } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
 import { ReceiveLotDialog } from "@/features/materials/LotsView";
-
-function generateFreshUid(): string {
-  return "04" + Array.from({ length: 6 }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join("");
-}
 
 export function ReceivingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
   const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
   const [selectedLotId, setSelectedLotId] = useState("");
-  const [scanUid, setScanUid] = useState("04E1F2A3");
+  const [scanUid, setScanUid] = useState("");
 
   const isReceivingStaff = me.role === "M" || me.department === "receiving" || me.department === "raw-store";
 
@@ -207,50 +204,115 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
 
                   {isCtxForThisStation && activeCtx.status === "ready" && (
                     <div className="rounded-lg border border-success/40 bg-success-soft p-4 space-y-3">
-                      <p className="text-sm font-medium text-success-foreground">
-                        Ready to scan! Present fabric bundle RFID card at Station 1 (Fabric
-                        Receiving).
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
+                        </span>
+                        <p className="text-sm font-semibold text-success-foreground">
+                          Ready to scan! Present fabric bundle RFID card at Station 1 (Reader 0, GPIO 27).
+                        </p>
+                      </div>
+
+                      <div className="rounded-md bg-background/70 border border-success/30 p-2.5 text-xs text-foreground flex items-center gap-2">
+                        <Radio className="size-4 text-success shrink-0 animate-pulse" />
+                        <span>
+                          <strong>Hardware Reader Active:</strong> Click &ldquo;Catch Hardware Scan&rdquo; below, then tap the physical card on Reader 0 to automatically catch and bind its UID.
+                        </span>
+                      </div>
+
                       <div className="space-y-2">
                         <Field
-                          label="Card UID (Hex)"
+                          label="Manual Card UID (Optional / Override)"
                           htmlFor="rcv-uid"
-                          hint="Enter tag UID to simulate tap."
+                          hint="Leave blank for physical hardware card tap, or enter UID to test manually."
                         >
                           <Input
                             id="rcv-uid"
                             value={scanUid}
                             onChange={(e) => setScanUid(e.target.value.toUpperCase())}
                             className="font-mono bg-card"
-                            placeholder="e.g. 04E1F2A3"
+                            placeholder="Leave blank for hardware tap, or e.g. BB4A0003"
                           />
                         </Field>
                         <div className="flex flex-wrap items-center gap-2 pt-1">
                           <Button
-                            disabled={pending || !scanUid.trim()}
+                            disabled={pending}
                             onClick={() =>
                               void run(
-                                (c) => c.resolveRfidScan(scanUid.trim()),
-                                (outcome) => {
-                                  if (outcome.resolution === "accepted") {
-                                    setScanUid(generateFreshUid());
-                                    return `Card ${outcome.uid} bound to ${outcome.subjectId}!`;
+                                async (c) => {
+                                  if (scanUid.trim()) {
+                                    return await c.resolveRfidScan(scanUid.trim());
                                   }
-                                  return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+
+                                  // Polling loop to wait for hardware scan from ESP32
+                                  const startTime = Date.now();
+                                  while (Date.now() - startTime < 35000) {
+                                    const data = await c.getRfidStationData("fabric_receiving");
+                                    if (
+                                      !data.activeContext ||
+                                      data.activeContext.id !== activeCtx.id ||
+                                      data.lastScanOutcome?.contextId === activeCtx.id
+                                    ) {
+                                      if (data.lastScanOutcome?.resolution === "accepted") {
+                                        return data.lastScanOutcome;
+                                      }
+                                      if (data.lastScanOutcome?.resolution === "rejected") {
+                                        throw new Error(
+                                          data.lastScanOutcome.rejectReason ??
+                                            "Hardware scan was rejected by workstation rules.",
+                                        );
+                                      }
+                                    }
+
+                                    const lots = await c.listLots();
+                                    const target = lots.find(
+                                      (l) => l.id === lotId || l.code === lotId || (l as any).lotId === lotId,
+                                    );
+                                    if (target?.rfidUid) {
+                                      return {
+                                        resolution: "accepted",
+                                        uid: target.rfidUid,
+                                        subjectId: target.id,
+                                      } as ScanOutcome;
+                                    }
+
+                                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                                  }
+
+                                  throw new Error(
+                                    "No hardware card scan detected within 35 seconds. Please tap your RFID card on Reader 0 (GPIO 27) and try again.",
+                                  );
+                                },
+                                (outcome) => {
+                                  setScanUid("");
+                                  if (outcome?.resolution === "accepted") {
+                                    return `Physical card ${outcome.uid} caught and bound to ${outcome.subjectId ?? lotId}!`;
+                                  }
+                                  return `Scan outcome: ${outcome?.rejectReason ?? outcome?.resolution ?? "Completed"}`;
                                 },
                               )
                             }
                           >
-                            <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => setScanUid(generateFreshUid())}
-                          >
-                            <Sparkles className="size-3 mr-1" /> Generate Fresh UID
+                            {pending ? (
+                              <>
+                                <span className="relative flex h-2.5 w-2.5 mr-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                </span>
+                                Awaiting Hardware Card Tap...
+                              </>
+                            ) : scanUid.trim() ? (
+                              <>
+                                <ScanLine className="size-4 mr-1.5" />
+                                Simulate RFID Scan ({scanUid.trim()})
+                              </>
+                            ) : (
+                              <>
+                                <Radio className="size-4 mr-1.5" />
+                                Catch Hardware Scan
+                              </>
+                            )}
                           </Button>
                           <Button
                             variant="outline"
