@@ -1266,7 +1266,7 @@ export async function dispatchBoxScan(
       },
       data: {
         status: "completed",
-        assignee_id: actorRef.id,
+        assignee_id: staffUserId,
         completed_at: now,
       },
     });

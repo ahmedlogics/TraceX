@@ -15,6 +15,7 @@ import {
   Truck,
   Users,
   Wrench,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { RouteKey } from "@/domain/permissions";
@@ -41,6 +42,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
       { key: "materialLots", label: "Material lots", href: paths.lots, icon: Boxes },
       { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
       { key: "garments", label: "Garments", href: paths.garments, icon: Shirt },
+      { key: "nfcHub", label: "NFC Tag Passports", href: paths.nfcHub, icon: Zap },
     ],
   },
   {

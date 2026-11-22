@@ -493,7 +493,7 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
       subjectKind: "material_lot",
       subjectId: subject.subjectId,
       subjectCode: subject.subjectCode,
-      orderId: targetOrderCode,
+
       processedAt: new Date().toISOString(),
       nextExpectedStation: "cutting",
     };

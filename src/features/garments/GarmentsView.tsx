@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, Clock, ExternalLink, OctagonAlert, Package, Radio, Scissors, Tag } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, ExternalLink, OctagonAlert, Package, Radio, Scissors, Shirt, Tag, Zap } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import type { LifecycleStage } from "@/domain/types";
 import { useWtQuery } from "@/lib/data/hooks";
+import { NfcHubView } from "@/features/nfc/NfcHubView";
 
 const stages: LifecycleStage[] = [
   "cutting",
@@ -28,14 +29,60 @@ export function GarmentsView() {
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
   const [disposition, setDisposition] = useState("all");
+  const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
 
   return (
     <>
       <PageHeader
-        title="Garment Registry & Production Status"
+        title={activeTab === "nfc" ? "NFC Tag Programming & Localtunnel Hub" : "Garment Registry & Production Status"}
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Garments" }]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={activeTab === "nfc" ? "default" : "outline"}
+              onClick={() => setActiveTab(activeTab === "nfc" ? "register" : "nfc")}
+              className={`text-xs font-semibold h-8 ${
+                activeTab === "nfc" ? "bg-primary" : "text-primary border-primary/25 hover:bg-primary/5"
+              }`}
+            >
+              <Zap className="size-3.5 mr-1" />
+              {activeTab === "nfc" ? "Switch to Garment Register" : "⚡ NFC Localtunnel Hub"}
+            </Button>
+          </div>
+        }
       />
 
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 mb-6">
+        <div className="inline-flex rounded-lg border bg-muted/80 p-1 text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab("register")}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
+              activeTab === "register"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Shirt className="size-3.5" /> Garment Production Register
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("nfc")}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
+              activeTab === "nfc"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Zap className="size-3.5" /> ⚡ NFC Tag Hub & Localtunnel Links
+          </button>
+        </div>
+      </div>
+
+      {activeTab === "nfc" ? (
+        <NfcHubView />
+      ) : (
       <Loadable query={q}>
         {(gs) => {
           const inAssembly = gs.filter((g) => g.stage === "stitching" || g.stage === "finishing").length;
@@ -214,6 +261,7 @@ export function GarmentsView() {
           );
         }}
       </Loadable>
+      )}
     </>
   );
 }

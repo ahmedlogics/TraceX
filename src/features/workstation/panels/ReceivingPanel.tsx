@@ -257,7 +257,7 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                                       if (data.lastScanOutcome?.resolution === "accepted") {
                                         return data.lastScanOutcome;
                                       }
-                                      if (data.lastScanOutcome?.resolution === "rejected") {
+                                      if (data.lastScanOutcome?.resolution) {
                                         throw new Error(
                                           data.lastScanOutcome.rejectReason ??
                                             "Hardware scan was rejected by workstation rules.",
@@ -267,7 +267,7 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
 
                                     const lots = await c.listLots();
                                     const target = lots.find(
-                                      (l) => l.id === lotId || l.code === lotId || (l as any).lotId === lotId,
+                                      (l) => l.id === lotId || (l as any).code === lotId || (l as any).lotId === lotId,
                                     );
                                     if (target?.rfidUid) {
                                       return {

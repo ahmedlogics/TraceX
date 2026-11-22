@@ -150,12 +150,10 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                         void qLots.refetch();
                         return data.lastScanOutcome;
                       }
-                      if (data.lastScanOutcome.resolution === "rejected") {
-                        throw new Error(
-                          data.lastScanOutcome.rejectReason ??
-                            "Hardware scan on Scanner 2 was rejected by workstation rules.",
-                        );
-                      }
+                      throw new Error(
+                        data.lastScanOutcome.rejectReason ??
+                          "Hardware scan on Scanner 2 was rejected by workstation rules.",
+                      );
                     }
 
                     const freshOrders = await c.listOrders();

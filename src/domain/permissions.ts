@@ -38,7 +38,8 @@ export type RouteKey =
   | "audit"
   | "reports"
   | "adminUsers"
-  | "settings";
+  | "settings"
+  | "nfcHub";
 
 const ALL: Role[] = ["A", "M", "O", "P", "Q", "L"];
 
@@ -65,6 +66,7 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   reports: ["A", "M"],
   adminUsers: ["A"],
   settings: ["A", "M"],
+  nfcHub: ALL,
 };
 
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
