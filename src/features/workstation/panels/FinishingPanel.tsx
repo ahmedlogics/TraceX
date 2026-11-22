@@ -65,6 +65,11 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                   (g) => g.stage === "finishing" && !g.hold,
                 );
 
+                // Garments currently at Stitching (Station 4) awaiting assembly
+                const inStitching = garments.filter(
+                  (g) => g.stage === "stitching" && !g.hold,
+                );
+
                 // 2. Handed Over to Station 6 (Final QC): garments processed here that advanced to next station
                 const handedOverToQc = garments.filter(
                   (g) => g.stage === "final-qc" && !g.hold,
@@ -251,6 +256,54 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                         </Button>
                                       )}
                                     </div>
+
+                                    {/* Stage Integration Testing Box */}
+                                    {inStitching.length > 0 && (
+                                      <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2 text-xs">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2">
+                                            <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                                            <span className="font-semibold text-foreground">
+                                              Test Garment Awaiting Stitching Completion
+                                            </span>
+                                          </div>
+                                          <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400">
+                                            Stage: stitching
+                                          </span>
+                                        </div>
+                                        <p className="text-muted-foreground">
+                                          Garment <strong className="text-foreground">{inStitching[0]?.id}</strong> ({inStitching[0]?.productName}) is currently at <strong>Station 4 (Stitching)</strong> with active RFID card <code className="font-mono text-primary font-bold">{inStitching[0]?.rfidUid}</code>.
+                                        </p>
+                                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 text-xs font-medium"
+                                            onClick={() => setScanUid(inStitching[0]?.rfidUid || "")}
+                                          >
+                                            1. Pre-fill UID (Verify Reject Guard)
+                                          </Button>
+                                          <Button
+                                            variant="default"
+                                            size="sm"
+                                            className="h-7 text-xs font-semibold gap-1.5"
+                                            disabled={pending}
+                                            onClick={() =>
+                                              void run(
+                                                (c) => c.routineScan(inStitching[0]?.rfidUid!, "stitching"),
+                                                (outcome) =>
+                                                  outcome.resolution === "accepted"
+                                                    ? `Garment ${inStitching[0]?.id} completed at Stitching → Arrived in Finishing Work Queue!`
+                                                    : `Stitching scan rejected: ${outcome.rejectReason}`,
+                                              )
+                                            }
+                                          >
+                                            <CheckCircle2 className="size-3.5" />
+                                            2. Simulate Station 4 Stitching Scan
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>

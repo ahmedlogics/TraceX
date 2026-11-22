@@ -125,6 +125,16 @@ export function createSeed(): DemoState {
       boundBy: "u-cutting",
       active: true,
     },
+    // SHIRT-TEST-001 garment card (at stitching station awaiting completion)
+    {
+      id: "BIND-SHIRT-TEST-001",
+      uid: "04556677",
+      subjectType: "garment",
+      subjectId: "SHIRT-TEST-001",
+      boundAt: "2026-11-21T08:00:00Z",
+      boundBy: "u-cutting",
+      active: true,
+    },
   ];
 
   const actionContexts: ActionContext[] = [];
@@ -397,6 +407,18 @@ export function createSeed(): DemoState {
         },
         rfidUid: "04003344",
       },
+      {
+        id: "SHIRT-TEST-001",
+        orderId: "ORDER-001",
+        publicId: "shirt-test-001-demo",
+        productName: "Test Oxford Shirt — Sky Blue, M",
+        size: "M",
+        cuttingOutputId: "CUT-001",
+        stage: "stitching",
+        disposition: "awaiting-inspection",
+        hold: null,
+        rfidUid: "04556677",
+      },
     ],
     garmentEvents: [
       {
@@ -648,6 +670,17 @@ export function createSeed(): DemoState {
       },
     ],
     tasks: [
+      {
+        id: "T-TEST-STITCH",
+        kind: "stitch",
+        title: "Assemble & stitch SHIRT-TEST-001",
+        department: "stitching",
+        subjectType: "garment",
+        subjectId: "SHIRT-TEST-001",
+        checkpoint: "S3",
+        status: "open",
+        createdAt: "2026-11-21T08:15:00Z",
+      },
       {
         id: "T-101",
         kind: "final-qc-presentation",
