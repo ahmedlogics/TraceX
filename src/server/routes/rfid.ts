@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "node:crypto";
-import { prisma } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import { validateBody } from "../middleware/validation";
 import { sendSuccess, ApiError } from "../middleware/responses";
 import { VersionedScanEnvelopeSchema } from "../rfid/schemas";
@@ -10,6 +10,7 @@ import { createPrismaAuthMiddleware } from "../auth/actor-context";
 import { authenticateDevice, extractDeviceSecret } from "../rfid/device-auth";
 import { getOrCreateChecklistVersion } from "../quality/quality-service";
 import { executeRoutineScan } from "../production/production-service";
+import { executeWarehouseCartonIntake } from "../fulfilment/fulfilment-service";
 import type {
   RfidStationCode,
   VersionedScanEnvelope,
@@ -267,15 +268,26 @@ rfidRouter.get(
         }
       }
 
-      // Query last scan outcome on this station
-      const lastScan = await prisma.rfid_scans.findFirst({
-        where: { station_code: stationCode },
-        orderBy: { received_at: "desc" },
-        include: {
-          garments: { select: { code: true } },
-          material_lots: { select: { code: true } },
-        },
-      });
+      // Query last scan outcome and device mapping in parallel
+      const [lastScan, mapping] = await Promise.all([
+        prisma.rfid_scans.findFirst({
+          where: { station_code: stationCode },
+          orderBy: { received_at: "desc" },
+          include: {
+            garments: { select: { code: true } },
+            material_lots: { select: { code: true } },
+          },
+        }),
+        prisma.device_reader_mappings.findFirst({
+          where: {
+            station_code: stationCode,
+            device_mapping_versions: {
+              activated_at: { not: null },
+              retired_at: null,
+            },
+          },
+        }),
+      ]);
 
       const lastScanOutcome: ScanOutcome | undefined = lastScan
         ? {
@@ -289,11 +301,23 @@ rfidRouter.get(
           }
         : undefined;
 
+      let bridgeConnected = false;
+      if (mapping) {
+        const activeBridge = await prisma.device_bridge_sessions.findFirst({
+          where: {
+            device_id: mapping.device_id,
+            disconnected_at: null,
+            last_seen_at: { gt: new Date(Date.now() - 5 * 60 * 1000) },
+          },
+        });
+        bridgeConnected = Boolean(activeBridge);
+      }
+
       const stationData: RfidStationData = {
         stationCode,
         stationName: station.name,
         operatorId: session?.operator_id ?? user.id,
-        bridgeConnected: true,
+        bridgeConnected,
         activeContext,
         lastScanOutcome,
       };
@@ -682,20 +706,64 @@ rfidRouter.post(
 
 /**
  * POST /api/rfid/routine-scan
- * Triggers a routine scan for Stitching or Finishing from the workstation panel.
+ * Triggers a routine scan for Stitching, Finishing, or Warehouse from the workstation panel.
  */
 rfidRouter.post(
   "/routine-scan",
   prismaAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { uid, stationCode } = req.body as { uid?: string; stationCode?: "stitching" | "finishing" };
+      const { uid, stationCode, binId } = req.body as {
+        uid?: string;
+        stationCode?: "stitching" | "finishing" | "warehouse";
+        binId?: string;
+      };
       if (!uid || !stationCode) throw ApiError.badRequest("uid and stationCode are required.");
 
       const staff = getStaffUser(req);
+
+      if (stationCode === "warehouse") {
+        const outcome = await runInTransaction(async (tx) =>
+          executeWarehouseCartonIntake(tx, staff, {
+            tagUid: uid,
+            binId: binId || "BIN-A1",
+            isHardware: false,
+          }),
+        );
+        sendSuccess(res, outcome, 200);
+        return;
+      }
+
       const outcome = await executeRoutineScan(
         { tagUid: uid, stationCode, isHardware: false },
         staff,
+      );
+      sendSuccess(res, outcome, 200);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /api/rfid/warehouse-intake
+ * Directly performs Master Box RFID Tag intake at Station 8 / Warehouse.
+ */
+rfidRouter.post(
+  "/warehouse-intake",
+  prismaAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { tagUid, binId } = req.body as { tagUid?: string; binId?: string };
+      if (!tagUid) throw ApiError.badRequest("tagUid is required.");
+
+      const staff = getStaffUser(req);
+      const outcome = await runInTransaction(async (tx) =>
+        executeWarehouseCartonIntake(tx, staff, {
+          tagUid,
+          binId: binId || "BIN-A1",
+          isHardware: false,
+        }),
       );
       sendSuccess(res, outcome, 200);
     } catch (err) {

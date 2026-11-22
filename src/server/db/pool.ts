@@ -38,7 +38,7 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
       database: parsed.database ?? undefined,
       user: parsed.user ?? undefined,
       password: parsed.password ?? undefined,
-      max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 4),
+      max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
       connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 30000,
       keepAlive: true,

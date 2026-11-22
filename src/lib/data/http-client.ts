@@ -216,8 +216,10 @@ function mapDbStageToLifecycleStage(stage: string): LifecycleStage {
     case "finished":
       return "final-qc";
     case "packed":
-      return "warehouse";
+      return "packing";
     case "warehoused":
+      return "warehouse";
+    case "allocated":
       return "allocated";
     case "dispatched":
       return "dispatched";
@@ -447,11 +449,15 @@ export function createHttpClient(): WearTrailClient {
         body: { uid },
       });
     },
-    async routineScan(uid: string, stationCode: "stitching" | "finishing"): Promise<ScanOutcome> {
+    async routineScan(
+      uid: string,
+      stationCode: "stitching" | "finishing" | "warehouse",
+      binId?: string,
+    ): Promise<ScanOutcome> {
       try {
         return await req<ScanOutcome>("/api/rfid/routine-scan", {
           method: "POST",
-          body: { uid, stationCode },
+          body: { uid, stationCode, binId },
         });
       } catch (err) {
         if (err instanceof ApiError) {
@@ -464,6 +470,29 @@ export function createHttpClient(): WearTrailClient {
 
           return {
             uid,
+            resolution,
+            rejectReason: err.message,
+            at: new Date().toISOString(),
+          };
+        }
+        throw err;
+      }
+    },
+    async warehouseIntake(tagUid: string, binId?: string): Promise<ScanOutcome> {
+      try {
+        return await req<ScanOutcome>("/api/rfid/warehouse-intake", {
+          method: "POST",
+          body: { tagUid, binId: binId || "BIN-A1" },
+        });
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const code = err.code.toLowerCase();
+          let resolution: ScanResolution = "rejected_unknown_card";
+          if (code.includes("hold")) resolution = "rejected_business_rule";
+          else if (code.includes("duplicate")) resolution = "rejected_duplicate";
+          else if (code.includes("stage")) resolution = "rejected_wrong_stage";
+          return {
+            uid: tagUid,
             resolution,
             rejectReason: err.message,
             at: new Date().toISOString(),

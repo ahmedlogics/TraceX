@@ -201,8 +201,14 @@ export interface WearTrailClient {
   cancelContext(contextId: string): Promise<void>;
   /** Resolve a tag UID scan: returns the outcome (accepted or rejected with reason). */
   resolveRfidScan(uid: string): Promise<ScanOutcome>;
-  /** Routine scan at Stitching or Finishing: identifies garment and advances stage. */
-  routineScan(uid: string, stationCode: "stitching" | "finishing"): Promise<ScanOutcome>;
+  /** Routine scan at Stitching, Finishing, or Warehouse: identifies garment/carton and advances stage. */
+  routineScan(
+    uid: string,
+    stationCode: "stitching" | "finishing" | "warehouse",
+    binId?: string,
+  ): Promise<ScanOutcome>;
+  /** Warehouse Carton Intake: scans Master Box RFID Tag and receives carton and all linked garments into storage bin. */
+  warehouseIntake(tagUid: string, binId?: string): Promise<ScanOutcome>;
   /** Staff-only: simulate a scan event (mock only). */
   simulateRfidScan(uid: string): Promise<ScanOutcome>;
 

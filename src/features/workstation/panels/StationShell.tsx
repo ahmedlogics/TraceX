@@ -25,6 +25,7 @@ import { StitchingPanel } from "./StitchingPanel";
 import { FinishingPanel } from "./FinishingPanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
+import { WarehousePanel } from "./WarehousePanel";
 
 function defaultStationForUser(user: StaffUser): RfidStationCode {
   if (user.username === "receiving.demo") return "fabric_receiving";
@@ -120,6 +121,8 @@ export function StationShell() {
                 className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 space-y-4 shadow-xs ${
                   effectiveStation === "stitching"
                     ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
+                    : effectiveStation === "warehouse"
+                    ? "bg-gradient-to-r from-card via-card/95 to-amber-50/30 dark:to-card/85"
                     : "bg-card"
                 }`}
               >
@@ -139,6 +142,26 @@ export function StationShell() {
                       alt="Vintage stitching machine"
                       aria-hidden="true"
                       className="h-full w-auto max-w-[260px] object-contain object-right opacity-90 brightness-105 contrast-105"
+                    />
+                  </div>
+                )}
+
+                {/* Aesthetic warehouse backdrop blend for warehouse workstation */}
+                {effectiveStation === "warehouse" && (
+                  <div
+                    className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center justify-end select-none overflow-hidden pr-1"
+                    style={{
+                      maskImage:
+                        "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
+                      WebkitMaskImage:
+                        "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
+                    }}
+                  >
+                    <img
+                      src="/images/warehouse/aesthetic-warehouse.jpg"
+                      alt="Artisanal warehouse shelves"
+                      aria-hidden="true"
+                      className="h-full w-auto max-w-[280px] object-cover object-right opacity-80 brightness-105 contrast-100"
                     />
                   </div>
                 )}
@@ -224,8 +247,8 @@ export function StationShell() {
             {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
             {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
             {(effectiveStation === "packing" ||
-              effectiveStation === "warehouse" ||
               effectiveStation === "dispatch") && <LogisticsPanel stationData={stData} />}
+            {effectiveStation === "warehouse" && <WarehousePanel stationData={stData} />}
           </div>
         );
       }}

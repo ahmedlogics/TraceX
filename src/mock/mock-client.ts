@@ -193,8 +193,24 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     resolveRfidScan: (uid: string) => act((s, u) => E.resolveRfidScan(s, u, uid)),
 
-    routineScan: (uid: string, stationCode: "stitching" | "finishing") =>
-      act((s, u) => E.routineScan(s, u, uid, stationCode)),
+    routineScan: (
+      uid: string,
+      stationCode: "stitching" | "finishing" | "warehouse",
+      _binId?: string,
+    ) => act((s, u) => E.routineScan(s, u, uid, stationCode as any)),
+
+    warehouseIntake: (tagUid: string, binId?: string) =>
+      act((s, u) => {
+        E.receiveStock(s, u, tagUid);
+        return {
+          uid: tagUid,
+          resolution: "accepted" as const,
+          subjectId: tagUid,
+          garmentCode: tagUid,
+          productName: `Received into ${binId || "BIN-A1"}`,
+          at: new Date().toISOString(),
+        };
+      }),
 
     simulateRfidScan: (uid: string) => act((s, u) => E.resolveRfidScan(s, u, uid)),
 
