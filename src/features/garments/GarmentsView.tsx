@@ -1,22 +1,23 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, Clock, ExternalLink, OctagonAlert, Package, Radio, Scissors, Shirt, Tag, Zap } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/wt/DataTable";
 import { FilterBar, NativeSelect, SearchInput } from "@/components/wt/forms";
-import { IdLink, PageHeader } from "@/components/wt/layout";
+import { fmt, IdLink, PageHeader } from "@/components/wt/layout";
 import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
-import type { LifecycleStage } from "@/domain/types";
+import type { LifecycleStage, ScanOutcome } from "@/domain/types";
 import { can } from "@/domain/permissions";
-import { useWtQuery } from "@/lib/data/hooks";
+import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
 import { NfcHubView } from "@/features/nfc/NfcHubView";
 
 const stages: LifecycleStage[] = [
   "cutting",
   "stitching",
+  "stitched",
   "finishing",
   "final-qc",
   "rework",
@@ -28,14 +29,84 @@ const stages: LifecycleStage[] = [
 
 export function GarmentsView() {
   const me = useMe();
+  const isStitching = me?.department === "stitching" || me?.username === "stitching.demo";
   const canAccessNfc = can.accessNfcHub(me);
   const q = useWtQuery(["garments"], (c) => c.listGarments());
+  const { run } = useWtAction();
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
   const [disposition, setDisposition] = useState("all");
   const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
+  const [recentScanOutcome, setRecentScanOutcome] = useState<ScanOutcome | null>(null);
+
+  // Poll hardware station data for Station 4 (Stitching reader)
+  const qStation = useWtQuery(
+    ["rfid-station", "stitching"],
+    (c) => c.getRfidStationData("stitching"),
+    {
+      enabled: isStitching,
+      refetchInterval: 1200,
+    },
+  );
+
+  // Auto-detect scans arriving via MQTT/backend hardware reader at Station 4
+  const lastSeenScanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isStitching) return;
+    const outcome = qStation.data?.lastScanOutcome;
+    if (!outcome) return;
+    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
+      lastSeenScanRef.current = outcome.at;
+      setRecentScanOutcome(outcome);
+      void q.refetch();
+    }
+  }, [isStitching, qStation.data?.lastScanOutcome, q]);
+
+  // Global USB Keyboard Wedge RFID reader listener for Station 4
+  // Enables hardware scanner 4 to automatically capture card UID without any manual typing or selecting
+  useEffect(() => {
+    if (!isStitching) return;
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      const now = Date.now();
+      if (now - lastKeyTime > 500) {
+        buffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const scanned = buffer.trim().toUpperCase();
+        buffer = "";
+        if (scanned.length >= 4 && /^[0-9A-F]+$/i.test(scanned)) {
+          e.preventDefault();
+          void run(
+            (c) => c.routineScan(scanned, "stitching"),
+            (outcome) => {
+              setRecentScanOutcome(outcome);
+              void q.refetch();
+              if (outcome.resolution === "accepted") {
+                return `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName ?? "Garment"}) stitching complete! Status updated to Stitched.`;
+              }
+              return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+            },
+          );
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isStitching, q, run]);
 
   const effectiveTab = canAccessNfc ? activeTab : "register";
+  const activeOutcome = recentScanOutcome ?? qStation.data?.lastScanOutcome ?? null;
 
   return (
     <>
@@ -115,6 +186,72 @@ export function GarmentsView() {
 
           return (
             <div className="space-y-6">
+              {/* Station 4 Stitching Live Hardware Reader Status */}
+              {isStitching && (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                        <Radio className="size-5 animate-pulse" />
+                        <span className="absolute -top-1 -right-1 flex size-3">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                          <span className="relative inline-flex size-3 rounded-full bg-success" />
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-sm font-bold text-foreground">
+                            Station 4 — Stitching Line Reader (Live Scanner 4 Active)
+                          </h2>
+                          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success border border-success/30">
+                            Ready for Scans
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Zero manual clicks required. Simply present physical garment tag to Scanner 4. Details are fetched and status dynamically updates to Stitched.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {activeOutcome && (
+                    <div
+                      className={`rounded-lg border p-3 text-xs flex items-center justify-between gap-3 ${
+                        activeOutcome.resolution === "accepted"
+                          ? "border-success/40 bg-success-soft text-foreground"
+                          : "border-destructive/40 bg-danger-soft text-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {activeOutcome.resolution === "accepted" ? (
+                          <CheckCircle2 className="size-4 text-success shrink-0" />
+                        ) : (
+                          <OctagonAlert className="size-4 text-destructive shrink-0" />
+                        )}
+                        <div>
+                          <span className="font-bold">
+                            {activeOutcome.resolution === "accepted"
+                              ? `Scan Confirmed: ${activeOutcome.garmentCode ?? activeOutcome.subjectId}${
+                                  activeOutcome.productName ? ` · ${activeOutcome.productName}` : ""
+                                }`
+                              : `Scan Rejected (${activeOutcome.uid})`}
+                          </span>
+                          <span className="text-muted-foreground ml-2">
+                            {activeOutcome.resolution === "accepted"
+                              ? "· Stitching Complete → Status Updated to Stitched"
+                              : `· ${activeOutcome.rejectReason ?? activeOutcome.resolution}`}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
+                        <span>Tag: {activeOutcome.uid}</span>
+                        {activeOutcome.at && <span>· {fmt.dateTime(activeOutcome.at)}</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Metric Overview Cards */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-primary/40 hover:shadow-sm transition-all duration-200">

@@ -347,6 +347,7 @@ export interface CuttingOutput {
 export type LifecycleStage =
   | "cutting"
   | "stitching"
+  | "stitched"
   | "finishing"
   | "final-qc"
   | "rework"

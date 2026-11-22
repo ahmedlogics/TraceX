@@ -77,6 +77,23 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return user.username === "manager.demo" || user.role === "M";
   }
 
+  // Stitching operators: strictly Home, Garments, and Rework screens
+  if (
+    user.username === "stitching.demo" ||
+    user.department?.toLowerCase() === "stitching"
+  ) {
+    const stitchingAllowed: RouteKey[] = [
+      "account",
+      "home",
+      "tasks",
+      "garments",
+      "garment",
+      "rework",
+      "reworkCase",
+    ];
+    return stitchingAllowed.includes(key);
+  }
+
   // Receiving operators only handle materials/receiving, not production orders
   if (
     (user.username === "receiving.demo" || user.department === "receiving") &&

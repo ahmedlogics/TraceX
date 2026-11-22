@@ -32,6 +32,9 @@ const toneFor: Record<string, Tone> = {
   "reinspection-pending": "warning",
   released: "success",
   // stages
+  stitched: "success",
+  stitching: "info",
+  finishing: "info",
   dispatched: "success",
   rework: "danger",
   // tasks

@@ -1519,7 +1519,7 @@ export function routineScan(
   }
 
   if (stationCode === "stitching") {
-    if (g.stage !== "stitching") {
+    if (g.stage !== "stitching" && g.stage !== "cut") {
       return rejectScan(
         s,
         normUid,
@@ -1551,7 +1551,7 @@ export function routineScan(
     });
     audit(s, actor, "production", "Stitching completed via RFID scan", "garment", g.id);
   } else {
-    if (g.stage !== "finishing") {
+    if (g.stage !== "finishing" && (g.stage as string) !== "stitched") {
       return rejectScan(
         s,
         normUid,

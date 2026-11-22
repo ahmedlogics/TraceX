@@ -794,7 +794,7 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     const garment = binding.garments;
-    if (garment.stage !== "cut" && garment.stage !== "stitched") {
+    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
       throw ApiError.badRequest(
         `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'.`,
         { garmentId: garment.id, stage: garment.stage },

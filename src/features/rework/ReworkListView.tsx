@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   Clock,
   Filter,
   Hammer,
+  Radio,
   RotateCcw,
   ScanLine,
   Search,
@@ -54,6 +55,35 @@ export function ReworkListView() {
   const [scanError, setScanError] = useState<string | null>(null);
 
   const isProduction = me.role === "P";
+
+  const stationCode =
+    me.department === "stitching"
+      ? "stitching"
+      : me.department === "cutting"
+        ? "cutting"
+        : null;
+
+  const qStation = useWtQuery(
+    ["rfid-station", stationCode ?? "stitching"],
+    (c) => c.getRfidStationData((stationCode ?? "stitching") as any),
+    {
+      enabled: !!stationCode && !!scanCase,
+      refetchInterval: 1000,
+    },
+  );
+
+  const lastReworkScanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!scanCase) return;
+    const outcome = qStation.data?.lastScanOutcome;
+    if (!outcome) return;
+    if (outcome.at && outcome.at !== lastReworkScanRef.current) {
+      lastReworkScanRef.current = outcome.at;
+      if (outcome.uid) {
+        setScannedTagInput(outcome.uid);
+      }
+    }
+  }, [scanCase, qStation.data?.lastScanOutcome]);
 
   return (
     <>
@@ -250,7 +280,7 @@ export function ReworkListView() {
                               header: "Status",
                               cell: (r) => {
                                 const isMyDept = isProduction && r.assignedDepartment === me.department;
-                                const isUnderRepair = r.status === "assigned";
+                                const isUnderRepair = r.status === "assigned" || (isMyDept && r.status === "awaiting-assignment");
                                 const currentRowState = rowStates[r.id] ?? "pending";
 
                                 return (
@@ -259,7 +289,7 @@ export function ReworkListView() {
 
                                     {/* For production staff: interactive Pending / Done buttons */}
                                     {isMyDept && isUnderRepair && (
-                                      <div className="space-y-1.5 pt-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                                         <div className="inline-flex rounded-md border border-input p-0.5 bg-muted/40 text-[11px]">
                                           <button
                                             type="button"
@@ -289,21 +319,19 @@ export function ReworkListView() {
                                           </button>
                                         </div>
 
-                                        {/* When Done is selected, show the Scan Tag button */}
+                                        {/* Alongside Done: Scan Tag button */}
                                         {currentRowState === "done" && (
-                                          <div>
-                                            <Button
-                                              size="sm"
-                                              className="h-6 px-2 text-[11px] gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs transition-all animate-in fade-in"
-                                              onClick={() => {
-                                                setScanCase(r);
-                                                setScannedTagInput("");
-                                                setScanError(null);
-                                              }}
-                                            >
-                                              <ScanLine className="size-3" /> Scan Tag
-                                            </Button>
-                                          </div>
+                                          <Button
+                                            size="sm"
+                                            className="h-6 px-2 text-[11px] gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs transition-all animate-in fade-in"
+                                            onClick={() => {
+                                              setScanCase(r);
+                                              setScannedTagInput("");
+                                              setScanError(null);
+                                            }}
+                                          >
+                                            <ScanLine className="size-3" /> Scan Tag
+                                          </Button>
                                         )}
                                       </div>
                                     )}
@@ -352,6 +380,16 @@ export function ReworkListView() {
 
                       {scanCase && (
                         <div className="space-y-4 py-2">
+                          {stationCode && (
+                            <div className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-primary font-medium">
+                                <Radio className="size-3.5 animate-pulse" />
+                                <span>Hardware Scanner Active ({stationCode === "stitching" ? "Scanner 4" : "Scanner 3"})</span>
+                              </div>
+                              <span className="text-muted-foreground text-[10px]">Listening for tag scan...</span>
+                            </div>
+                          )}
+
                           <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5 text-xs">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Rework Case:</span>
@@ -459,6 +497,8 @@ export function ReworkListView() {
 
                             if (success) {
                               setScanCase(null);
+                              void qRework.refetch();
+                              void qGarments.refetch();
                             }
                           }}
                         >
