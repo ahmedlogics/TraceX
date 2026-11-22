@@ -526,4 +526,48 @@ describe("Member 3: Fulfilment, Warehousing & Outbound Departure Gate", () => {
     // Sibling remained unaffected throughout entire process
     expect(sibling.stage).toBe(initialSiblingStage);
   });
+
+  it("Station 9: Aggregate Carton Dispatch Scan & Automated Gate Pipeline", () => {
+    const s = createSeed();
+    const dispStaff = as(s, "dispatch.demo");
+
+    // 1. Check 1: Unrecognised Box Tag
+    const unrecognisedRes = E.dispatchBoxScan(s, dispStaff, "UNKNOWN-TAG-999");
+    expect(unrecognisedRes.resolution).toBe("rejected_unknown_card");
+    expect(unrecognisedRes.rejectReason).toMatch(/Unrecognised Box Tag/i);
+
+    // 2. Check 2: Cannot dispatch empty box
+    const emptyPkgId = E.createPackage(s, as(s, "packing.demo"));
+    const emptyRes = E.dispatchBoxScan(s, dispStaff, emptyPkgId);
+    expect(emptyRes.resolution).toBe("rejected_business_rule");
+    expect(emptyRes.rejectReason).toMatch(/Cannot dispatch empty box/i);
+
+    // 3. Prepare sealed box with 2 garments
+    const pkg = s.packages.find((p) => p.id === "PKG-001")!;
+    expect(pkg.garmentIds.length).toBeGreaterThan(0);
+    const linkedShirt = s.garments.find((g) => g.id === pkg.garmentIds[0])!;
+
+    // 4. Check 4: Active Quality Hold Blocker
+    linkedShirt.hold = {
+      since: "2026-11-22T08:00:00Z",
+      reason: "Stain mark on cuff",
+      inspectionId: "INSP-TEST-HOLD",
+    };
+    const holdRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
+    expect(holdRes.resolution).toBe("rejected_business_rule");
+    expect(holdRes.rejectReason).toMatch(/Blocked.*active Quality Hold/i);
+    expect(pkg.status).toBe("sealed");
+
+    // 5. Clear hold -> Instant Atomic Status Advancement
+    linkedShirt.hold = null;
+    const acceptRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
+    expect(acceptRes.resolution).toBe("accepted");
+    expect(pkg.status).toBe("dispatched");
+    expect(linkedShirt.stage).toBe("dispatched");
+
+    // 6. Check 3: Duplicate Dispatch Guard
+    const dupRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
+    expect(dupRes.resolution).toBe("rejected_business_rule");
+    expect(dupRes.rejectReason).toMatch(/Box Already Dispatched/i);
+  });
 });

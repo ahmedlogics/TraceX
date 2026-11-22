@@ -193,8 +193,11 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     resolveRfidScan: (uid: string) => act((s, u) => E.resolveRfidScan(s, u, uid)),
 
-    routineScan: (uid: string, stationCode: "stitching" | "finishing") =>
+    routineScan: (uid: string, stationCode: "stitching" | "finishing" | "dispatch") =>
       act((s, u) => E.routineScan(s, u, uid, stationCode)),
+
+    dispatchBoxScan: (boxTagOrId: string, shipmentId?: string) =>
+      act((s, u) => E.dispatchBoxScan(s, u, boxTagOrId, shipmentId)),
 
     simulateRfidScan: (uid: string) => act((s, u) => E.resolveRfidScan(s, u, uid)),
 

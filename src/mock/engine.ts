@@ -1199,18 +1199,201 @@ function handleDispatchGarment(
   return outcome;
 }
 
-// ---------------------------------------------------------------- Routine station scans (Stitching/Finishing)
+// ---------------------------------------------------------------- Station 9: Dispatch & Outbound Gate Box Scan
+
+/**
+ * Station 9: Aggregate Carton Dispatch Scan.
+ * Operators scan the master container/box RFID tag.
+ * Automatically triggers an instant, atomic status update across all linked products directly to dispatched.
+ */
+export function dispatchBoxScan(
+  s: DemoState,
+  actor: StaffUser,
+  boxTagOrId: string,
+  shipmentId?: string,
+): ScanOutcome {
+  ensure(
+    can.confirmDeparture(actor) || actor.department === "dispatch" || actor.role === "M" || actor.role === "A",
+    "forbidden",
+    "Only authorized dispatch associates can dispatch outbound cartons.",
+  );
+
+  const cleanInput = boxTagOrId.trim();
+  const normUid = normalizeUid(cleanInput);
+
+  // 1. Identify Box: by ID, by rfidUid, or by binding
+  let pkg = s.packages.find(
+    (p) =>
+      p.id.toUpperCase() === cleanInput.toUpperCase() ||
+      (p.rfidUid && p.rfidUid.toUpperCase() === normUid),
+  );
+
+  if (!pkg) {
+    const binding = findBindingByUid(s, normUid);
+    if (binding) {
+      if (binding.subjectType === "package" || (binding.subjectType as any) === "box") {
+        pkg = s.packages.find((p) => p.id === binding.subjectId);
+      } else if (binding.subjectType === "garment") {
+        pkg = s.packages.find((p) => p.garmentIds.includes(binding.subjectId));
+      }
+    }
+  }
+
+  // Check 1: Is the Tag registered as a valid Box?
+  if (!pkg) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_unknown_card",
+      `Unrecognised Box Tag: Tag UID '${cleanInput}' is not registered to any box or carton.`,
+    );
+  }
+
+  // Check 2: Does the Box contain linked products (> 0)?
+  if (!pkg.garmentIds || pkg.garmentIds.length === 0) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Cannot dispatch empty box — 0 products linked to ${pkg.id}.`,
+    );
+  }
+
+  // Check 3: Has this Box already been dispatched?
+  if (pkg.status === "dispatched") {
+    const linkedShipment = s.shipments.find((sh) =>
+      sh.garmentIds.some((gid) => pkg!.garmentIds.includes(gid)),
+    );
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Box Already Dispatched: Box ${pkg.id} has already been dispatched${
+        linkedShipment ? ` on Shipment ${linkedShipment.id}` : ""
+      }.`,
+    );
+  }
+
+  // Check 4: Do ANY linked garments have an active Hold?
+  const linkedGarments = pkg.garmentIds
+    .map((gid) => s.garments.find((g) => g.id === gid))
+    .filter(Boolean) as Garment[];
+
+  const holdGarment = linkedGarments.find((g) => Boolean(g.hold));
+  if (holdGarment) {
+    const reason = holdGarment.hold?.reason ? ` ("${holdGarment.hold.reason}")` : "";
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Blocked: Garment ${holdGarment.id} inside Box ${pkg.id} has an active Quality Hold${reason}. Release hold before dispatching.`,
+    );
+  }
+
+  // All Passed: Instant Atomic Status Advancement
+  pkg.status = "dispatched";
+
+  for (const g of linkedGarments) {
+    g.stage = "dispatched";
+    garmentEvent(s, g.id, `Dispatched at Station 9 in container ${pkg.id}`, actor);
+    s.ledger.unshift({
+      id: nextId(s, "ledger", "LC"),
+      subjectType: "garment",
+      subjectId: g.id,
+      milestone: `Garment dispatched in carton ${pkg.id} at Station 9`,
+      status: "confirmed",
+      digest: `0x${Math.random().toString(16).slice(2, 10)}`,
+      createdAt: now(),
+      updatedAt: now(),
+      attempts: 1,
+    });
+  }
+
+  // Update target shipment manifest verification if linked
+  const targetShipment =
+    (shipmentId && s.shipments.find((sh) => sh.id === shipmentId)) ||
+    s.shipments.find((sh) => sh.garmentIds.some((gid) => pkg!.garmentIds.includes(gid)));
+
+  if (targetShipment) {
+    if (!targetShipment.verifiedGarmentIds) {
+      targetShipment.verifiedGarmentIds = [];
+    }
+    for (const g of linkedGarments) {
+      if (!targetShipment.verifiedGarmentIds.includes(g.id)) {
+        targetShipment.verifiedGarmentIds.push(g.id);
+      }
+    }
+    if (
+      targetShipment.status === "planned" &&
+      targetShipment.allocatedGarmentIds.length > 0 &&
+      targetShipment.allocatedGarmentIds.every((id) =>
+        targetShipment.verifiedGarmentIds!.includes(id),
+      )
+    ) {
+      targetShipment.status = "loading";
+    }
+  }
+
+  closeTasks(s, pkg.id, ["dispatch"]);
+  for (const g of linkedGarments) {
+    closeTasks(s, g.id, ["dispatch"]);
+  }
+
+  audit(
+    s,
+    actor,
+    "logistics",
+    `Box ${pkg.id} scanned at Station 9: All ${linkedGarments.length} linked garments dispatched`,
+    "package",
+    pkg.id,
+    targetShipment?.id,
+  );
+
+  const outcome: ScanOutcome = {
+    uid: normUid,
+    resolution: "accepted",
+    subjectId: pkg.id,
+    garmentCode: pkg.id,
+    productName: `${linkedGarments.length} Linked Units Dispatched`,
+    rejectReason: undefined,
+    at: now(),
+  };
+
+  appendScanLog(s, outcome);
+
+  const stKey = "dispatch";
+  if (!s.rfidStationStates[stKey]) {
+    s.rfidStationStates[stKey] = {
+      stationCode: "dispatch",
+      operatorId: actor.id,
+      lastConfirmedSubjectId: pkg.id,
+      lastScanOutcome: outcome,
+    };
+  } else {
+    s.rfidStationStates[stKey].lastConfirmedSubjectId = pkg.id;
+    s.rfidStationStates[stKey].lastScanOutcome = outcome;
+  }
+
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Routine station scans (Stitching/Finishing/Dispatch)
 
 /**
  * Routine scan: identifies garment and advances its stage without an explicit per-shirt context.
- * Used at Stitching and Finishing where bulk throughput is expected under an authorised session.
+ * Used at Stitching and Finishing where bulk throughput is expected under an authorised session,
+ * and at Station 9 Dispatch for aggregate carton dispatching.
  */
 export function routineScan(
   s: DemoState,
   actor: StaffUser,
   uid: string,
-  stationCode: "stitching" | "finishing",
+  stationCode: "stitching" | "finishing" | "dispatch",
 ): ScanOutcome {
+  if (stationCode === "dispatch") {
+    return dispatchBoxScan(s, actor, uid);
+  }
+
   const normUid = normalizeUid(uid);
   const binding = findBindingByUid(s, normUid);
   if (!binding)

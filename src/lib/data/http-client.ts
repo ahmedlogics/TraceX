@@ -445,10 +445,16 @@ export function createHttpClient(): WearTrailClient {
         body: { uid },
       });
     },
-    async routineScan(uid: string, stationCode: "stitching" | "finishing"): Promise<ScanOutcome> {
+    async routineScan(uid: string, stationCode: "stitching" | "finishing" | "dispatch"): Promise<ScanOutcome> {
       return await req<ScanOutcome>("/api/rfid/routine-scan", {
         method: "POST",
         body: { uid, stationCode },
+      });
+    },
+    async dispatchBoxScan(boxTagOrId: string, shipmentId?: string): Promise<ScanOutcome> {
+      return await req<ScanOutcome>("/api/fulfilment/dispatch-box", {
+        method: "POST",
+        body: { boxTagOrId, shipmentId },
       });
     },
     async simulateRfidScan(uid: string): Promise<ScanOutcome> {

@@ -13,6 +13,7 @@ import {
   getPackageDetail,
   listShipments,
   getShipmentDetail,
+  dispatchBoxScan,
 } from "../fulfilment/fulfilment-service";
 import { sendSuccess, sendError, ApiError } from "../middleware/responses";
 import type { ActorContext, StaffRole, Department } from "../contracts/actor";
@@ -378,6 +379,21 @@ fulfilmentRouter.post("/shipments/:id/depart", async (req: Request, res: Respons
     const shipmentId = getParam(req.params["id"]);
     const result = await runInTransaction((tx) =>
       confirmShipmentDeparture(tx, req.actor!, shipmentId),
+    );
+    return sendSuccess(res, result, 200);
+  } catch (err) {
+    return sendError(res, err, 400);
+  }
+});
+
+// Station 9: Aggregate Carton Dispatch Scan
+fulfilmentRouter.post("/dispatch-box", async (req: Request, res: Response) => {
+  try {
+    const { boxTagOrId, shipmentId } = req.body as { boxTagOrId?: string; shipmentId?: string };
+    if (!boxTagOrId) throw ApiError.badRequest("boxTagOrId is required.");
+
+    const result = await runInTransaction((tx) =>
+      dispatchBoxScan(tx, req.actor!, boxTagOrId, shipmentId),
     );
     return sendSuccess(res, result, 200);
   } catch (err) {
