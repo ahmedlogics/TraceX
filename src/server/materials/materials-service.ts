@@ -156,22 +156,34 @@ export async function listLots(
         material_stock_movements: {
           select: { kind: true, quantity: true },
         },
+        inspections: {
+          where: { scope: "incoming" },
+          select: { id: true, outcome: true, defect_reason: true, created_at: true },
+          orderBy: { created_at: "desc" },
+          take: 1,
+        },
       },
       orderBy: { received_at: "desc" },
     });
 
     return lots.map((lot) => {
       const activeBinding = lot.rfid_tag_bindings;
+      const latestIncomingInsp = lot.inspections?.[0];
+      const hasFailedInsp = latestIncomingInsp?.outcome === "fail";
       const acceptedMovements = lot.material_stock_movements.filter(
         (m) => m.kind === "accepted",
       );
       const isAccepted =
-        acceptedMovements.length > 0 ||
-        Number(lot.available_accepted_quantity) > 0;
+        !hasFailedInsp &&
+        (acceptedMovements.length > 0 ||
+          Number(lot.available_accepted_quantity) > 0 ||
+          latestIncomingInsp?.outcome === "pass");
 
       const status: MaterialLotDTO["status"] = isAccepted
         ? "accepted"
-        : "awaiting-inspection";
+        : hasFailedInsp
+          ? "rejected"
+          : "awaiting-inspection";
 
       return {
         id: lot.id,
@@ -216,22 +228,34 @@ export async function getLotDetail(
           },
           orderBy: { performed_at: "desc" },
         },
+        inspections: {
+          where: { scope: "incoming" },
+          select: { id: true, outcome: true, defect_reason: true, created_at: true },
+          orderBy: { created_at: "desc" },
+          take: 1,
+        },
       },
     });
 
     if (!lot) return null;
 
     const activeBinding = lot.rfid_tag_bindings;
+    const latestIncomingInsp = lot.inspections?.[0];
+    const hasFailedInsp = latestIncomingInsp?.outcome === "fail";
     const acceptedMovements = lot.material_stock_movements.filter(
       (m) => m.kind === "accepted",
     );
     const isAccepted =
-      acceptedMovements.length > 0 ||
-      Number(lot.available_accepted_quantity) > 0;
+      !hasFailedInsp &&
+      (acceptedMovements.length > 0 ||
+        Number(lot.available_accepted_quantity) > 0 ||
+        latestIncomingInsp?.outcome === "pass");
 
     const status: MaterialLotDTO["status"] = isAccepted
       ? "accepted"
-      : "awaiting-inspection";
+      : hasFailedInsp
+        ? "rejected"
+        : "awaiting-inspection";
 
     const movements: MaterialStockMovementDTO[] =
       lot.material_stock_movements.map((m) => ({

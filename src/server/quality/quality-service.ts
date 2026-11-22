@@ -537,6 +537,44 @@ export async function executeIncomingQc(
     });
   }
 
+  // 7. Update work task pipeline hand-off (Step 2 approval -> Step 3 raw store task)
+  if ("work_tasks" in (tx as any) && typeof (tx as any).work_tasks.updateMany === "function") {
+    await (tx as any).work_tasks.updateMany({
+      where: {
+        material_lot_id: lot.id,
+        action_code: "incoming-qc",
+        status: { in: ["queued", "claimed"] },
+      },
+      data: {
+        status: input.result === "pass" ? "completed" : "cancelled",
+        completed_at: new Date(),
+      },
+    });
+
+    if (input.result === "pass" && acceptedQty > 0) {
+      const existingIssueTask = await (tx as any).work_tasks.findFirst({
+        where: {
+          material_lot_id: lot.id,
+          action_code: "issue-material",
+          status: { in: ["queued", "claimed"] },
+        },
+      });
+      if (!existingIssueTask && typeof (tx as any).work_tasks.create === "function") {
+        await (tx as any).work_tasks.create({
+          data: {
+            action_code: "issue-material",
+            department_code: "raw_store",
+            material_lot_id: lot.id,
+            status: "queued",
+            created_by: staffUserId,
+            created_at: new Date(),
+            revision: 0,
+          },
+        });
+      }
+    }
+  }
+
   return {
     inspectionId: inspection.id,
     inspectionCode: inspection.code,

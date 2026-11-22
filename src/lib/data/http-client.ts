@@ -461,6 +461,8 @@ export function createHttpClient(): WearTrailClient {
       const raw = await req<any[]>("/api/materials/lots", { method: "GET" });
       return (raw || []).map((l: any) => ({
         id: l.code || l.id,
+        lotId: l.id,
+        code: l.code || l.id,
         material: l.materialName || l.material || "Unknown Material",
         supplierRef: l.supplierLotRef || l.supplierRef || "—",
         receivedQty: Number(l.receivedQuantity ?? l.receivedQty ?? 0),
@@ -468,7 +470,11 @@ export function createHttpClient(): WearTrailClient {
         unit: l.unit || "m",
         receivedAt: l.receivedAt || new Date().toISOString(),
         receivedBy: l.receivedByName || l.receivedBy || "Staff",
-        status: l.status || "accepted",
+        status:
+          l.status ||
+          (Number(l.availableAcceptedQuantity ?? l.balanceQty ?? 0) > 0
+            ? "accepted"
+            : "awaiting-inspection"),
         rfidUid: l.activeTagUid || l.rfidUid || undefined,
       }));
     },

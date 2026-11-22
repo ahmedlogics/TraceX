@@ -2200,7 +2200,22 @@ export function submitIncomingQc(
     "Only quality inspectors may approve incoming inspections. Materials staff cannot approve their own incoming QC.",
   );
   const lot = findOrThrow(s.lots, input.lotId, "Lot");
-  const insp = findOrThrow(s.inspections, input.inspectionId, "Inspection");
+  let insp = s.inspections.find(
+    (i) => i.id === input.inspectionId || i.subjectId === lot.id,
+  );
+  if (!insp) {
+    insp = {
+      id: input.inspectionId || `INSP-${lot.id}`,
+      kind: "incoming",
+      subjectType: "lot",
+      subjectId: lot.id,
+      status: "open",
+      checklist: input.checklist,
+      notes: input.notes,
+      createdAt: now(),
+    };
+    s.inspections.push(insp);
+  }
   ensure(
     input.acceptedQty + input.heldQty + input.rejectedQty === lot.receivedQty,
     "invalid",
