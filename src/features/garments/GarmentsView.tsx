@@ -33,7 +33,6 @@ export function GarmentsView() {
     <>
       <PageHeader
         title="Garment Registry & Production Status"
-        description="Every physical product is individually tracked with its own permanent ID, assigned RFID card, and unbroken fabric lineage."
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Garments" }]}
       />
 

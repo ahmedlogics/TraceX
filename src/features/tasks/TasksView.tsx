@@ -141,7 +141,6 @@ export function TasksSection() {
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
   const { run, pending } = useWtAction();
   const [status, setStatus] = useState("active");
-  const [deptFilter, setDeptFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
   return (
@@ -164,7 +163,8 @@ export function TasksSection() {
                       const matchesStatus =
                         status === "all" ||
                         (status === "active" ? t.status !== "done" : t.status === status);
-                      const matchesDept = deptFilter === "all" || t.department === deptFilter;
+                      const matchesDept =
+                        me.role === "M" || me.role === "A" || t.department === me.department;
                       const matchesSearch =
                         search.trim() === "" ||
                         `${t.id} ${t.title} ${t.subjectId} ${t.department}`
@@ -234,25 +234,6 @@ export function TasksSection() {
                                 { value: "claimed", label: "Claimed Only" },
                                 { value: "done", label: "Completed" },
                                 { value: "all", label: "All Statuses" },
-                              ]}
-                            />
-                          </div>
-                          <div className="w-full sm:w-48">
-                            <NativeSelect
-                              ariaLabel="Filter by department"
-                              value={deptFilter}
-                              onChange={setDeptFilter}
-                              options={[
-                                { value: "all", label: "All Departments" },
-                                { value: "receiving", label: "Receiving" },
-                                { value: "raw-store", label: "Raw Store" },
-                                { value: "cutting", label: "Cutting" },
-                                { value: "stitching", label: "Stitching" },
-                                { value: "finishing", label: "Finishing" },
-                                { value: "quality", label: "Quality" },
-                                { value: "packing", label: "Packing" },
-                                { value: "warehouse", label: "Warehouse" },
-                                { value: "dispatch", label: "Dispatch" },
                               ]}
                             />
                           </div>
@@ -381,11 +362,6 @@ export function TasksView() {
     <>
       <PageHeader
         title="Tasks & Factory Work Queue"
-        description={
-          me.role === "M"
-            ? "Factory-wide task queue. Review prerequisites, bottlenecks, and assign work to operators."
-            : `Departmental work queue for ${departmentLabels[me.department]}.`
-        }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Tasks" }]}
       />
       <TasksSection />

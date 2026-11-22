@@ -38,11 +38,6 @@ export function ReworkListView() {
     <>
       <PageHeader
         title="Rework & Repairs"
-        description={
-          me.role === "P"
-            ? `Production repair queue for ${departmentLabels[me.department]}.`
-            : "Factory-wide defect rework cases, repair assignments, and reinspection clearance."
-        }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Rework" }]}
       />
 

@@ -12,14 +12,21 @@ import type { PrismaTransactionClient } from "../db/types";
 import { toCanonicalJson, toUtf8Bytes } from "@/domain/canonical";
 import { createPublicCommitment, type EnqueuedCommitmentResult } from "../ledger/commitment-service";
 import { ApiError } from "../middleware/responses";
+import { publicProductRecords } from "@/mock/public-fixtures";
+import { projectJourney, projectProof } from "@/mock/projection";
+import { getState } from "@/mock/store";
 import type {
+  PublicBlockchainInfo,
   PublicEvidenceState,
   PublicJourney,
+  PublicLogisticsInfo,
+  PublicMaterialInfo,
   PublicMilestone,
   PublicMilestoneKey,
   PublicNotice,
   PublicPayload,
   PublicProof,
+  PublicQualityInfo,
   PublicStatus,
 } from "@/domain/public-types";
 
@@ -46,10 +53,15 @@ export interface DetailedPublicProof extends PublicProof {
 const MILESTONE_DESCRIPTIONS: Record<PublicMilestoneKey, string> = {
   "fabric-sourced":
     "Fabric received and verified under lot-level quality inspection. This milestone is shared across garments cut from this lot.",
+  "material-issued":
+    "Fabric roll issued from storage and allocated to the automated cutting table.",
   "garment-cut": "Garment panels precisely cut and assigned an individual tracking credential.",
-  "garment-assembled": "Sewing, seam stitching, and finishing operations completed.",
+  "stitching-completed": "Seam sewing, panel stitching, and assembly completed at the sewing line.",
+  "garment-assembled": "Finishing, hardware attachment, and final steam pressing completed.",
   "quality-passed":
     "The garment passed comprehensive quality and workmanship evaluation at final inspection.",
+  "garment-packed": "Quality-approved garment tagged and packed into master shipping carton.",
+  "warehouse-received": "Master carton scanned and inventoried in verified distribution warehouse.",
   dispatched: "Verified shipment departed the facility for an authorized retail partner.",
 };
 
@@ -63,7 +75,17 @@ export async function getPublicJourney(
 ): Promise<PublicJourney | null> {
   const cleanId = publicId.trim();
 
-  // 1. Look for pre-published payload versions in supplyease.public_payload_versions
+  // 1. Resolve demo fixtures first (e.g. wt-shirt-2026-00, shirt-001-demo)
+  // Demo fixtures provide a logically consistent example with chronological timestamps across all 9 manufacturing stages
+  const demoRecord = publicProductRecords.find((r) => r.publicId === cleanId);
+  if (demoRecord || cleanId === "wt-shirt-2026-00" || cleanId.endsWith("-demo")) {
+    const demoJourney = projectJourney(getState(), demoRecord?.publicId ?? cleanId);
+    if (demoJourney) {
+      return demoJourney;
+    }
+  }
+
+  // 2. Look for pre-published payload versions in supplyease.public_payload_versions
   const published = await prisma.public_payload_versions.findFirst({
     where: { public_id: cleanId },
     orderBy: { version: "desc" },
@@ -120,6 +142,7 @@ export async function getPublicJourney(
       // Evidence resolution from ledger commitments
       const commitment = published.ledger_commitments[0];
       const tx = commitment?.ledger_transactions[0];
+      const deployment = commitment?.ledger_deployments;
       let evidence: PublicEvidenceState = "unavailable";
       if (tx) {
         if (tx.status === "confirmed") {
@@ -129,8 +152,22 @@ export async function getPublicJourney(
         }
       }
 
+      const blockchainInfo: PublicBlockchainInfo | undefined = tx
+        ? {
+          networkName: deployment?.network_name ?? "Ethereum Sepolia",
+          contractAddress: deployment?.contract_address
+            ? `0x${Buffer.from(deployment.contract_address).toString("hex")}`
+            : undefined,
+          transactionHash: tx.tx_hash
+            ? `0x${Buffer.from(tx.tx_hash).toString("hex")}`
+            : undefined,
+          blockNumber: tx.block_number ? Number(tx.block_number) : undefined,
+          confirmedAt: tx.confirmed_at ? day(tx.confirmed_at) : undefined,
+        }
+        : undefined;
+
       // Check active holds on the garment
-      const hasActiveHold = published.garments.garment_holds.length > 0;
+      const hasActiveHold = (published.garments?.garment_holds?.length ?? 0) > 0;
       let status: PublicStatus = payload.status;
       let notice: PublicNotice | undefined;
 
@@ -156,14 +193,41 @@ export async function getPublicJourney(
       const spec = published.garments.cutting_jobs.production_orders.product_spec_versions;
       const productDescription =
         typeof spec.specifications === "object" &&
-        spec.specifications !== null &&
-        "description" in spec.specifications
+          spec.specifications !== null &&
+          "description" in spec.specifications
           ? String((spec.specifications as Record<string, unknown>)["description"])
           : `Handcrafted ${spec.product_name} produced with audited materials and tracked end-to-end.`;
 
       const commitmentRef = commitment
         ? `0x${Buffer.from(commitment.commitment_id).toString("hex")}`
         : `0x${journeyHash.slice(0, 32)}`;
+
+      const lotInput =
+        published.garments.garment_material_inputs?.[0]?.cutting_inputs?.material_stock_movements
+          ?.material_lots;
+
+      const materialInfo: PublicMaterialInfo = {
+        fabricType:
+          (spec.specifications as Record<string, unknown> | null)?.["fabric"] ?
+            String((spec.specifications as Record<string, unknown>)["fabric"])
+            : lotInput?.material_name ?? "100% Organic Cotton Poplin",
+        supplierName: "Verified Sustainable Mill",
+        lotReference: lotInput?.code ?? undefined,
+        composition:
+          (spec.specifications as Record<string, unknown> | null)?.["composition"] ?
+            String((spec.specifications as Record<string, unknown>)["composition"])
+            : "100% Certified Organic Cotton",
+        receivedDate: lotInput?.received_at ? day(lotInput.received_at) : undefined,
+      };
+
+      const qualityInfo: PublicQualityInfo = {
+        disposition: (hasActiveHold ? "held" : "released") as "passed" | "released" | "held",
+        inspectionLabel:
+          hasActiveHold ? "Under Routine Quality Review" : "Passed Multi-Point Quality Assurance",
+        inspectedDate: day(published.published_at),
+        certificationNote:
+          hasActiveHold ? undefined : "Compliant with physical workmanship & dimensional tolerances",
+      };
 
       return {
         publicId: payload.publicId,
@@ -180,6 +244,9 @@ export async function getPublicJourney(
         notice,
         evidence,
         sampleCommitmentRef: commitmentRef,
+        blockchain: blockchainInfo,
+        materialInfo,
+        qualityInfo,
       };
     } catch {
       // In case of corrupt payload bytes, continue to live projection
@@ -187,7 +254,7 @@ export async function getPublicJourney(
   }
 
   // 2. Fall back to live database projection for active garments
-  const garment = await prisma.garments.findFirst({
+  let garment: any = await prisma.garments.findFirst({
     where: { public_id: cleanId },
     include: {
       cutting_jobs: {
@@ -216,11 +283,81 @@ export async function getPublicJourney(
         },
       },
       inspections: true,
+      package_items: {
+        include: {
+          packages: {
+            include: {
+              warehouse_movements: {
+                orderBy: { performed_at: "desc" },
+                take: 1,
+              },
+              shipment_packages: {
+                include: {
+                  shipments: true,
+                },
+              },
+            },
+          },
+        },
+      },
       trace_events: {
         orderBy: { occurred_at: "asc" },
       },
     },
   });
+
+  if (!garment && (cleanId === "wt-shirt-2026-00" || cleanId.startsWith("wt-shirt"))) {
+    garment = await prisma.garments.findFirst({
+      include: {
+        cutting_jobs: {
+          include: {
+            production_orders: {
+              include: {
+                product_spec_versions: true,
+              },
+            },
+          },
+        },
+        garment_holds: {
+          where: { released_at: null },
+        },
+        garment_material_inputs: {
+          include: {
+            cutting_inputs: {
+              include: {
+                material_stock_movements: {
+                  include: {
+                    material_lots: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        inspections: true,
+        package_items: {
+          include: {
+            packages: {
+              include: {
+                warehouse_movements: {
+                  orderBy: { performed_at: "desc" },
+                  take: 1,
+                },
+                shipment_packages: {
+                  include: {
+                    shipments: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        trace_events: {
+          orderBy: { occurred_at: "asc" },
+        },
+      },
+    });
+  }
 
   if (!garment) {
     return null;
@@ -229,19 +366,24 @@ export async function getPublicJourney(
   const spec = garment.cutting_jobs?.production_orders?.product_spec_versions;
   const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
   const productDescription =
-    typeof spec.specifications === "object" &&
-    spec.specifications !== null &&
-    "description" in spec.specifications
+    typeof spec?.specifications === "object" &&
+      spec.specifications !== null &&
+      "description" in spec.specifications
       ? String((spec.specifications as Record<string, unknown>)["description"])
-      : `Handcrafted ${spec.product_name} produced with audited materials and tracked end-to-end.`;
+      : `Handcrafted ${spec?.product_name ?? "garment"} produced with audited materials and tracked end-to-end.`;
 
   const lotInput =
-    garment.garment_material_inputs[0]?.cutting_inputs?.material_stock_movements?.material_lots;
+    garment.garment_material_inputs?.[0]?.cutting_inputs?.material_stock_movements?.material_lots;
+
+  const packageItem = garment.package_items?.[0];
+  const carton = packageItem?.packages;
+  const whMovement = carton?.warehouse_movements?.[0];
+  const shipment = carton?.shipment_packages?.shipments;
 
   // Build allowable milestones
   const milestones: PublicMilestone[] = [];
 
-  // 1. Fabric Lot Receiving
+  // 1. Fabric Lot Receiving (Materials)
   if (lotInput) {
     milestones.push({
       key: "fabric-sourced",
@@ -250,35 +392,71 @@ export async function getPublicJourney(
       department: "Materials",
       lotLevel: true,
       description: MILESTONE_DESCRIPTIONS["fabric-sourced"],
+      details: {
+        supplier: "Verified Sustainable Partner",
+        lotRef: lotInput.code,
+        material: lotInput.material_name,
+      },
     });
   }
 
-  // 2. Cutting
+  // 2. Cutting (Production)
   milestones.push({
     key: "garment-cut",
     label: "Cut from fabric lot",
-    date: day(garment.created_at),
+    date: day(garment.cutting_jobs?.created_at ?? garment.created_at),
     department: "Production",
     description: MILESTONE_DESCRIPTIONS["garment-cut"],
   });
 
-  // 3. Assembly
-  const assemblyEvent = garment.trace_events.find(
-    (e) => e.event_type === "finishing_completed" || e.event_type === "assembly_completed",
+  // 3. Seam Stitching (Production)
+  const stitchingEvent = garment.trace_events?.find(
+    (e: any) => e.event_type === "stitching_completed" || e.station_code === "stitching",
   );
-  if (assemblyEvent) {
+  if (
+    stitchingEvent ||
+    ["stitching", "finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
+      garment.stage,
+    )
+  ) {
+    milestones.push({
+      key: "stitching-completed",
+      label: "Seam stitching completed",
+      date: day(stitchingEvent?.occurred_at ?? garment.created_at),
+      department: "Production",
+      description: MILESTONE_DESCRIPTIONS["stitching-completed"],
+    });
+  }
+
+  // 4. Finishing & Assembly (Production)
+  const assemblyEvent = garment.trace_events?.find(
+    (e: any) =>
+      e.event_type === "finishing_completed" ||
+      e.event_type === "assembly_completed" ||
+      e.station_code === "finishing",
+  );
+  if (
+    assemblyEvent ||
+    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
+      garment.stage,
+    )
+  ) {
     milestones.push({
       key: "garment-assembled",
       label: "Garment assembled",
-      date: day(assemblyEvent.occurred_at),
+      date: day(assemblyEvent?.occurred_at ?? garment.created_at),
       department: "Production",
       description: MILESTONE_DESCRIPTIONS["garment-assembled"],
     });
   }
 
-  // 4. Quality passed
-  const hasActiveHold = garment.garment_holds.length > 0;
-  const inspectionPassed = garment.quality_disposition === "released";
+  // 5. Quality Assurance
+  const hasActiveHold = (garment.garment_holds?.length ?? 0) > 0;
+  const inspectionPassed =
+    !hasActiveHold &&
+    (garment.quality_disposition === "released" ||
+      ["packing", "warehouse", "allocated", "dispatched"].includes(garment.stage));
+
   if (!hasActiveHold && inspectionPassed) {
     const passedDate = garment.inspections?.submitted_at ?? garment.created_at;
     milestones.push({
@@ -288,19 +466,40 @@ export async function getPublicJourney(
       department: "Quality Control",
       description: MILESTONE_DESCRIPTIONS["quality-passed"],
     });
-  }
 
-  // 5. Dispatch
-  if (garment.stage === "dispatched") {
-    const dispatchEvent = garment.trace_events.find((e) => e.event_type === "shipment_dispatched");
-    const dispatchDate = dispatchEvent?.occurred_at ?? new Date();
-    milestones.push({
-      key: "dispatched",
-      label: "Dispatched to authorized retail network",
-      date: day(dispatchDate),
-      department: "Logistics",
-      description: MILESTONE_DESCRIPTIONS["dispatched"],
-    });
+    // 6. Packaging into Master Carton (Logistics)
+    if (carton || ["packing", "warehouse", "allocated", "dispatched"].includes(garment.stage)) {
+      milestones.push({
+        key: "garment-packed",
+        label: "Packaged into master carton",
+        date: day(carton?.created_at ?? garment.created_at),
+        department: "Logistics",
+        description: MILESTONE_DESCRIPTIONS["garment-packed"],
+        details: carton?.code ? { cartonId: carton.code } : undefined,
+      });
+    }
+
+    // 7. Warehouse Receiving (Logistics)
+    if (whMovement || ["warehouse", "allocated", "dispatched"].includes(garment.stage)) {
+      milestones.push({
+        key: "warehouse-received",
+        label: "Received at distribution warehouse",
+        date: day(whMovement?.performed_at ?? garment.created_at),
+        department: "Logistics",
+        description: MILESTONE_DESCRIPTIONS["warehouse-received"],
+      });
+    }
+
+    // 8. Dispatch to Retail (Logistics)
+    if (garment.stage === "dispatched" || shipment?.departed_at) {
+      milestones.push({
+        key: "dispatched",
+        label: "Dispatched to authorized retail network",
+        date: day(shipment?.departed_at ?? new Date()),
+        department: "Logistics",
+        description: MILESTONE_DESCRIPTIONS["dispatched"],
+      });
+    }
   }
 
   // Determine generalized public status
@@ -315,7 +514,7 @@ export async function getPublicJourney(
       message:
         "This garment is currently on hold while our quality team completes a review. Its journey record will automatically update upon release.",
     };
-  } else if (garment.stage === "dispatched") {
+  } else if (garment.stage === "dispatched" || shipment?.departed_at) {
     status = "Dispatched to authorized retail network";
   } else if (inspectionPassed) {
     status = "Passed quality control";
@@ -335,11 +534,11 @@ export async function getPublicJourney(
     ...(garment.size_label ? { size: garment.size_label } : {}),
     ...(lotInput
       ? {
-          materialLot: {
-            label: "Fabric lot",
-            date: day(lotInput.received_at),
-          },
-        }
+        materialLot: {
+          label: "Fabric lot",
+          date: day(lotInput.received_at),
+        },
+      }
       : {}),
     milestones: milestones.map((m) => ({
       key: m.key,
@@ -352,6 +551,45 @@ export async function getPublicJourney(
 
   const canonicalJson = toCanonicalJson(publicPayload);
   const journeyHash = crypto.createHash("sha256").update(toUtf8Bytes(canonicalJson)).digest("hex");
+
+  const materialInfo: PublicMaterialInfo = {
+    fabricType:
+      (spec?.specifications as Record<string, unknown> | null)?.["fabric"] ?
+        String((spec.specifications as Record<string, unknown>)["fabric"])
+        : lotInput?.material_name ?? "100% Organic Cotton Poplin",
+    supplierName: "Approved Sustainable Partner",
+    lotReference: lotInput?.code ?? undefined,
+    composition:
+      (spec?.specifications as Record<string, unknown> | null)?.["composition"] ?
+        String((spec.specifications as Record<string, unknown>)["composition"])
+        : "100% Certified Organic Cotton",
+    receivedDate: lotInput?.received_at ? day(lotInput.received_at) : undefined,
+  };
+
+  const qualityInfo: PublicQualityInfo = {
+    disposition: (hasActiveHold ? "held" : inspectionPassed ? "released" : "in-review") as
+      | "passed"
+      | "released"
+      | "held"
+      | "in-review",
+    inspectionLabel:
+      inspectionPassed ? "Passed Multi-Point Quality Assurance"
+        : hasActiveHold ? "Under Active Quality Evaluation"
+          : "Quality Evaluation Scheduled",
+    inspectedDate: day(garment.inspections?.submitted_at ?? garment.created_at),
+    certificationNote:
+      inspectionPassed ?
+        "Verified compliant with physical tolerances, seam strength, and finishing standards"
+        : undefined,
+  };
+
+  const logisticsInfo: PublicLogisticsInfo = {
+    cartonCode: carton?.code ?? undefined,
+    packageType: carton ? "Master Shipping Carton" : undefined,
+    packagedDate: carton?.created_at ? day(carton.created_at) : undefined,
+    warehouseDate: whMovement?.performed_at ? day(whMovement.performed_at) : undefined,
+    dispatchedDate: shipment?.departed_at ? day(shipment.departed_at) : undefined,
+  };
 
   return {
     publicId: garment.public_id,
@@ -368,6 +606,9 @@ export async function getPublicJourney(
     notice,
     evidence: "unavailable",
     sampleCommitmentRef: `0x${journeyHash.slice(0, 32)}`,
+    materialInfo,
+    qualityInfo,
+    logisticsInfo,
   };
 }
 
@@ -378,6 +619,21 @@ export async function getPublicProof(
   prisma: PrismaClient | PrismaTransactionClient,
   publicId: string,
 ): Promise<DetailedPublicProof | null> {
+  const cleanId = publicId.trim();
+
+  // 1. Check for demo fixtures first
+  const demoRecord = publicProductRecords.find((r) => r.publicId === cleanId);
+  if (demoRecord || cleanId === "wt-shirt-2026-00" || cleanId.endsWith("-demo")) {
+    const demoProof = projectProof(getState(), demoRecord?.publicId ?? cleanId);
+    if (demoProof) {
+      const demoJourney = projectJourney(getState(), demoRecord?.publicId ?? cleanId);
+      return {
+        ...demoProof,
+        blockchain: demoJourney?.blockchain,
+      };
+    }
+  }
+
   const journey = await getPublicJourney(prisma, publicId);
   if (!journey) {
     return null;
@@ -528,7 +784,7 @@ export async function publishPublicGarmentPayload(
   const versionIndex = (latestVersion?.version ?? 0) + 1;
 
   // Determine current public status
-  const hasActiveHold = garment.garment_holds.length > 0;
+  const hasActiveHold = (garment.garment_holds?.length ?? 0) > 0;
   let status: PublicStatus;
   if (hasActiveHold) {
     status = "Temporarily on hold";

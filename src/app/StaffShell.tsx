@@ -160,9 +160,6 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
                 <DropdownMenuItem onSelect={() => setDataMode(dataMode === "live" ? "mock" : "live")}>
                   Switch to {dataMode === "live" ? "Mock Data" : "Live API"}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void signOut()}>
-                  Switch demo account
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => void signOut()}>
                   <LogOut /> Sign out

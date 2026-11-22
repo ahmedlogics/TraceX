@@ -9,20 +9,19 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmt, PageHeader } from "@/components/wt/layout";
 import { StatusBadge, type Tone } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { rfidStationCodes, rfidStationLabels, stationDepartment } from "@/domain/labels";
-import type { RfidStationCode, ScanOutcome } from "@/domain/types";
+import type { RfidStationCode, ScanOutcome, StaffUser } from "@/domain/types";
 import { useWtQuery } from "@/lib/data/hooks";
 import { UserName } from "@/features/shared/directory";
 import { can } from "@/domain/permissions";
-import type { StaffUser } from "@/domain/types";
 import { useMe } from "@/features/shared/useMe";
 import { ReceivingPanel } from "./ReceivingPanel";
 import { IssuePanel } from "./IssuePanel";
 import { CuttingPanel } from "./CuttingPanel";
+import { StitchingPanel } from "./StitchingPanel";
 import { RoutinePanel } from "./RoutinePanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
@@ -80,7 +79,7 @@ export function StationShell() {
 
         return (
           <div className="space-y-6">
-            {/* Station Selector Bar */}
+            {/* Station Operator Bar */}
             <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -99,7 +98,7 @@ export function StationShell() {
                     ))}
                   </select>
                 ) : (
-                  <span className="inline-flex items-center rounded-md border bg-muted/60 px-2.5 py-1 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary">
                     {rfidStationLabels[effectiveStation]} ({effectiveStation})
                   </span>
                 )}
@@ -117,15 +116,39 @@ export function StationShell() {
             {/* Station Status Banner */}
             <section
               aria-label="Station header"
-              className="rounded-lg border-2 border-primary/30 bg-card p-5 space-y-4"
+              className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 space-y-4 shadow-xs ${
+                effectiveStation === "stitching"
+                  ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
+                  : "bg-card"
+              }`}
             >
-              <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+              {/* Aesthetic stitching backdrop blend for stitching workstation */}
+              {effectiveStation === "stitching" && (
+                <div
+                  className="pointer-events-none absolute right-0 top-0 bottom-0 w-64 md:w-80 select-none overflow-hidden"
+                  style={{
+                    maskImage:
+                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
+                  }}
+                >
+                  <img
+                    src="/images/stitching/vintage-sewing-aesthetic.jpg"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-full w-full object-cover object-right opacity-30 mix-blend-multiply dark:opacity-15 dark:mix-blend-luminosity"
+                  />
+                </div>
+              )}
+
+              <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="wt-eyebrow">
                       {activeStations.length > 1
                         ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
-                        : "Assigned Workstation"}
+                        : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
                     </p>
                     <span className="text-xs font-mono text-muted-foreground">
                       code: {effectiveStation}
@@ -143,13 +166,11 @@ export function StationShell() {
                 </div>
 
                 <div className="flex flex-col items-start gap-2 md:items-end">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Hardware Bridge:</span>
-                    <StatusBadge
-                      status={stData.bridgeConnected ? "Connected" : "Disconnected (Simulated)"}
-                      tone={stData.bridgeConnected ? "success" : "neutral"}
-                    />
-                  </div>
+                  {stData.bridgeConnected && (
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status="Hardware RFID: Connected" tone="success" />
+                    </div>
+                  )}
                   {stData.lastConfirmedSubjectId && (
                     <div className="flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-xs">
                       <span className="text-muted-foreground">Latest Subject:</span>
@@ -166,8 +187,8 @@ export function StationShell() {
                 <div
                   className={`rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
                     lastOutcome.resolution === "accepted"
-                      ? "border-success/40 bg-success-soft text-success-foreground"
-                      : "border-destructive/40 bg-danger-soft text-destructive-foreground"
+                      ? "border-success/40 bg-success-soft text-foreground"
+                      : "border-destructive/40 bg-danger-soft text-foreground"
                   }`}
                 >
                   {lastOutcome.resolution === "accepted" ? (
@@ -176,7 +197,7 @@ export function StationShell() {
                     <XCircle className="size-4 shrink-0 text-destructive mt-0.5" />
                   )}
                   <div className="space-y-0.5">
-                    <p className="font-semibold">
+                    <p className="font-semibold text-foreground">
                       {lastOutcome.resolution === "accepted"
                         ? `Scan confirmed (${lastOutcome.uid}): ${
                             lastOutcome.garmentCode ?? lastOutcome.subjectId
@@ -185,7 +206,7 @@ export function StationShell() {
                             lastOutcome.rejectReason ?? lastOutcome.resolution
                           }`}
                     </p>
-                    <p className="text-[11px] opacity-80">
+                    <p className="text-[11px] text-foreground/80 font-medium">
                       Timestamp: {fmt.dateTime(lastOutcome.at)}
                     </p>
                   </div>
@@ -197,9 +218,8 @@ export function StationShell() {
             {effectiveStation === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
             {effectiveStation === "fabric_issue" && <IssuePanel stationData={stData} />}
             {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
-            {(effectiveStation === "stitching" || effectiveStation === "finishing") && (
-              <RoutinePanel stationData={stData} />
-            )}
+            {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
+            {effectiveStation === "finishing" && <RoutinePanel stationData={stData} />}
             {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
             {(effectiveStation === "packing" ||
               effectiveStation === "warehouse" ||

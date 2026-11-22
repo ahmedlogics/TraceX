@@ -34,6 +34,7 @@ export function buildCanonicalPublicPayload(
   if (!g) return null;
   const cut = s.cuttingOutputs.find((c) => c.id === g.cuttingOutputId);
   const lot = cut ? s.lots.find((l) => l.id === cut.lotId) : undefined;
+  const issue = cut ? s.issues.find((i) => i.id === cut.issueId) : undefined;
   const events = s.garmentEvents.filter((e) => e.garmentId === g.id);
 
   const milestones: PublicPayload["milestones"] = [];
@@ -49,7 +50,17 @@ export function buildCanonicalPublicPayload(
     });
   }
 
-  // 2. Cutting (Production)
+  // 2. Material Issued (Raw Store)
+  if (issue) {
+    milestones.push({
+      key: "material-issued",
+      label: "Material issued to cutting",
+      date: day(issue.at),
+      department: "Raw Store",
+    });
+  }
+
+  // 3. Cutting (Production)
   if (cut) {
     milestones.push({
       key: "garment-cut",
@@ -59,18 +70,39 @@ export function buildCanonicalPublicPayload(
     });
   }
 
-  // 3. Assembly (Production)
-  const assembled = events.find((e) => e.label === "Finishing completed");
-  if (assembled) {
+  // 4. Seam Stitching (Production)
+  const stitching = events.find((e) => e.label.toLowerCase().includes("stitching"));
+  if (
+    stitching ||
+    ["stitching", "finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
+      g.stage,
+    )
+  ) {
     milestones.push({
-      key: "garment-assembled",
-      label: "Garment assembled",
-      date: day(assembled.at),
+      key: "stitching-completed",
+      label: "Seam stitching completed",
+      date: day(stitching?.at ?? cut?.at ?? new Date().toISOString()),
       department: "Production",
     });
   }
 
-  // 4. Quality Control
+  // 5. Assembly / Finishing (Production)
+  const assembled = events.find(
+    (e) => e.label === "Finishing completed" || e.label.toLowerCase().includes("finishing"),
+  );
+  if (
+    assembled ||
+    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(g.stage)
+  ) {
+    milestones.push({
+      key: "garment-assembled",
+      label: "Garment assembled",
+      date: day(assembled?.at ?? cut?.at ?? new Date().toISOString()),
+      department: "Production",
+    });
+  }
+
+  // 6. Quality Control (Gated: never added if active hold or failed)
   const passedOk = !g.hold && (g.disposition === "passed" || g.disposition === "released");
   if (passedOk) {
     const passed = s.inspections
@@ -86,18 +118,49 @@ export function buildCanonicalPublicPayload(
         department: "Quality Control",
       });
     }
-  }
 
-  // 5. Dispatch (Logistics)
-  if (g.stage === "dispatched") {
-    const sh = s.shipments.find((x) => x.id === g.shipmentId);
-    if (sh?.departedAt) {
+    // 7. Packaging (Carton)
+    const pkg =
+      s.packages.find((p) => p.garmentIds.includes(g.id)) ||
+      (g.packageId ? s.packages.find((p) => p.id === g.packageId) : undefined);
+    const packingEvent = events.find((e) => e.label.toLowerCase().includes("packed"));
+    if (pkg || packingEvent || ["packing", "warehouse", "allocated", "dispatched"].includes(g.stage)) {
       milestones.push({
-        key: "dispatched",
-        label: "Dispatched to authorized retail network",
-        date: day(sh.departedAt),
+        key: "garment-packed",
+        label: "Packaged into master carton",
+        date: day(packingEvent?.at ?? pkg?.createdAt ?? when ?? new Date().toISOString()),
         department: "Logistics",
       });
+    }
+
+    // 8. Warehouse Receiving
+    const whEvent = events.find(
+      (e) => e.label.toLowerCase().includes("finished stock") || e.department === "warehouse",
+    );
+    if (whEvent || ["warehouse", "allocated", "dispatched"].includes(g.stage)) {
+      milestones.push({
+        key: "warehouse-received",
+        label: "Received at distribution warehouse",
+        date: day(whEvent?.at ?? pkg?.createdAt ?? when ?? new Date().toISOString()),
+        department: "Logistics",
+      });
+    }
+
+    // 9. Dispatch
+    if (g.stage === "dispatched") {
+      const sh = s.shipments.find(
+        (x) => x.id === g.shipmentId || x.allocatedGarmentIds.includes(g.id),
+      );
+      const dispatchEvent = events.find((e) => e.label.toLowerCase().includes("dispatched"));
+      const dispatchDate = dispatchEvent?.at ?? sh?.departedAt;
+      if (dispatchDate) {
+        milestones.push({
+          key: "dispatched",
+          label: "Dispatched to authorized retail network",
+          date: day(dispatchDate),
+          department: "Logistics",
+        });
+      }
     }
   }
 
@@ -123,11 +186,11 @@ export function buildCanonicalPublicPayload(
     ...(g.size ? { size: g.size } : {}),
     ...(lot
       ? {
-          materialLot: {
-            label: "Fabric lot",
-            date: day(lot.receivedAt),
-          },
-        }
+        materialLot: {
+          label: "Fabric lot",
+          date: day(lot.receivedAt),
+        },
+      }
       : {}),
     milestones,
   };
@@ -145,6 +208,7 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
   if (!g) return null;
   const cut = s.cuttingOutputs.find((c) => c.id === g.cuttingOutputId);
   const lot = cut ? s.lots.find((l) => l.id === cut.lotId) : undefined;
+  const issue = cut ? s.issues.find((i) => i.id === cut.issueId) : undefined;
   const events = s.garmentEvents.filter((e) => e.garmentId === g.id);
 
   const built = buildCanonicalPublicPayload(s, publicId);
@@ -152,7 +216,7 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
 
   const milestones: PublicMilestone[] = [];
 
-  // Fabric lot milestone
+  // 1. Fabric lot milestone
   if (lot && lot.status === "accepted") {
     milestones.push({
       key: "fabric-sourced",
@@ -165,7 +229,19 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
     });
   }
 
-  // Cutting milestone
+  // 2. Material Issued milestone
+  if (issue) {
+    milestones.push({
+      key: "material-issued",
+      label: "Material issued to cutting",
+      date: day(issue.at),
+      department: "Raw Store",
+      description:
+        "Inspected fabric rolls issued from storage and allocated to the automated cutting line.",
+    });
+  }
+
+  // 3. Cutting milestone
   if (cut) {
     milestones.push({
       key: "garment-cut",
@@ -176,19 +252,41 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
     });
   }
 
-  // Assembly milestone
-  const assembled = events.find((e) => e.label === "Finishing completed");
-  if (assembled) {
+  // 4. Seam Stitching (Production)
+  const stitching = events.find((e) => e.label.toLowerCase().includes("stitching"));
+  if (
+    stitching ||
+    ["stitching", "finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
+      g.stage,
+    )
+  ) {
     milestones.push({
-      key: "garment-assembled",
-      label: "Garment assembled",
-      date: day(assembled.at),
+      key: "stitching-completed",
+      label: "Seam stitching completed",
+      date: day(stitching?.at ?? cut?.at ?? new Date().toISOString()),
       department: "Production",
-      description: "Sewing, seam stitching, and finishing operations completed.",
+      description: "Precision seam stitching and tailoring assembly completed at the sewing line.",
     });
   }
 
-  // Quality milestone
+  // 5. Assembly / Finishing (Production)
+  const assembled = events.find(
+    (e) => e.label === "Finishing completed" || e.label.toLowerCase().includes("finishing"),
+  );
+  if (
+    assembled ||
+    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(g.stage)
+  ) {
+    milestones.push({
+      key: "garment-assembled",
+      label: "Garment assembled",
+      date: day(assembled?.at ?? cut?.at ?? new Date().toISOString()),
+      department: "Production",
+      description: "Finishing, hardware attachment, and final steam pressing completed.",
+    });
+  }
+
+  // 6. Quality milestone
   const passedOk = !g.hold && (g.disposition === "passed" || g.disposition === "released");
   if (passedOk) {
     const passed = s.inspections
@@ -205,19 +303,53 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
         description: "The garment passed comprehensive quality and workmanship evaluation.",
       });
     }
-  }
 
-  // Dispatch milestone
-  if (g.stage === "dispatched") {
-    const sh = s.shipments.find((x) => x.id === g.shipmentId);
-    if (sh?.departedAt) {
+    // 7. Packaging milestone
+    const pkg =
+      s.packages.find((p) => p.garmentIds.includes(g.id)) ||
+      (g.packageId ? s.packages.find((p) => p.id === g.packageId) : undefined);
+    const packingEvent = events.find((e) => e.label.toLowerCase().includes("packed"));
+    if (pkg || packingEvent || ["packing", "warehouse", "allocated", "dispatched"].includes(g.stage)) {
       milestones.push({
-        key: "dispatched",
-        label: "Dispatched to authorized retail network",
-        date: day(sh.departedAt),
+        key: "garment-packed",
+        label: "Packaged into master carton",
+        date: day(packingEvent?.at ?? pkg?.createdAt ?? when ?? new Date().toISOString()),
         department: "Logistics",
-        description: "Verified shipment left the facility for an authorized retail partner.",
+        description: "Quality-approved garment tagged and packed into master shipping carton.",
+        details: pkg ? { cartonId: pkg.id } : undefined,
       });
+    }
+
+    // 8. Warehouse Receiving
+    const whEvent = events.find(
+      (e) => e.label.toLowerCase().includes("finished stock") || e.department === "warehouse",
+    );
+    if (whEvent || ["warehouse", "allocated", "dispatched"].includes(g.stage)) {
+      milestones.push({
+        key: "warehouse-received",
+        label: "Received at distribution warehouse",
+        date: day(whEvent?.at ?? pkg?.createdAt ?? when ?? new Date().toISOString()),
+        department: "Logistics",
+        description: "Master carton scanned and inventoried in verified distribution warehouse.",
+      });
+    }
+
+    // 9. Dispatch milestone
+    if (g.stage === "dispatched") {
+      const sh = s.shipments.find(
+        (x) => x.id === g.shipmentId || x.allocatedGarmentIds.includes(g.id),
+      );
+      const dispatchEvent = events.find((e) => e.label.toLowerCase().includes("dispatched"));
+      const dispatchDate = dispatchEvent?.at ?? sh?.departedAt;
+      if (dispatchDate) {
+        milestones.push({
+          key: "dispatched",
+          label: "Dispatched to authorized retail network",
+          date: day(dispatchDate),
+          department: "Logistics",
+          description: "Verified shipment left the facility for an authorized retail partner.",
+        });
+      }
     }
   }
 
@@ -229,6 +361,57 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
   } else if (passedOk) {
     status = "Passed quality control";
   }
+
+  const pkg =
+    s.packages.find((p) => p.garmentIds.includes(g.id)) ||
+    (g.packageId ? s.packages.find((p) => p.id === g.packageId) : undefined);
+  const sh = s.shipments.find((x) => x.id === g.shipmentId || x.allocatedGarmentIds.includes(g.id));
+  const ledgerEntry = s.ledger.find((l) => l.subjectType === "garment" && l.subjectId === g.id);
+
+  const materialInfo = lot
+    ? {
+      fabricType: lot.material,
+      supplierName: "Certified Sustainable Partner",
+      lotReference: lot.id,
+      composition: "100% Certified Organic Cotton",
+      receivedDate: day(lot.receivedAt),
+    }
+    : undefined;
+
+  const qualityInfo = {
+    disposition: (g.hold ? "held" : passedOk ? "released" : "in-review") as
+      | "passed"
+      | "released"
+      | "held"
+      | "in-review",
+    inspectionLabel:
+      passedOk ? "Passed Multi-Point Quality Assurance"
+        : g.hold ? "Under Active Quality Evaluation"
+          : "Quality Evaluation Scheduled",
+    inspectedDate: day(new Date().toISOString()),
+    certificationNote:
+      passedOk ?
+        "Verified compliant with physical tolerances, seam strength, and finishing standards"
+        : undefined,
+  };
+
+  const logisticsInfo = {
+    cartonCode: pkg?.id,
+    packageType: pkg ? "Master Shipping Carton" : undefined,
+    packagedDate: pkg?.createdAt ? day(pkg.createdAt) : undefined,
+    warehouseDate: ["warehouse", "allocated", "dispatched"].includes(g.stage) ? day(pkg?.createdAt ?? new Date().toISOString()) : undefined,
+    dispatchedDate: sh?.departedAt ? day(sh.departedAt) : undefined,
+  };
+
+  const blockchain = ledgerEntry
+    ? {
+      networkName: "hardhat-local",
+      contractAddress: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+      transactionHash: "0xd663c4404eecbf240cc84cb92831637105770c5f48b29dce3e38e713e626ecb5",
+      blockNumber: 6,
+      confirmedAt: day(ledgerEntry.createdAt ?? new Date().toISOString()),
+    }
+    : undefined;
 
   return {
     publicId: record.publicId,
@@ -245,15 +428,19 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
     milestones,
     notice: g.hold
       ? {
-          kind: "hold",
-          title: "Quality review in progress — Not released",
-          message:
-            "This garment is currently on hold while our quality team completes a review. Its journey record will automatically update upon release.",
-        }
+        kind: "hold",
+        title: "Quality review in progress — Not released",
+        message:
+          "This garment is currently on hold while our quality team completes a review. Its journey record will automatically update upon release.",
+      }
       : undefined,
     advisory: record.advisory,
     evidence: evidenceFor(s, g.id),
     sampleCommitmentRef: record.sampleCommitmentRef,
+    materialInfo,
+    qualityInfo,
+    logisticsInfo,
+    blockchain,
   };
 }
 

@@ -48,7 +48,6 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                 <div className="grid gap-6 lg:grid-cols-2">
                   <Section
                     title={`Routine ${stationData.stationName} Reader`}
-                    description="Routine station scans automatically identify garments by card UID and advance their physical stage."
                   >
                     <div className="space-y-4">
                       <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
@@ -59,12 +58,6 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                           </span>
                           <p className="text-sm font-semibold text-foreground">Continuous Routine Reader Active</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          No per-shirt form required. Simply present any assembled garment card at
-                          the reader. Advancement:{" "}
-                          <span className="font-semibold capitalize">{expectedStage}</span> &rarr;{" "}
-                          <span className="font-semibold capitalize">{nextStage}</span>.
-                        </p>
 
                         {!isAuthorized && (
                           <ScopeNote>
@@ -78,7 +71,6 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                             <Field
                               label="Garment Card UID"
                               htmlFor="rtn-uid"
-                              hint="Enter or scan the garment's active RFID card UID."
                             >
                               <Input
                                 id="rtn-uid"
@@ -125,24 +117,11 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                           </div>
                         )}
                       </div>
-
-                      {/* Station guidance */}
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        <p>
-                          &bull; Duplicate scans on an already-processed garment are safely ignored.
-                        </p>
-                        <p>
-                          &bull; Garments with an active quality hold remain blocked from routine
-                          progression.
-                        </p>
-                        <p>&bull; Scans are linked to the active operator session.</p>
-                      </div>
                     </div>
                   </Section>
 
                   <Section
                     title="Station Work Queue & Planning"
-                    description={`Garments awaiting or in progress at ${stationData.stationName}.`}
                   >
                     <DataTable
                       rows={queue}
