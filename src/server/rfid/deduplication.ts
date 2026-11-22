@@ -45,17 +45,22 @@ export async function checkExistingScan(
   requestFingerprint: Buffer,
   db: PrismaClient | PrismaTransactionClient,
 ): Promise<ExistingScanEvaluation> {
+  // Deduplication protects against in-flight network retries (within 60s).
+  // Historical scans from previous device boots or rollover sequences must not block new scans.
+  const dedupWindow = new Date(Date.now() - 60 * 1000);
+
   const existing = await db.rfid_scans.findFirst({
     where: {
       device_id: envelope.deviceId,
+      received_at: { gte: dedupWindow },
       OR: [
         { scan_id: envelope.scanId },
-        {
-          boot_id: envelope.bootId,
-          sequence: BigInt(envelope.sequence),
-        },
+        ...(envelope.bootId && envelope.bootId !== "boot-000000"
+          ? [{ boot_id: envelope.bootId, sequence: BigInt(envelope.sequence) }]
+          : []),
       ],
     },
+    orderBy: { received_at: "desc" },
   });
 
   if (!existing) {
@@ -72,10 +77,18 @@ export async function checkExistingScan(
     };
   }
 
+  // Only flag as a conflict if the exact scanId was reused with different payload within the 60s window
+  if (existing.scan_id === envelope.scanId) {
+    return {
+      isDuplicate: true,
+      isConflict: true,
+      existingScan: existing,
+    };
+  }
+
   return {
-    isDuplicate: true,
-    isConflict: true,
-    existingScan: existing,
+    isDuplicate: false,
+    isConflict: false,
   };
 }
 

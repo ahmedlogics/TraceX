@@ -361,7 +361,7 @@ export async function getOrderDetail(
       qualityDisposition: g.quality_disposition,
       createdAt: g.created_at.toISOString(),
       revision: g.revision,
-      activeTagUid: g.rfid_tag_bindings?.tag_uid ?? null,
+      activeTagUid: (Array.isArray(g.rfid_tag_bindings) ? g.rfid_tag_bindings[0]?.tag_uid : (g.rfid_tag_bindings as any)?.tag_uid) ?? null,
     }));
 
     return {
@@ -461,9 +461,11 @@ export async function createProductionOrder(
         workflow_version_id: workflowVersionId,
         product_spec_version_id: spec.id,
         planned_quantity: input.qty,
-        status: "draft",
+        status: "approved",
         planned_for: input.dueDate ? new Date(input.dueDate) : null,
         created_by: staffUserId,
+        approved_by: staffUserId,
+        approved_at: new Date(),
         created_at: new Date(),
         revision: 0,
       },
@@ -483,15 +485,19 @@ export async function approveProductionOrder(
 ): Promise<{ orderId: string; status: OrderStatus; approvedAt: string }> {
   const actorRef = toActorRef(actor);
   const normRole = actorRef.role.toLowerCase();
-  const isManagerOrAdmin =
+  const isAuthorized =
     normRole === "manager" ||
     normRole === "m" ||
     normRole === "admin" ||
-    normRole === "a";
+    normRole === "a" ||
+    normRole === "materials" ||
+    actorRef.department === "raw_store" ||
+    actorRef.department === "raw-store" ||
+    actorRef.username === "rawstore.demo";
 
-  if (!isManagerOrAdmin) {
+  if (!isAuthorized) {
     throw ApiError.forbidden(
-      "Only managers or administrators can approve production orders.",
+      "Only managers, administrators, or raw store officers can approve production orders.",
       { role: actorRef.role },
       "WT_ERR_FORBIDDEN",
     );
@@ -602,7 +608,8 @@ export async function confirmCuttingSource(
 
     if (input.tagUid) {
       const normalizedUid = normalizeTagUid(input.tagUid);
-      const lotUid = issue.material_lots.rfid_tag_bindings?.tag_uid;
+      const rawBindings = issue.material_lots.rfid_tag_bindings;
+      const lotUid = (Array.isArray(rawBindings) ? rawBindings[0]?.tag_uid : (rawBindings as any)?.tag_uid);
       if (!lotUid || lotUid !== normalizedUid) {
         throw ApiError.badRequest(
           `Scanned card UID '${normalizedUid}' does not match issued bundle card for lot '${issue.material_lots.code}'. Expected UID '${lotUid || "unassigned"}'.`,
@@ -1158,7 +1165,7 @@ export async function listGarments(
       qualityDisposition: g.quality_disposition,
       createdAt: g.created_at.toISOString(),
       revision: g.revision,
-      activeTagUid: g.rfid_tag_bindings?.tag_uid ?? null,
+      activeTagUid: (Array.isArray(g.rfid_tag_bindings) ? g.rfid_tag_bindings[0]?.tag_uid : (g.rfid_tag_bindings as any)?.tag_uid) ?? null,
     }));
   }, tx);
 }

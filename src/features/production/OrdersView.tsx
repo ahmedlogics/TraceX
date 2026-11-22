@@ -14,7 +14,13 @@ import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useDirectory, UserName } from "@/features/shared/directory";
 import { useMe } from "@/features/shared/useMe";
 
-function PlanOrderDialog() {
+export function PlanOrderDialog({
+  triggerLabel = "Plan production order",
+  onSuccess,
+}: {
+  triggerLabel?: string;
+  onSuccess?: (orderId: string) => void;
+}) {
   const { run } = useWtAction();
   const qSpecs = useWtQuery(["product-specs"], (c) => c.listProductSpecs());
   const [selectedSpecId, setSelectedSpecId] = useState("");
@@ -25,16 +31,22 @@ function PlanOrderDialog() {
 
   return (
     <FormDialog
-      trigger="Plan production order"
+      trigger={triggerLabel}
       title="Plan a Production Order"
       description="Orders are digital instructions authorizing garment manufacture. Orders have NO RFID cards; individual garment cards are bound at Cutting."
       submitLabel="Create production order"
-      onSubmit={async () =>
-        !!(await run(
+      onSubmit={async () => {
+        const id = await run(
           (c) => c.planOrder({ product, styleCode, qty: Number(qty), dueDate }),
-          (id) => `${id} planned successfully.`,
-        ))
-      }
+          (orderId) => `${orderId} planned successfully.`,
+        );
+        if (id) {
+          const resolvedId = typeof id === "string" ? id : (id as any).orderId || String(id);
+          onSuccess?.(resolvedId);
+          return true;
+        }
+        return false;
+      }}
     >
       <Loadable query={qSpecs}>
         {(specs) => (

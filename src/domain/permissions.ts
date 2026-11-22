@@ -49,8 +49,8 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   workstation: ["M", "O", "P", "Q", "L"],
   materialLots: ["M", "O", "Q"],
   materialLot: ["M", "O", "Q"],
-  productionOrders: ["M", "P", "Q"],
-  productionOrder: ["M", "P", "Q"],
+  productionOrders: ["M", "P", "Q", "O"],
+  productionOrder: ["M", "P", "Q", "O"],
   garments: ["M", "P", "Q", "L"],
   garment: ["M", "P", "Q", "L"],
   quality: ["M", "Q"],
@@ -139,8 +139,16 @@ export const can = {
       (u.role === "O" && (u.department === "receiving" || u.username === "receiving.demo"))),
   receiveLot: (u: StaffUser) => is(u, "O", "receiving"),
   issueMaterial: (u: StaffUser) => is(u, "O", "raw-store"),
-  planOrder: (u: StaffUser) => is(u, "M"),
-  approveOrder: (u: StaffUser) => is(u, "M"),
+  planOrder: (u: StaffUser) =>
+    u.status === "active" &&
+    (u.role === "M" ||
+      u.role === "A" ||
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
+  approveOrder: (u: StaffUser) =>
+    u.status === "active" &&
+    (u.role === "M" ||
+      u.role === "A" ||
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
   claimTask: (u: StaffUser, t: Task) =>
     u.role !== "M" && u.department === t.department && t.status === "open",
   assignTask: (u: StaffUser) => is(u, "M"),

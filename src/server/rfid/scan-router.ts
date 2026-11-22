@@ -132,34 +132,26 @@ export class ScanRoutingService implements IScanRoutingService {
     // 5. Validate action context (if reported or required by station)
     let contextIdToValidate = envelope.actionContextId ?? null;
 
-    if (!contextIdToValidate && envelope.timestamp && typeof (db as any).rfid_action_contexts?.findFirst === "function") {
-      const scanTime = new Date(envelope.timestamp);
+    if (!contextIdToValidate && typeof (db as any).rfid_action_contexts?.findFirst === "function") {
+      let scanTime = envelope.timestamp ? new Date(envelope.timestamp) : null;
+      if (scanTime && isNaN(scanTime.getTime())) scanTime = null;
 
-      // Scoped guard: Auto-resolution is only permitted if the scan has a valid synchronized timestamp.
-      // Unsynchronized scans or scans without timestamps cannot safely auto-resolve server-side contexts.
-      if (!isNaN(scanTime.getTime())) {
-        // Enforce strict causality: A scan cannot consume a context created or acknowledged after the scan occurred.
-        // Context must already have been created at or before scanTime.
-        const liveContext = await (db as any).rfid_action_contexts.findFirst({
-          where: {
-            reader_session_id: session.id,
-            closed_at: null,
-            expires_at: { gt: new Date() },
-            created_at: { lte: scanTime },
-            status: { in: ["armed", "awaiting_ack"] },
-          },
-          orderBy: { created_at: "desc" },
-        });
+      // Allow 60 seconds clock skew tolerance between device RTC/NTP and server clock
+      const maxCreatedTime = scanTime ? new Date(scanTime.getTime() + 60000) : new Date(Date.now() + 60000);
 
-        if (liveContext) {
-          // If acknowledged_at is recorded, scan must also have occurred at or after acknowledgement
-          const ackTime = liveContext.acknowledged_at ? new Date(liveContext.acknowledged_at) : null;
-          const isAckValid = !ackTime || isNaN(ackTime.getTime()) || ackTime <= scanTime;
+      const liveContext = await (db as any).rfid_action_contexts.findFirst({
+        where: {
+          reader_session_id: session.id,
+          closed_at: null,
+          expires_at: { gt: new Date() },
+          created_at: { lte: maxCreatedTime },
+          status: { in: ["armed", "awaiting_ack"] },
+        },
+        orderBy: { created_at: "desc" },
+      });
 
-          if (isAckValid) {
-            contextIdToValidate = liveContext.id;
-          }
-        }
+      if (liveContext) {
+        contextIdToValidate = liveContext.id;
       }
     }
 
@@ -240,17 +232,17 @@ export class ScanRoutingService implements IScanRoutingService {
         // Insert accepted scan record
         const scanRecord = await tx.rfid_scans.create({
           data: {
-            device_id: envelope.deviceId,
+            device_id: session.deviceId,
             scan_id: envelope.scanId,
             boot_id: envelope.bootId,
             sequence: BigInt(envelope.sequence),
-            reader_index: envelope.readerIndex,
-            reported_mapping_version: envelope.mappingVersion,
+            reader_index: session.readerIndex,
+            reported_mapping_version: session.mappingVersion,
             tag_uid: normalizeTagUid(envelope.tagUid),
             reported_context_id: effectiveEnvelope.actionContextId ?? null,
             resolved_context_id: actionContext?.id ?? null,
             reader_session_id: session.id,
-            station_code: stationCode,
+            station_code: session.stationCode,
             tag_binding_id: tagBindingId,
             garment_id: subject.kind === "garment" ? subject.subjectId : null,
             material_lot_id: subject.kind === "material_lot" ? subject.subjectId : null,
@@ -330,7 +322,7 @@ export class ScanRoutingService implements IScanRoutingService {
           tag_uid: normalizeTagUid(envelope.tagUid),
           reported_context_id: envelope.actionContextId ?? null,
           resolved_context_id: null,
-          reader_session_id: readerSessionId,
+          reader_session_id: null,
           station_code: stationCode,
           device_uptime_ms:
             envelope.deviceUptimeMs !== null && envelope.deviceUptimeMs !== undefined

@@ -289,18 +289,102 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
   async process(
     envelope: VersionedScanEnvelope,
     subject: PreparedScanSubject,
-    _tx: PrismaTransactionClient,
-    _context?: DomainScanContext,
+    tx: PrismaTransactionClient,
+    context?: DomainScanContext,
   ): Promise<ScanOutcomeResult> {
+    let orderId: string | undefined;
+    let requestedQty = 8.0;
+
+    if (envelope.actionContextId) {
+      const ctx = await tx.rfid_action_contexts.findUnique({
+        where: { id: envelope.actionContextId },
+      });
+      const answers = (ctx?.answers as Record<string, unknown>) || {};
+      orderId = String(answers["orderId"] || ctx?.production_order_id || "");
+      if (answers["qty"]) requestedQty = Number(answers["qty"]);
+    }
+
+    if (!orderId) {
+      const activeOrder = await tx.production_orders.findFirst({
+        where: { status: { in: ["approved", "draft"] } },
+        orderBy: { created_at: "asc" },
+      });
+      if (activeOrder) {
+        orderId = activeOrder.id;
+        requestedQty = Number(activeOrder.planned_quantity) * 2.0;
+      }
+    }
+
+    let targetOrderCode = orderId || "ORDER";
+
+    if (orderId) {
+      const order = await tx.production_orders.findFirst({
+        where: idOrCodeWhere(orderId),
+      });
+
+      if (order) {
+        targetOrderCode = order.code;
+
+        const lot = await tx.material_lots.findUnique({
+          where: { id: subject.subjectId },
+        });
+
+        if (lot) {
+          const currentBal = Number(lot.available_accepted_quantity);
+          const issueQty = Math.min(currentBal, requestedQty);
+          const newBalance = Math.max(0, currentBal - issueQty);
+
+          await tx.material_lots.update({
+            where: { id: lot.id },
+            data: {
+              available_accepted_quantity: newBalance,
+              revision: { increment: 1 },
+            },
+          });
+
+          let staffUserId = context?.actor?.actorId;
+          if (!staffUserId) {
+            const op = await tx.staff_users.findFirst({
+              where: { username: "rawstore.demo" },
+            });
+            staffUserId = op ? op.id : lot.received_by;
+          }
+
+          await tx.material_stock_movements.create({
+            data: {
+              material_lot_id: lot.id,
+              production_order_id: order.id,
+              kind: "issued",
+              quantity: issueQty,
+              reason: `Issued at Station 2 to order ${order.code}`,
+              performed_by: staffUserId,
+              performed_at: new Date(),
+            },
+          });
+
+          if (order.status === "approved" || order.status === "draft") {
+            await tx.production_orders.update({
+              where: { id: order.id },
+              data: {
+                status: "in_progress",
+                revision: { increment: 1 },
+              },
+            });
+          }
+        }
+      }
+    }
+
     return {
       scanId: envelope.scanId,
       outcome: "accepted",
       outcomeCode: "issue_confirmed",
-      outcomeMessage: "Bundle linked to Order → Issued to Cutting",
+      outcomeMessage: `Bundle card ${subject.tagUid} (${subject.subjectCode}) linked to Order ${targetOrderCode} → Issued to Cutting`,
       stationCode: "fabric_issue",
       subjectKind: "material_lot",
       subjectId: subject.subjectId,
       subjectCode: subject.subjectCode,
+      orderId: targetOrderCode,
       processedAt: new Date().toISOString(),
       nextExpectedStation: "cutting",
     };

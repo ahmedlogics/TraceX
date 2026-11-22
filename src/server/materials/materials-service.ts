@@ -170,7 +170,9 @@ export async function listLots(
     });
 
     return lots.map((lot) => {
-      const activeBinding = lot.rfid_tag_bindings;
+      const activeBinding = Array.isArray(lot.rfid_tag_bindings)
+        ? lot.rfid_tag_bindings[0]
+        : (lot.rfid_tag_bindings as any);
       const latestIncomingInsp = lot.inspections?.[0];
       const hasFailedInsp = latestIncomingInsp?.outcome === "fail";
       const acceptedMovements = lot.material_stock_movements.filter(
@@ -248,7 +250,9 @@ export async function getLotDetail(
 
     if (!lot) return null;
 
-    const activeBinding = lot.rfid_tag_bindings;
+    const activeBinding = Array.isArray(lot.rfid_tag_bindings)
+      ? lot.rfid_tag_bindings[0]
+      : (lot.rfid_tag_bindings as any);
     const latestIncomingInsp = lot.inspections?.[0];
     const hasFailedInsp = latestIncomingInsp?.outcome === "fail";
     const acceptedMovements = lot.material_stock_movements.filter(

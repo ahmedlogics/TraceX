@@ -28,10 +28,11 @@ import { Field, ScopeNote } from "@/components/wt/forms";
 import { fmt, KeyValue, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
-import type { MaterialLot, ProductionOrder } from "@/domain/types";
+import type { MaterialLot, ProductionOrder, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
+import { PlanOrderDialog } from "@/features/production/OrdersView";
 
 function getRequiredFabric(order: ProductionOrder): number {
   return Math.round(order.plannedQty * 2.0 * 10) / 10;
@@ -94,16 +95,101 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
               );
             };
 
-            // Handle scan execution
+            const handleOrderCreated = (newOrderId: string) => {
+              setSelectedOrderId(newOrderId);
+              void qOrders.refetch();
+              void run(
+                (c) =>
+                  c.prepareActionContext("fabric_issue", "confirm_issue", {
+                    kind: "confirm_issue",
+                    orderId: newOrderId,
+                    qty: 8.0,
+                  }),
+                `Order ${newOrderId} created and armed for Scanner 2. Ready to scan bundle tag!`,
+              );
+            };
+
+            // Handle scan execution (simulation or polling hardware scan on Scanner 2 / GPIO 12)
             const handleScan = (uidToScan?: string) => {
               const targetUid = (uidToScan || scanUid).trim();
-              if (!targetUid) return;
+              if (targetUid) {
+                void run(
+                  (c) => c.resolveRfidScan(targetUid),
+                  (outcome) => {
+                    setScanUid("");
+                    void qOrders.refetch();
+                    void qLots.refetch();
+                    return outcome.resolution === "accepted"
+                      ? `Bundle linked to Order → Issued to Cutting (${outcome.subjectId} → ${outcome.orderId ?? targetOrderId})`
+                      : `${outcome.rejectReason ?? outcome.resolution}`;
+                  },
+                );
+                return;
+              }
+
+              // Polling loop to wait for hardware scan from ESP32 on Reader 1 (GPIO 12)
               void run(
-                (c) => c.resolveRfidScan(targetUid),
-                (outcome) =>
-                  outcome.resolution === "accepted"
-                    ? `Bundle linked to Order → Issued to Cutting (${outcome.subjectId} → ${outcome.orderId ?? targetOrderId})`
-                    : `${outcome.rejectReason ?? outcome.resolution}`,
+                async (c) => {
+                  if (targetOrderId && (!activeCtx || (activeCtx.payload as any)?.orderId !== targetOrderId)) {
+                    try {
+                      await c.prepareActionContext("fabric_issue", "confirm_issue", {
+                        kind: "confirm_issue",
+                        orderId: targetOrderId,
+                        qty: targetRequiredFabric,
+                      });
+                    } catch {
+                      // context already armed or prepared
+                    }
+                  }
+                  const startTime = Date.now();
+                  while (Date.now() - startTime < 35000) {
+                    const data = await c.getRfidStationData("fabric_issue");
+                    if (data.lastScanOutcome) {
+                      if (data.lastScanOutcome.resolution === "accepted") {
+                        void qOrders.refetch();
+                        void qLots.refetch();
+                        return data.lastScanOutcome;
+                      }
+                      if (data.lastScanOutcome.resolution === "rejected") {
+                        throw new Error(
+                          data.lastScanOutcome.rejectReason ??
+                            "Hardware scan on Scanner 2 was rejected by workstation rules.",
+                        );
+                      }
+                    }
+
+                    const freshOrders = await c.listOrders();
+                    const updatedOrder = freshOrders.find((o) => o.id === targetOrderId);
+                    if (
+                      updatedOrder &&
+                      (updatedOrder.status === "in-progress" || updatedOrder.status === "completed")
+                    ) {
+                      void qOrders.refetch();
+                      void qLots.refetch();
+                      return {
+                        resolution: "accepted",
+                        uid: "PHYSICAL_CARD",
+                        orderId: updatedOrder.id,
+                        subjectId: "FAB-BUNDLE",
+                      } as ScanOutcome;
+                    }
+
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                  }
+
+                  throw new Error(
+                    "No hardware card scan detected on Scanner 2 (GPIO 12) within 35 seconds. Please tap your RFID card and try again.",
+                  );
+                },
+                (outcome) => {
+                  setScanUid("");
+                  void qOrders.refetch();
+                  void qLots.refetch();
+                  if (outcome?.resolution === "accepted") {
+                    return `Physical card ${outcome.uid} caught and linked to Order ${outcome.orderId ?? targetOrderId} → Issued to Cutting!`;
+                  }
+                  return `Scan outcome: ${outcome?.rejectReason ?? outcome?.resolution ?? "Completed"}`;
+                },
               );
             };
 
@@ -291,13 +377,29 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                       title="Active Production Orders Queue (Pending Fabric)"
                       description="Manager-approved production runs awaiting fabric issue. Click an order to set it as active target for Scanner 2."
                       actions={
-                        <span className="text-xs text-muted-foreground">
-                          {approvedOrders.length} active orders
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <PlanOrderDialog
+                            triggerLabel="+ New Production Order"
+                            onSuccess={handleOrderCreated}
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {approvedOrders.length} active orders
+                          </span>
+                        </div>
                       }
                     >
                       {approvedOrders.length === 0 ? (
-                        <EmptyState title="Zero active production orders in queue" />
+                        <EmptyState title="Zero active production orders in queue">
+                          <div className="space-y-3 text-center">
+                            <p className="text-sm text-muted-foreground">
+                              Create a new production order to begin fabric issuing.
+                            </p>
+                            <PlanOrderDialog
+                              triggerLabel="+ Create First Production Order"
+                              onSuccess={handleOrderCreated}
+                            />
+                          </div>
+                        </EmptyState>
                       ) : (
                         <DataTable
                           rows={approvedOrders}
@@ -399,31 +501,50 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                             <Field
                               label="Bundle Card Tag UID"
                               htmlFor="s2-uid"
-                              hint="Enter or pre-fill the RFID UID of the roll being issued."
+                              hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID to test manually."
                             >
                               <Input
                                 id="s2-uid"
                                 value={scanUid}
                                 onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                placeholder="e.g. 04A1B2C3 or 04D4E5F6"
+                                placeholder="e.g. BB4A0003 or tap physical card"
                                 className="font-mono bg-card"
                               />
                             </Field>
                             <div className="flex flex-wrap items-center gap-2 pt-1">
                               <Button
-                                disabled={pending || !scanUid.trim()}
+                                disabled={pending}
                                 onClick={() => handleScan()}
                                 className="gap-1.5"
                               >
-                                <ScanLine className="size-4" /> Tap / Scan at Scanner 2
+                                {pending ? (
+                                  <>
+                                    <span className="relative flex h-2.5 w-2.5 mr-2">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                    </span>
+                                    Awaiting Hardware Card Tap (Scanner 2)...
+                                  </>
+                                ) : scanUid.trim() ? (
+                                  <>
+                                    <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
+                                  </>
+                                ) : (
+                                  <>
+                                    <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
+                                  </>
+                                )}
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setScanUid("")}
-                              >
-                                Clear
-                              </Button>
+                              {scanUid && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() => setScanUid("")}
+                                >
+                                  Clear
+                                </Button>
+                              )}
                             </div>
                           </div>
 

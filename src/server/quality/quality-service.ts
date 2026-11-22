@@ -359,6 +359,18 @@ export async function ensureActiveReaderSession(
     });
   }
 
+  await tx.reader_sessions.updateMany({
+    where: {
+      device_id: device.id,
+      reader_index: 0,
+      closed_at: null,
+    },
+    data: {
+      closed_at: new Date(),
+      close_reason: "Superseded by new quality session",
+    },
+  });
+
   const session = await tx.reader_sessions.create({
     data: {
       device_id: device.id,
@@ -594,6 +606,7 @@ export async function executeIncomingQc(
 
   // 7. Update work task pipeline hand-off (Step 2 approval -> Step 3 raw store task)
   if ("work_tasks" in (tx as any) && typeof (tx as any).work_tasks.updateMany === "function") {
+    const isPass = input.result === "pass";
     await (tx as any).work_tasks.updateMany({
       where: {
         material_lot_id: lot.id,
@@ -601,8 +614,10 @@ export async function executeIncomingQc(
         status: { in: ["queued", "claimed"] },
       },
       data: {
-        status: input.result === "pass" ? "completed" : "cancelled",
-        completed_at: new Date(),
+        status: isPass ? "completed" : "cancelled",
+        assignee_id: staffUserId,
+        claimed_at: new Date(),
+        completed_at: isPass ? new Date() : null,
       },
     });
 

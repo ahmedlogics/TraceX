@@ -204,11 +204,13 @@ class WearTrailHardware {
       Serial.println(" Firmware Version: v1.0.0 (WearTrail RFC Contract)");
       Serial.println("==================================================");
 
-      // Generate stable boot ID: "boot-" + last 6 hex chars of MAC
+      // Initialize WiFi station mode to obtain genuine MAC and unique boot ID
+      WiFi.mode(WIFI_STA);
       uint8_t mac[6];
       WiFi.macAddress(mac);
-      char buf[32];
-      snprintf(buf, sizeof(buf), "boot-%02x%02x%02x", mac[3], mac[4], mac[5]);
+      char buf[40];
+      uint16_t randSuffix = (uint16_t)(esp_random() & 0xFFFF);
+      snprintf(buf, sizeof(buf), "boot-%02x%02x%02x-%04x", mac[3], mac[4], mac[5], randSuffix);
       bootId = String(buf);
       Serial.print("[BOOT] Boot Identifier : "); Serial.println(bootId);
       Serial.print("[BOOT] Configured Device: "); Serial.println(DEVICE_ID);
