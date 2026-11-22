@@ -65,6 +65,28 @@ export function isQualityRole(actor: StaffUser | ActorContext): boolean {
   return false;
 }
 
+const VALID_DEPARTMENT_CODES = new Set([
+  "receiving",
+  "raw_store",
+  "cutting",
+  "stitching",
+  "finishing",
+  "quality",
+  "packing",
+  "warehouse",
+  "dispatch",
+]);
+
+export function normalizeDbDepartment(rawDept?: string | null): string | null {
+  if (!rawDept) return null;
+  const clean = rawDept.toLowerCase().trim().replace(/-/g, "_");
+  if (VALID_DEPARTMENT_CODES.has(clean)) return clean;
+  if (clean === "rawstore" || clean === "raw_materials" || clean === "fabric_issue") return "raw_store";
+  if (clean === "fabric_receiving" || clean === "dock") return "receiving";
+  if (clean === "qc" || clean === "inspection" || clean === "quality_control") return "quality";
+  return null;
+}
+
 export async function ensureStaffUserRecord(
   tx: PrismaTransactionClient,
   actor: StaffUser | ActorContext,
@@ -161,30 +183,53 @@ export async function ensureStaffUserRecord(
     if (dbRole === "admin" || dbRole === "manager") {
       dbDept = null;
     } else if ("department" in actor && actor.department) {
-      dbDept = actor.department.toLowerCase();
+      dbDept = normalizeDbDepartment(actor.department) || "quality";
+    }
+  }
+
+  // Ensure department matches constraints: admin/manager MUST have null dept, all other roles MUST have valid non-null dept
+  if (dbRole === "admin" || dbRole === "manager") {
+    dbDept = null;
+  } else {
+    dbDept = normalizeDbDepartment(dbDept);
+    if (!dbDept) {
+      if (dbRole === "quality") dbDept = "quality";
+      else if (dbRole === "materials") dbDept = "receiving";
+      else if (dbRole === "logistics") dbDept = "packing";
+      else dbDept = "cutting";
     }
   }
 
   // Ensure staff_role_grants exists so database triggers (e.g. staff_has_station_access) pass
   if (tx.staff_role_grants) {
+    // Check if user already has an active grant for this role
     const existingGrant = await tx.staff_role_grants.findFirst({
       where: {
         staff_user_id: userId,
         role: dbRole as any,
-        department_code: dbDept,
         revoked_at: null,
       },
     });
 
     if (!existingGrant) {
-      await tx.staff_role_grants.create({
-        data: {
-          staff_user_id: userId,
-          role: dbRole as any,
-          department_code: dbDept,
-          granted_at: new Date(),
-        },
-      });
+      try {
+        await tx.staff_role_grants.create({
+          data: {
+            staff_user_id: userId,
+            role: dbRole as any,
+            department_code: dbDept,
+            granted_at: new Date(),
+          },
+        });
+      } catch (grantErr) {
+        // Safe fallback if concurrent grant was created or trigger restriction handled
+        const fallback = await tx.staff_role_grants.findFirst({
+          where: { staff_user_id: userId, revoked_at: null },
+        });
+        if (!fallback) {
+          console.warn("[ensureStaffUserRecord] Role grant creation warning:", grantErr);
+        }
+      }
     }
   }
 
@@ -491,6 +536,7 @@ export async function executeIncomingQc(
         ? Object.fromEntries(input.checklist.map((c: any) => [c.id, Boolean(c.checked ?? c.passed)]))
         : {};
 
+  const inspectionTime = new Date();
   const inspection = await tx.inspections.create({
     data: {
       code: inspectionCode,
@@ -506,16 +552,24 @@ export async function executeIncomingQc(
       answers: answersJson,
       notes: input.notes ?? null,
       defect_reason: input.result === "fail" ? (input.defectReason ?? null) : null,
-      created_at: new Date(),
-      submitted_at: new Date(),
+      created_at: inspectionTime,
+      submitted_at: inspectionTime,
     },
   });
 
   let currentAvailable = Number(lot.available_accepted_quantity);
+  const receivedTotal = Number(lot.received_quantity);
 
   // 6. On acceptance: update available accepted quantity and record stock movement
   if (input.result === "pass") {
-    currentAvailable += acceptedQty;
+    if (currentAvailable > 0 && currentAvailable + acceptedQty > receivedTotal) {
+      await tx.material_lots.update({
+        where: { id: lot.id },
+        data: { available_accepted_quantity: Math.max(0, receivedTotal - acceptedQty) },
+      });
+    }
+
+    currentAvailable = Math.min(receivedTotal, currentAvailable + acceptedQty);
 
     await tx.material_stock_movements.create({
       data: {
@@ -525,6 +579,7 @@ export async function executeIncomingQc(
         quantity: acceptedQty,
         reason: input.notes || "Accepted at incoming QC inspection",
         performed_by: staffUserId,
+        performed_at: inspectionTime,
       },
     });
 

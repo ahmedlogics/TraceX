@@ -25,6 +25,7 @@ import {
   mapPrismaDepartmentToDomain,
   toStaffUserDto,
 } from "../auth/auth-service";
+import { normalizeDbDepartment } from "../quality/quality-service";
 import { ApiError } from "../middleware/responses";
 import { generateSessionToken, hashSessionToken } from "../auth/crypto";
 
@@ -783,7 +784,9 @@ export async function inviteStaffUser(
 
     const grantRole = roleMap[input.role] ?? "production";
     const grantDept =
-      grantRole === "admin" || grantRole === "manager" ? null : (input.department ?? "receiving");
+      grantRole === "admin" || grantRole === "manager"
+        ? null
+        : (normalizeDbDepartment(input.department) ?? "receiving");
 
     await tx.staff_role_grants.create({
       data: {
@@ -861,7 +864,9 @@ export async function updateStaffUserScope(
     // Create new grant
     const grantRole = roleMap[input.role] ?? "production";
     const grantDept =
-      grantRole === "admin" || grantRole === "manager" ? null : (input.department ?? "receiving");
+      grantRole === "admin" || grantRole === "manager"
+        ? null
+        : (normalizeDbDepartment(input.department) ?? "receiving");
 
     await tx.staff_role_grants.create({
       data: {
