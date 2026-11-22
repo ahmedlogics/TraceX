@@ -66,11 +66,16 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   reports: ["A", "M"],
   adminUsers: ["A"],
   settings: ["A", "M"],
-  nfcHub: ALL,
+  nfcHub: ["M"],
 };
 
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   if (!user || user.status !== "active") return false;
+
+  // NFC Tag Passport screen is strictly reserved for manager.demo
+  if (key === "nfcHub") {
+    return user.username === "manager.demo" || user.role === "M";
+  }
 
   // Receiving operators only handle materials/receiving, not production orders
   if (
@@ -163,6 +168,8 @@ export const can = {
     (u.role === "M" ||
       u.role === "A" ||
       (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
+  accessNfcHub: (u: StaffUser) =>
+    u.status === "active" && (u.username === "manager.demo" || u.role === "M"),
   claimTask: (u: StaffUser, t: Task) =>
     u.role !== "M" && u.department === t.department && t.status === "open",
   assignTask: (u: StaffUser) => is(u, "M"),

@@ -3,7 +3,7 @@ import { pageHead } from "@/app/head";
 import { NfcHubView } from "@/features/nfc/NfcHubView";
 
 export const Route = createFileRoute("/staff/_workspace/nfc-passports")({
-  staticData: { access: "garments" },
+  staticData: { access: "nfcHub" },
   head: () =>
     pageHead(
       "NFC Tag Hub & Mobile Passports",

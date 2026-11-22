@@ -9,7 +9,9 @@ import { IdLink, PageHeader } from "@/components/wt/layout";
 import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import type { LifecycleStage } from "@/domain/types";
+import { can } from "@/domain/permissions";
 import { useWtQuery } from "@/lib/data/hooks";
+import { useMe } from "@/features/shared/useMe";
 import { NfcHubView } from "@/features/nfc/NfcHubView";
 
 const stages: LifecycleStage[] = [
@@ -25,62 +27,70 @@ const stages: LifecycleStage[] = [
 ];
 
 export function GarmentsView() {
+  const me = useMe();
+  const canAccessNfc = can.accessNfcHub(me);
   const q = useWtQuery(["garments"], (c) => c.listGarments());
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
   const [disposition, setDisposition] = useState("all");
   const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
 
+  const effectiveTab = canAccessNfc ? activeTab : "register";
+
   return (
     <>
       <PageHeader
-        title={activeTab === "nfc" ? "NFC Tag Programming & Localtunnel Hub" : "Garment Registry & Production Status"}
+        title={effectiveTab === "nfc" ? "NFC Tag Programming & Localtunnel Hub" : "Garment Registry & Production Status"}
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Garments" }]}
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={activeTab === "nfc" ? "default" : "outline"}
-              onClick={() => setActiveTab(activeTab === "nfc" ? "register" : "nfc")}
-              className={`text-xs font-semibold h-8 ${
-                activeTab === "nfc" ? "bg-primary" : "text-primary border-primary/25 hover:bg-primary/5"
-              }`}
-            >
-              <Zap className="size-3.5 mr-1" />
-              {activeTab === "nfc" ? "Switch to Garment Register" : "⚡ NFC Localtunnel Hub"}
-            </Button>
-          </div>
+          canAccessNfc ? (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={effectiveTab === "nfc" ? "default" : "outline"}
+                onClick={() => setActiveTab(effectiveTab === "nfc" ? "register" : "nfc")}
+                className={`text-xs font-semibold h-8 ${
+                  effectiveTab === "nfc" ? "bg-primary" : "text-primary border-primary/25 hover:bg-primary/5"
+                }`}
+              >
+                <Zap className="size-3.5 mr-1" />
+                {effectiveTab === "nfc" ? "Switch to Garment Register" : "⚡ NFC Localtunnel Hub"}
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 mb-6">
-        <div className="inline-flex rounded-lg border bg-muted/80 p-1 text-xs">
-          <button
-            type="button"
-            onClick={() => setActiveTab("register")}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
-              activeTab === "register"
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Shirt className="size-3.5" /> Garment Production Register
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("nfc")}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
-              activeTab === "nfc"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Zap className="size-3.5" /> ⚡ NFC Tag Hub & Localtunnel Links
-          </button>
+      {canAccessNfc && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 mb-6">
+          <div className="inline-flex rounded-lg border bg-muted/80 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab("register")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
+                effectiveTab === "register"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Shirt className="size-3.5" /> Garment Production Register
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("nfc")}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
+                effectiveTab === "nfc"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Zap className="size-3.5" /> ⚡ NFC Tag Hub & Localtunnel Links
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {activeTab === "nfc" ? (
+      {effectiveTab === "nfc" && canAccessNfc ? (
         <NfcHubView />
       ) : (
       <Loadable query={q}>
