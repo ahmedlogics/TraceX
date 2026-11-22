@@ -283,28 +283,16 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                 },
                                 {
                                   header: "Product & Size",
-                                  cell: (g) => {
-                                    const isTrouser = g.productName.toLowerCase().includes("trouser");
-                                    const thumbSrc = isTrouser ? "/finishing/trouser-thumb.jpg" : "/finishing/shirt-thumb.jpg";
-                                    return (
-                                      <div className="flex items-center gap-2.5">
-                                        <img
-                                          src={thumbSrc}
-                                          alt={g.productName}
-                                          className="size-9 rounded-md object-cover border shrink-0 bg-muted"
-                                          loading="lazy"
-                                        />
-                                        <div className="min-w-0">
-                                          <p className="font-medium text-xs sm:text-sm truncate">{g.productName}</p>
-                                          {g.size && (
-                                            <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
-                                              Size {g.size}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  },
+                                  cell: (g) => (
+                                    <div>
+                                      <p className="font-medium text-xs sm:text-sm">{g.productName}</p>
+                                      {g.size && (
+                                        <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
+                                          Size {g.size}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ),
                                 },
                                 {
                                   header: "Active RFID Tag",
@@ -386,29 +374,17 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                   },
                                   {
                                     header: "Product & Size",
-                                  cell: (g) => {
-                                    const isTrouser = g.productName.toLowerCase().includes("trouser");
-                                    const thumbSrc = isTrouser ? "/finishing/trouser-thumb.jpg" : "/finishing/shirt-thumb.jpg";
-                                    return (
-                                      <div className="flex items-center gap-2.5">
-                                        <img
-                                          src={thumbSrc}
-                                          alt={g.productName}
-                                          className="size-9 rounded-md object-cover border shrink-0 bg-muted"
-                                          loading="lazy"
-                                        />
-                                        <div className="min-w-0">
-                                          <p className="font-medium text-xs sm:text-sm truncate">{g.productName}</p>
-                                          {g.size && (
-                                            <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
-                                              Size {g.size}
-                                            </span>
-                                          )}
-                                        </div>
+                                    cell: (g) => (
+                                      <div>
+                                        <p className="font-medium text-xs sm:text-sm">{g.productName}</p>
+                                        {g.size && (
+                                          <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
+                                            Size {g.size}
+                                          </span>
+                                        )}
                                       </div>
-                                    );
+                                    ),
                                   },
-                                },
                                   {
                                     header: "Active RFID Tag",
                                     cell: (g) => (
@@ -528,27 +504,17 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                 header: "Garment Identification",
                                 cell: (r) => {
                                   const garment = garments.find((g) => g.id === r.garmentId);
-                                  const isTrouser = (garment?.productName ?? "").toLowerCase().includes("trouser");
-                                  const thumbSrc = isTrouser ? "/finishing/trouser-thumb.jpg" : "/finishing/shirt-thumb.jpg";
                                   return (
-                                    <div className="flex items-center gap-2.5">
-                                      <img
-                                        src={thumbSrc}
-                                        alt={garment?.productName ?? "Garment"}
-                                        className="size-9 rounded-md object-cover border shrink-0 bg-muted"
-                                        loading="lazy"
-                                      />
-                                      <div className="min-w-0">
-                                        <IdLink href={paths.garment(r.garmentId)} id={r.garmentId} />
-                                        <p className="text-xs font-medium text-foreground mt-0.5 truncate">
-                                          {garment?.productName ?? "Garment Unit"}
-                                        </p>
-                                        {garment?.size && (
-                                          <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
-                                            Size {garment.size}
-                                          </span>
-                                        )}
-                                      </div>
+                                    <div>
+                                      <IdLink href={paths.garment(r.garmentId)} id={r.garmentId} />
+                                      <p className="text-xs font-medium text-foreground mt-0.5">
+                                        {garment?.productName ?? "Garment Unit"}
+                                      </p>
+                                      {garment?.size && (
+                                        <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
+                                          Size {garment.size}
+                                        </span>
+                                      )}
                                     </div>
                                   );
                                 },

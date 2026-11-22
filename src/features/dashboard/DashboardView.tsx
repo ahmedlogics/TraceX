@@ -90,79 +90,6 @@ export function DashboardView() {
             {/* Domain Metric Grid */}
             <MetricGrid metrics={d.metrics} />
 
-            {/* Active Production Garment Styles (Real Clothes Preview) */}
-            <div className="rounded-xl border bg-card p-4 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Active Garments in Production Line
-                  </h3>
-                  <p className="text-xs text-muted-foreground">Live garment models currently in cutting, assembly, and finishing.</p>
-                </div>
-                {canAccessRoute(me, "garments") && (
-                  <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-primary gap-1">
-                    <AppLink href={paths.garments}>
-                      View all garments <ArrowRight className="size-3" />
-                    </AppLink>
-                  </Button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 p-2.5 hover:border-primary/40 transition-colors">
-                  <img
-                    src="/finishing/shirt-thumb.jpg"
-                    alt="Classic Poplin Shirt"
-                    className="size-10 rounded-md object-cover border shrink-0 bg-background"
-                    loading="lazy"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-xs text-foreground truncate">Poplin Classic</p>
-                    <span className="text-[10px] text-muted-foreground">White · Size M</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 p-2.5 hover:border-primary/40 transition-colors">
-                  <img
-                    src="/finishing/linen-shirt.jpg"
-                    alt="Oxford Linen Shirt"
-                    className="size-10 rounded-md object-cover border shrink-0 bg-background"
-                    loading="lazy"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-xs text-foreground truncate">Oxford Linen</p>
-                    <span className="text-[10px] text-muted-foreground">Casual · Size M</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 p-2.5 hover:border-primary/40 transition-colors">
-                  <img
-                    src="/finishing/trouser-thumb.jpg"
-                    alt="Cotton Twill Trouser"
-                    className="size-10 rounded-md object-cover border shrink-0 bg-background"
-                    loading="lazy"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-xs text-foreground truncate">Cotton Trouser</p>
-                    <span className="text-[10px] text-muted-foreground">Chino · Size 32</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 rounded-lg border bg-muted/20 p-2.5 hover:border-primary/40 transition-colors">
-                  <img
-                    src="/finishing/overshirt.jpg"
-                    alt="Heritage Overshirt"
-                    className="size-10 rounded-md object-cover border shrink-0 bg-background"
-                    loading="lazy"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-xs text-foreground truncate">Heritage Overshirt</p>
-                    <span className="text-[10px] text-muted-foreground">Twill · Size L</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="grid gap-6 lg:grid-cols-2">
               {/* Assigned Work Queue */}
               <Section
@@ -192,16 +119,7 @@ export function DashboardView() {
                         key={t.id}
                         className="flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors hover:bg-muted/30"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {t.subjectType === "garment" && (
-                            <img
-                              src={t.title.toLowerCase().includes("trouser") ? "/finishing/trouser-thumb.jpg" : "/finishing/shirt-thumb.jpg"}
-                              alt="Garment"
-                              className="size-8 rounded-md object-cover border shrink-0 bg-muted"
-                              loading="lazy"
-                            />
-                          )}
-                          <div className="min-w-0 space-y-0.5">
+                        <div className="min-w-0 space-y-0.5">
                           <p className="text-sm font-medium text-foreground">{t.title}</p>
                           <p className="text-xs text-muted-foreground">
                             <span className="wt-id font-semibold">{t.id}</span> ·{" "}
@@ -212,7 +130,6 @@ export function DashboardView() {
                               </span>
                             )}
                           </p>
-                          </div>
                         </div>
                         <StatusBadge status={t.status} />
                       </li>
