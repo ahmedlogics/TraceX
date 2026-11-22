@@ -137,6 +137,8 @@ export async function getOrCreateSupplier(
 
 // ---------------------------------------------------------------- Material Lots
 
+const EXCLUDED_LOT_CODES = ["FAB-011", "FAB-007", "LOT-2026-DEMO-01"];
+
 export async function listLots(
   actor?: unknown,
   filters?: { status?: string | undefined; supplierId?: string | undefined },
@@ -146,6 +148,7 @@ export async function listLots(
     const lots = await db.material_lots.findMany({
       where: {
         ...(filters?.supplierId ? { supplier_id: filters.supplierId } : {}),
+        code: { notIn: EXCLUDED_LOT_CODES },
       },
       include: {
         suppliers: true,
@@ -212,9 +215,15 @@ export async function getLotDetail(
   actor?: unknown,
   tx?: PrismaTransactionClient,
 ): Promise<MaterialLotDetailDTO | null> {
+  if (typeof lotIdOrCode === "string" && EXCLUDED_LOT_CODES.includes(lotIdOrCode)) {
+    return null;
+  }
   return runInTransaction(async (db) => {
     const lot = await db.material_lots.findFirst({
-      where: idOrCodeWhere(lotIdOrCode),
+      where: {
+        ...idOrCodeWhere(lotIdOrCode),
+        code: { notIn: EXCLUDED_LOT_CODES },
+      },
       include: {
         suppliers: true,
         staff_users: true,

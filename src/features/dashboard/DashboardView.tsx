@@ -37,7 +37,7 @@ function ReceivingLotsQueue() {
   return (
     <Loadable query={qLots}>
       {(lots) => {
-        const unassigned = lots.filter((l) => !l.rfidUid);
+        const unassigned = lots.filter((l) => !l.rfidUid && l.status === "awaiting-inspection");
         const assignedLots = lots.filter((l) => !!l.rfidUid);
 
         return (
