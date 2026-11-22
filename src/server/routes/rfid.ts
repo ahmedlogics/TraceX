@@ -449,6 +449,7 @@ rfidRouter.post(
       if (p["lotId"]) (answers as any)["lotId"] = p["lotId"];
       if (p["orderId"] || p["productionOrderId"]) (answers as any)["orderId"] = p["orderId"] || p["productionOrderId"];
       if (p["size"]) (answers as any)["size"] = p["size"];
+      if (p["assignedDepartment"]) (answers as any)["assignedDepartment"] = p["assignedDepartment"];
       (answers as any)["kind"] = kind;
 
       // Context valid for at most 5 minutes, strictly bounded by reader session expiry

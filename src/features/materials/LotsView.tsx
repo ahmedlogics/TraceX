@@ -95,8 +95,7 @@ export function LotsView() {
     <>
       <PageHeader
         title="Material Lots & Fabric Register"
-        description="Physical raw material inventory. Fabric lots are received with bundle cards, verified by incoming QC, and issued to approved orders."
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Material lots" }]}
+              crumbs={[{ label: "Staff", href: paths.home }, { label: "Material lots" }]}
         actions={can.receiveLot(me) ? <ReceiveLotDialog /> : undefined}
       />
 
@@ -240,7 +239,7 @@ export function LotsView() {
                   },
                   {
                     header: "Incoming QC",
-                    cell: (l) => <StatusBadge status={l.status} label={l.status === "accepted" ? "Accepted" : undefined} />,
+                    cell: (l) => <StatusBadge status={l.status} />,
                   },
                   {
                     header: "Actions",

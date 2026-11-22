@@ -33,11 +33,37 @@ const defaultChecklist: ChecklistItem[] = [
   },
 ];
 
+interface QcFault {
+  id: string;
+  label: string;
+  category: "stitching" | "cutting" | "finishing";
+}
+
+const COMMON_QC_FAULTS: QcFault[] = [
+  { id: "f1", label: "Broken / Skipped Stitching", category: "stitching" },
+  { id: "f2", label: "Open Seam or Unraveled Hem", category: "stitching" },
+  { id: "f3", label: "Stitch Tension Puckering / Tight Seams", category: "stitching" },
+  { id: "f4", label: "Dimensional Tolerance Mismatch (Chest/Length)", category: "cutting" },
+  { id: "f5", label: "Pattern Misalignment / Fabric Flaw", category: "cutting" },
+  { id: "f6", label: "Loose / Missing Button or Defective Zipper", category: "finishing" },
+  { id: "f7", label: "Care / Brand Label Misplaced or Missing", category: "finishing" },
+  { id: "f8", label: "Oil / Dirt / Contamination Stain", category: "finishing" },
+];
+
+const REWORK_DEPARTMENTS: { code: string; label: string }[] = [
+  { code: "cutting", label: "Cutting Department (Pattern / Cut Rework)" },
+  { code: "stitching", label: "Stitching / Assembly Department (Sewing Repair)" },
+  { code: "finishing", label: "Finishing & Tagging Department (Trims / Pressing)" },
+];
+
 export function QAPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
   const [result, setResult] = useState<"pass" | "fail">("pass");
   const [defectReason, setDefectReason] = useState("");
+  const [defectComment, setDefectComment] = useState("");
+  const [selectedFaults, setSelectedFaults] = useState<string[]>([]);
+  const [targetDept, setTargetDept] = useState<string>("stitching");
   const [notes, setNotes] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(defaultChecklist);
   const [scanUid, setScanUid] = useState("04DAEBFC"); // SHIRT-002 seed tag
@@ -47,14 +73,20 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
   const activeCtx = stationData.activeContext;
   const isCtxForThisStation = activeCtx && activeCtx.stationCode === "final_qc";
 
-  const allChecked = checklist.every((c) => c.checked);
-  const canPrepare = result === "pass" ? allChecked : !!defectReason.trim();
+  const allPassChecked = checklist.every((c) => c.checked);
+  const hasFaultSelected = selectedFaults.length > 0;
+  const hasComment = defectComment.trim().length > 0 || defectReason.trim().length > 0;
+  const canPrepareFail = (hasFaultSelected || hasComment) && !!targetDept;
+  const canPrepare = result === "pass" ? allPassChecked : canPrepareFail;
 
   const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
 
   const resetForm = () => {
     setResult("pass");
     setDefectReason("");
+    setDefectComment("");
+    setSelectedFaults([]);
+    setTargetDept("stitching");
     setNotes("");
     setChecklist(defaultChecklist);
   };
@@ -136,42 +168,117 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
               </div>
             </div>
 
-            {result === "fail" && (
-              <Field
-                label="Defect Code & Reason (Mandatory on Fail)"
-                htmlFor="qa-defect"
-                hint="Explain the defect that blocks this garment (e.g. Open seam, stitch tension fault, fabric flaw)."
-              >
-                <Input
-                  id="qa-defect"
-                  value={defectReason}
-                  onChange={(e) => setDefectReason(e.target.value)}
-                  placeholder="e.g. Open seam at left sleeve cuff"
-                  className="border-destructive/60 bg-card"
-                />
-              </Field>
+            {result === "fail" ? (
+              <>
+                {/* Rework Routing Department Dropdown */}
+                <div className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                  <label htmlFor="qa-target-dept" className="block text-xs font-semibold uppercase tracking-wider text-destructive">
+                    Route Rework To Department (Mandatory on Fail)
+                  </label>
+                  <select
+                    id="qa-target-dept"
+                    value={targetDept}
+                    onChange={(e) => setTargetDept(e.target.value)}
+                    className="w-full h-8 rounded-md border border-input bg-card px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {REWORK_DEPARTMENTS.map((dept) => (
+                      <option key={dept.code} value={dept.code}>
+                        {dept.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground pt-0.5">
+                    Upon card scan, this garment will appear immediately on the selected department&apos;s repair screen.
+                  </p>
+                </div>
+
+                {/* Common Faults Checklist (Optional Selection) */}
+                <div className="space-y-2 rounded-md border p-3 bg-card">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Common Faults Checklist (Optional)
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">
+                      {selectedFaults.length} selected
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                    {COMMON_QC_FAULTS.map((f) => (
+                      <label
+                        key={f.id}
+                        className={`flex items-start gap-2 text-xs cursor-pointer rounded p-1.5 transition-colors border ${
+                          selectedFaults.includes(f.id)
+                            ? "border-destructive/60 bg-destructive/10 text-destructive font-medium"
+                            : "border-border/60 hover:bg-muted/40"
+                        }`}
+                      >
+                        <Checkbox
+                          checked={selectedFaults.includes(f.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedFaults((prev) => [...prev, f.id]);
+                              if (f.category) setTargetDept(f.category);
+                            } else {
+                              setSelectedFaults((prev) => prev.filter((id) => id !== f.id));
+                            }
+                          }}
+                        />
+                        <span className="leading-tight">{f.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Defect Comment Box */}
+                <Field
+                  label="Defect Details & Comment Box"
+                  htmlFor="qa-defect-comment"
+                  hint={
+                    hasFaultSelected
+                      ? "Add optional specific notes or repair details."
+                      : "Mandatory if no checklist fault is selected: explain defect."
+                  }
+                >
+                  <Textarea
+                    id="qa-defect-comment"
+                    rows={2}
+                    value={defectComment}
+                    onChange={(e) => setDefectComment(e.target.value)}
+                    placeholder="e.g. Left sleeve cuff open by 3cm; restitch seam with matching thread"
+                    className="text-xs bg-card border-destructive/40"
+                  />
+                </Field>
+
+                {/* Mandatory Guard Notice */}
+                {!hasFaultSelected && !hasComment && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-300">
+                    ⚠️ <strong>Mandatory Requirement:</strong> Please select at least one fault on the checklist OR enter defect details in the comment box to prepare Fail.
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Pass Checklist */
+              <div className="space-y-2 rounded-md border p-3 bg-card">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Garment Inspection Checklist (All Verified on Pass)
+                </p>
+                {checklist.map((item) => (
+                  <label key={item.id} className="flex items-start gap-2 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={item.checked}
+                      onCheckedChange={(v) =>
+                        setChecklist((prev) =>
+                          prev.map((c) => (c.id === item.id ? { ...c, checked: v === true } : c)),
+                        )
+                      }
+                    />
+                    <span className="leading-tight">{item.label}</span>
+                  </label>
+                ))}
+              </div>
             )}
 
-            <div className="space-y-2 rounded-md border p-3 bg-card">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Garment Inspection Checklist
-              </p>
-              {checklist.map((item) => (
-                <label key={item.id} className="flex items-start gap-2 text-xs cursor-pointer">
-                  <Checkbox
-                    checked={item.checked}
-                    onCheckedChange={(v) =>
-                      setChecklist((prev) =>
-                        prev.map((c) => (c.id === item.id ? { ...c, checked: v === true } : c)),
-                      )
-                    }
-                  />
-                  <span className="leading-tight">{item.label}</span>
-                </label>
-              ))}
-            </div>
-
-            <Field label="Notes (Optional)" htmlFor="qa-notes">
+            <Field label="Inspection Notes (Optional)" htmlFor="qa-notes">
               <Textarea
                 id="qa-notes"
                 rows={2}
@@ -197,19 +304,45 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
                     !canPrepare ||
                     (isCtxForThisStation && activeCtx.status !== "expired")
                   }
-                  onClick={() =>
-                    void run(
+                  onClick={() => {
+                    const selectedLabels = COMMON_QC_FAULTS.filter((f) =>
+                      selectedFaults.includes(f.id),
+                    ).map((f) => f.label);
+                    let finalDefect = selectedLabels.join(", ");
+                    if (defectComment.trim()) {
+                      finalDefect = finalDefect
+                        ? `${finalDefect} — ${defectComment.trim()}`
+                        : defectComment.trim();
+                    } else if (defectReason.trim()) {
+                      finalDefect = finalDefect
+                        ? `${finalDefect} — ${defectReason.trim()}`
+                        : defectReason.trim();
+                    }
+
+                    return void run(
                       (c) =>
                         c.prepareActionContext("final_qc", "submit_qc", {
                           kind: "submit_qc",
                           result,
-                          defectReason: result === "fail" ? defectReason.trim() : undefined,
-                          checklist,
+                          scope: "final",
+                          defectReason: result === "fail" ? finalDefect : undefined,
+                          assignedDepartment: result === "fail" ? targetDept : undefined,
+                          faults: selectedFaults,
                           notes: notes.trim(),
+                          checklist:
+                            result === "pass"
+                              ? checklist
+                              : selectedLabels.map((l, i) => ({
+                                  id: `f-${i}`,
+                                  label: l,
+                                  checked: true,
+                                })),
                         }),
-                      `Prepared one-use ${result.toUpperCase()} decision. Ready for reader board acknowledgement.`,
-                    )
-                  }
+                      `Prepared one-use ${result.toUpperCase()} decision${
+                        result === "fail" ? ` (routed to ${targetDept})` : ""
+                      }. Ready for reader board card scan.`,
+                    );
+                  }}
                   className="w-full sm:w-auto"
                 >
                   <Radio className="size-4 mr-1.5" /> Prepare QC Decision ({result.toUpperCase()})

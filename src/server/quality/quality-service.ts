@@ -209,10 +209,18 @@ export async function getOrCreateChecklistVersion(
       checklist_code: `CHK-${scope.toUpperCase()}`,
       version: 1,
       scope,
-      items: [
-        { id: "c1", label: `${scope} Standard Conformance`, default: true },
-        { id: "c2", label: `${scope} Defect-Free Visual Inspection`, default: true },
-      ],
+      items:
+        scope === "incoming"
+          ? [
+              { id: "i1", label: "Lot paperwork matches delivery", default: true },
+              { id: "i2", label: "Shade within approved range", default: true },
+              { id: "i3", label: "Width and weight within spec", default: true },
+              { id: "i4", label: "Four-point defect check acceptable", default: true },
+            ]
+          : [
+              { id: "c1", label: `${scope} Standard Conformance`, default: true },
+              { id: "c2", label: `${scope} Defect-Free Visual Inspection`, default: true },
+            ],
       approved_by: approvedByUserId,
     },
   });
@@ -527,6 +535,44 @@ export async function executeIncomingQc(
         revision: { increment: 1 },
       },
     });
+  }
+
+  // 7. Update work task pipeline hand-off (Step 2 approval -> Step 3 raw store task)
+  if ("work_tasks" in (tx as any) && typeof (tx as any).work_tasks.updateMany === "function") {
+    await (tx as any).work_tasks.updateMany({
+      where: {
+        material_lot_id: lot.id,
+        action_code: "incoming-qc",
+        status: { in: ["queued", "claimed"] },
+      },
+      data: {
+        status: input.result === "pass" ? "completed" : "cancelled",
+        completed_at: new Date(),
+      },
+    });
+
+    if (input.result === "pass" && acceptedQty > 0) {
+      const existingIssueTask = await (tx as any).work_tasks.findFirst({
+        where: {
+          material_lot_id: lot.id,
+          action_code: "issue-material",
+          status: { in: ["queued", "claimed"] },
+        },
+      });
+      if (!existingIssueTask && typeof (tx as any).work_tasks.create === "function") {
+        await (tx as any).work_tasks.create({
+          data: {
+            action_code: "issue-material",
+            department_code: "raw_store",
+            material_lot_id: lot.id,
+            status: "queued",
+            created_by: staffUserId,
+            created_at: new Date(),
+            revision: 0,
+          },
+        });
+      }
+    }
   }
 
   return {
@@ -903,12 +949,18 @@ export async function executeFinalQcScan(
   holdId = hold.id;
 
   const rwkCode = `RWK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const answersObj = (context.answers as Record<string, any>) || {};
+  const assignedDept = (answersObj["assignedDepartment"] as string) || (answersObj["assigned_department_code"] as string) || null;
+
   const rework = await tx.rework_cases.create({
     data: {
       code: rwkCode,
       garment_id: garment.id,
       hold_id: hold.id,
-      status: "open",
+      status: assignedDept ? "assigned" : "open",
+      assigned_department_code: assignedDept,
+      assigned_by: assignedDept ? staffUserId : null,
+      assigned_at: assignedDept ? new Date() : null,
       description: context.defect_reason || "Failed Final QA inspection",
       opened_by: staffUserId,
       opened_at: new Date(),

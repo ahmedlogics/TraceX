@@ -20,6 +20,7 @@ import { can, canAccessRoute } from "@/domain/permissions";
 import { departmentLabels, roleLabels } from "@/domain/labels";
 import { useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
+import { StatusBadge } from "@/components/wt/StatusBadge";
 import { ReceiveLotDialog } from "@/features/materials/LotsView";
 import { TasksSection } from "@/features/tasks/TasksView";
 
@@ -37,56 +38,118 @@ function ReceivingLotsQueue() {
     <Loadable query={qLots}>
       {(lots) => {
         const unassigned = lots.filter((l) => !l.rfidUid);
-
-        if (unassigned.length === 0) {
-          return (
-            <div className="rounded-xl border border-dashed p-8 text-center space-y-3 bg-muted/20">
-              <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-success/10 text-success">
-                <Radio className="size-5" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">
-                  No lots awaiting RFID assignment
-                </p>
-                <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                  All recorded fabric lots have active RFID cards assigned. Click <strong className="text-foreground">"+ New Fabric Lot"</strong> when a new roll arrives.
-                </p>
-              </div>
-            </div>
-          );
-        }
+        const assignedLots = lots.filter((l) => !!l.rfidUid);
 
         return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Newly Created Lots Awaiting RFID Assignment ({unassigned.length})
-              </p>
-            </div>
-            <div className="divide-y rounded-lg border bg-card">
-              {unassigned.map((lot) => (
-                <div
-                  key={lot.id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
-                >
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-foreground">{lot.id} · {lot.material}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Supplier: <span className="font-medium">{lot.supplierRef}</span> · Amount: <span className="font-medium">{lot.receivedQty} {lot.unit ?? "m"}</span>
-                    </p>
+          <div className="space-y-6">
+            {/* Step 1: Newly Created Lots Awaiting RFID Assignment */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Step 1: Lots Awaiting RFID Assignment at Station 1 ({unassigned.length})
+                </p>
+              </div>
+              {unassigned.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
+                  <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
+                    <Radio className="size-4" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                      Card Pending
-                    </span>
-                    <Button asChild size="sm" className="h-8 text-xs gap-1.5">
-                      <AppLink href={paths.workstation}>
-                        Assign Card at Station 1 <ArrowRight className="size-3" />
-                      </AppLink>
-                    </Button>
-                  </div>
+                  <p className="text-sm font-medium text-foreground">
+                    All lots have active bundle cards assigned
+                  </p>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                    New incoming rolls created by managers will appear here ready for RFID tagging at Station 1.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                <div className="divide-y rounded-lg border bg-card">
+                  {unassigned.map((lot) => (
+                    <div
+                      key={lot.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
+                    >
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-foreground">{lot.id} · {lot.material}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Supplier: <span className="font-medium">{lot.supplierRef}</span> · Amount: <span className="font-medium">{lot.receivedQty} {lot.unit ?? "m"}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                          Card Pending
+                        </span>
+                        <Button asChild size="sm" className="h-8 text-xs gap-1.5">
+                          <AppLink href={paths.workstation}>
+                            Assign Card at Station 1 <ArrowRight className="size-3" />
+                          </AppLink>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Step 2 Quality Tracking: Fabric Lots Quality & Inspection Status */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Step 2 QC Status: Material Inspection Tracking ({assignedLots.length})
+                </p>
+              </div>
+              {assignedLots.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No fabric lots tagged yet.</p>
+              ) : (
+                <div className="divide-y rounded-lg border bg-card">
+                  {assignedLots.map((lot) => (
+                    <div
+                      key={lot.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-3.5 text-sm hover:bg-muted/30"
+                    >
+                      <div className="space-y-0.5 min-w-[200px]">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">{lot.id}</span>
+                          <span className="text-xs font-mono text-muted-foreground">({lot.material})</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Ref: <span className="font-medium">{lot.supplierRef}</span> · Balance: <span className="font-medium tabular-nums">{lot.balanceQty} / {lot.receivedQty} {lot.unit ?? "m"}</span>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded border border-success/30">
+                          <Radio className="size-3" /> {lot.rfidUid}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <StatusBadge status={lot.status} />
+                          {lot.status === "accepted" && (
+                            <span className="hidden sm:inline-block text-[11px] text-success font-medium">
+                              (Approved for Step 3)
+                            </span>
+                          )}
+                          {lot.status === "awaiting-inspection" && (
+                            <span className="hidden sm:inline-block text-[11px] text-warning font-medium">
+                              (Pending Step 2 QC)
+                            </span>
+                          )}
+                          {lot.status === "rejected" && (
+                            <span className="hidden sm:inline-block text-[11px] text-destructive font-medium">
+                              (Disapproved)
+                            </span>
+                          )}
+                        </div>
+
+                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                          <AppLink href={paths.lot(lot.id)}>
+                            View <ArrowRight className="size-3 ml-0.5" />
+                          </AppLink>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -127,13 +190,6 @@ export function DashboardView() {
           <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
             <AppLink href={paths.lots}>
               <Layers className="size-3.5 text-primary" /> Fabric Lots
-            </AppLink>
-          </Button>
-        )}
-        {canAccessRoute(me, "productionOrders") && (
-          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
-            <AppLink href={paths.orders}>
-              <Scissors className="size-3.5 text-primary" /> Orders
             </AppLink>
           </Button>
         )}
@@ -203,8 +259,8 @@ export function DashboardView() {
             {/* Department-tailored operational work */}
             {isReceivingUser ? (
               <Section
-                title="Incoming Fabric Lots & RFID Assignment"
-                description="Manager-registered fabric lots awaiting bundle card tagging at Station 1."
+                title="Step 1 & Step 2: Fabric Receiving & Inspection Tracking"
+                description="Manager-registered fabric lots awaiting bundle card tagging at Station 1 and downstream Step 2 QC clearance."
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <ReceiveLotDialog triggerLabel="+ New Fabric Lot" />

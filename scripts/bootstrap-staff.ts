@@ -26,6 +26,7 @@ const SEED_USERS: SeedUserSpec[] = [
   { username: "stitching.demo", displayName: "Stitching Line Operator", role: "production", departmentCode: "stitching" },
   { username: "finishing.demo", displayName: "Finishing & Tagging Lead", role: "production", departmentCode: "finishing" },
   { username: "qc.demo", displayName: "Final QA Inspector", role: "quality", departmentCode: "quality" },
+  { username: "qc.incoming", displayName: "Incoming Material QC Inspector", role: "quality", departmentCode: "receiving" },
   { username: "packing.demo", displayName: "Packaging Station Operator", role: "logistics", departmentCode: "packing" },
   { username: "warehouse.demo", displayName: "Warehouse Associate", role: "logistics", departmentCode: "warehouse" },
   { username: "dispatch.demo", displayName: "Dispatch & Freight Agent", role: "logistics", departmentCode: "dispatch" },
@@ -103,6 +104,20 @@ async function runBootstrap() {
           data: { staff_user_id: receivingUser.id, role: "materials", department_code: "raw_store" },
         });
         console.log(`✓ [materials ] @receiving.demo   - Added secondary grant for dept: raw_store`);
+      }
+    }
+
+    // Also grant qc.incoming secondary access to raw_store for fabric oversight
+    const qcIncomingUser = await prisma.staff_users.findUnique({ where: { username: "qc.incoming" } });
+    if (qcIncomingUser) {
+      const hasRawStore = await prisma.staff_role_grants.findFirst({
+        where: { staff_user_id: qcIncomingUser.id, role: "quality", department_code: "raw_store", revoked_at: null },
+      });
+      if (!hasRawStore) {
+        await prisma.staff_role_grants.create({
+          data: { staff_user_id: qcIncomingUser.id, role: "quality", department_code: "raw_store" },
+        });
+        console.log(`✓ [quality   ] @qc.incoming     - Added secondary grant for dept: raw_store`);
       }
     }
 

@@ -16,8 +16,8 @@ import type {
   ChecklistItem,
   Department,
   Garment,
-  Inspection,
   GarmentHold,
+  Inspection,
   LifecycleStage,
   MaterialLot,
   ProductSpecification,
@@ -207,6 +207,25 @@ export function notImplemented(methodName: string): never {
   );
 }
 
+function mapDbStageToLifecycleStage(stage: string): LifecycleStage {
+  switch (stage) {
+    case "cut":
+      return "stitching";
+    case "stitched":
+      return "finishing";
+    case "finished":
+      return "final-qc";
+    case "packed":
+      return "warehouse";
+    case "warehoused":
+      return "allocated";
+    case "dispatched":
+      return "dispatched";
+    default:
+      return (stage as LifecycleStage) || "cutting";
+  }
+}
+
 /**
  * Creates the real HTTP-backed WearTrailClient.
  */
@@ -322,7 +341,49 @@ export function createHttpClient(): WearTrailClient {
       return await req<DashboardData>("/api/staff/dashboard", { method: "GET" });
     },
     async listTasks(): Promise<Task[]> {
-      return await req<Task[]>("/api/tasks", { method: "GET" });
+      const raw = await req<any[]>("/api/tasks", { method: "GET" });
+      return (raw || []).map((t) => {
+        if (t.department && t.kind) return t as Task;
+        let subjectType: Task["subjectType"] = "garment";
+        let subjectId = t.id;
+        if (t.garmentId) {
+          subjectType = "garment";
+          subjectId = t.garmentId;
+        } else if (t.materialLotId) {
+          subjectType = "lot";
+          subjectId = t.materialLotId;
+        } else if (t.productionOrderId) {
+          subjectType = "order";
+          subjectId = t.productionOrderId;
+        } else if (t.shipmentId) {
+          subjectType = "shipment";
+          subjectId = t.shipmentId;
+        }
+        let status: Task["status"] = "open";
+        if (t.status === "completed" || t.status === "done") {
+          status = "done";
+        } else if (t.status === "claimed" || t.status === "in_progress") {
+          status = "claimed";
+        }
+        const rawDept = (t.departmentCode || t.department || "").replace(/_/g, "-");
+        return {
+          id: t.id,
+          kind: (t.actionCode || t.kind || "incoming-qc") as Task["kind"],
+          title:
+            t.title ||
+            (t.actionCode
+              ? t.actionCode.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+              : `Task ${t.id}`),
+          department: rawDept as any,
+          subjectType,
+          subjectId,
+          checkpoint: t.checkpointCode ?? t.checkpoint,
+          status,
+          assigneeId: t.assigneeId,
+          createdAt: t.createdAt,
+          completedAt: t.completedAt,
+        };
+      });
     },
     async claimTask(taskId: string): Promise<void> {
       await req(`/api/tasks/${encodeURIComponent(taskId)}/claim`, { method: "POST" });
@@ -421,6 +482,8 @@ export function createHttpClient(): WearTrailClient {
       const raw = await req<any[]>("/api/materials/lots", { method: "GET" });
       return (raw || []).map((l: any) => ({
         id: l.code || l.id,
+        lotId: l.id,
+        code: l.code || l.id,
         material: l.materialName || l.material || "Unknown Material",
         supplierRef: l.supplierLotRef || l.supplierRef || "—",
         receivedQty: Number(l.receivedQuantity ?? l.receivedQty ?? 0),
@@ -428,7 +491,11 @@ export function createHttpClient(): WearTrailClient {
         unit: l.unit || "m",
         receivedAt: l.receivedAt || new Date().toISOString(),
         receivedBy: l.receivedByName || l.receivedBy || "Staff",
-        status: l.status || "accepted",
+        status:
+          l.status ||
+          (Number(l.availableAcceptedQuantity ?? l.balanceQty ?? 0) > 0
+            ? "accepted"
+            : "awaiting-inspection"),
         rfidUid: l.activeTagUid || l.rfidUid || undefined,
       }));
     },
@@ -563,16 +630,6 @@ export function createHttpClient(): WearTrailClient {
     async listGarments(): Promise<Garment[]> {
       const raw = await req<any[]>("/api/production/garments", { method: "GET" });
       return (raw || []).map((g: any) => {
-        const dbStage = g.stage;
-        let lifecycleStage: LifecycleStage = "cutting";
-        if (dbStage === "cut") lifecycleStage = "stitching";
-        else if (dbStage === "stitched") lifecycleStage = "finishing";
-        else if (dbStage === "finished") lifecycleStage = "final-qc";
-        else if (dbStage === "packed") lifecycleStage = "packing";
-        else if (dbStage === "warehoused") lifecycleStage = "warehouse";
-        else if (dbStage === "dispatched") lifecycleStage = "dispatched";
-        else if (dbStage) lifecycleStage = dbStage as LifecycleStage;
-
         const isHeld = g.qualityDisposition === "held" || Boolean(g.holdReason || g.hold);
         const hold: GarmentHold | null = isHeld
           ? {
@@ -589,7 +646,7 @@ export function createHttpClient(): WearTrailClient {
           productName: g.productName || "Unknown Garment",
           size: g.sizeLabel || g.size || "M",
           cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
-          stage: lifecycleStage,
+          stage: mapDbStageToLifecycleStage(g.stage),
           disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
           hold,
           rfidUid: g.activeTagUid || g.rfidUid || undefined,
