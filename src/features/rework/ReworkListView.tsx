@@ -59,9 +59,11 @@ export function ReworkListView() {
   const stationCode =
     me.department === "stitching"
       ? "stitching"
-      : me.department === "cutting"
-        ? "cutting"
-        : null;
+      : me.department === "finishing"
+        ? "finishing"
+        : me.department === "cutting"
+          ? "cutting"
+          : null;
 
   const qStation = useWtQuery(
     ["rfid-station", stationCode ?? "stitching"],
@@ -384,7 +386,15 @@ export function ReworkListView() {
                             <div className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px] flex items-center justify-between">
                               <div className="flex items-center gap-1.5 text-primary font-medium">
                                 <Radio className="size-3.5 animate-pulse" />
-                                <span>Hardware Scanner Active ({stationCode === "stitching" ? "Scanner 4" : "Scanner 3"})</span>
+                                <span>
+                                  Hardware Scanner Active (
+                                  {stationCode === "finishing"
+                                    ? "Scanner 5"
+                                    : stationCode === "stitching"
+                                      ? "Scanner 4"
+                                      : "Scanner 3"}
+                                  )
+                                </span>
                               </div>
                               <span className="text-muted-foreground text-[10px]">Listening for tag scan...</span>
                             </div>

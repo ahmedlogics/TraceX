@@ -349,6 +349,7 @@ export type LifecycleStage =
   | "stitching"
   | "stitched"
   | "finishing"
+  | "finished"
   | "final-qc"
   | "rework"
   | "packing"

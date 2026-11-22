@@ -213,7 +213,7 @@ function mapDbStageToLifecycleStage(stage: string): LifecycleStage {
     case "stitched":
       return "stitched";
     case "finished":
-      return "final-qc";
+      return "finished";
     case "packed":
       return "warehouse";
     case "warehoused":

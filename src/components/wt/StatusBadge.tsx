@@ -33,8 +33,10 @@ const toneFor: Record<string, Tone> = {
   released: "success",
   // stages
   stitched: "success",
+  finished: "success",
   stitching: "info",
   finishing: "info",
+  "final-qc": "success",
   dispatched: "success",
   rework: "danger",
   // tasks
@@ -64,8 +66,10 @@ const toneFor: Record<string, Tone> = {
   hold: "danger",
 };
 
-const pretty = (s: string) =>
-  /\s/.test(s) ? s : s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+const pretty = (s: string) => {
+  if (s === "final-qc") return "Finished";
+  return /\s/.test(s) ? s : s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+};
 
 /** Text-labelled status badge. Pass `label` to prefix a field name (e.g. "Stage"). */
 export function StatusBadge({

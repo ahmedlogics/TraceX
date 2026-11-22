@@ -903,7 +903,7 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     const garment = binding.garments;
-    if (garment.stage !== "stitched" && garment.stage !== "finished") {
+    if (garment.stage !== "stitched" && garment.stage !== "finished" && garment.stage !== "finishing") {
       throw ApiError.badRequest(
         `Wrong Stage: Garment ${garment.code} cannot be processed at finishing; current stage is '${garment.stage}'. Expected stitching completion first.`,
         { garmentId: garment.id, stage: garment.stage },

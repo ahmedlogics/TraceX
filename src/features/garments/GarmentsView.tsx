@@ -19,6 +19,7 @@ const stages: LifecycleStage[] = [
   "stitching",
   "stitched",
   "finishing",
+  "finished",
   "final-qc",
   "rework",
   "packing",
@@ -30,6 +31,13 @@ const stages: LifecycleStage[] = [
 export function GarmentsView() {
   const me = useMe();
   const isStitching = me?.department === "stitching" || me?.username === "stitching.demo";
+  const isFinishing = me?.department === "finishing" || me?.username === "finishing.demo";
+  const activeStationCode: "stitching" | "finishing" | null = isStitching
+    ? "stitching"
+    : isFinishing
+      ? "finishing"
+      : null;
+
   const canAccessNfc = can.accessNfcHub(me);
   const q = useWtQuery(["garments"], (c) => c.listGarments());
   const { run } = useWtAction();
@@ -39,20 +47,20 @@ export function GarmentsView() {
   const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
   const [recentScanOutcome, setRecentScanOutcome] = useState<ScanOutcome | null>(null);
 
-  // Poll hardware station data for Station 4 (Stitching reader)
+  // Poll hardware station data for Station 4 (Stitching) or Station 5 (Finishing)
   const qStation = useWtQuery(
-    ["rfid-station", "stitching"],
-    (c) => c.getRfidStationData("stitching"),
+    ["rfid-station", activeStationCode ?? "stitching"],
+    (c) => c.getRfidStationData((activeStationCode ?? "stitching") as any),
     {
-      enabled: isStitching,
+      enabled: !!activeStationCode,
       refetchInterval: 1200,
     },
   );
 
-  // Auto-detect scans arriving via MQTT/backend hardware reader at Station 4
+  // Auto-detect scans arriving via MQTT/backend hardware reader
   const lastSeenScanRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isStitching) return;
+    if (!activeStationCode) return;
     const outcome = qStation.data?.lastScanOutcome;
     if (!outcome) return;
     if (outcome.at && outcome.at !== lastSeenScanRef.current) {
@@ -60,12 +68,12 @@ export function GarmentsView() {
       setRecentScanOutcome(outcome);
       void q.refetch();
     }
-  }, [isStitching, qStation.data?.lastScanOutcome, q]);
+  }, [activeStationCode, qStation.data?.lastScanOutcome, q]);
 
-  // Global USB Keyboard Wedge RFID reader listener for Station 4
-  // Enables hardware scanner 4 to automatically capture card UID without any manual typing or selecting
+  // Global USB Keyboard Wedge RFID reader listener for Station 4 & 5
+  // Enables hardware scanner to automatically capture card UID without any manual typing or selecting
   useEffect(() => {
-    if (!isStitching) return;
+    if (!activeStationCode) return;
     let buffer = "";
     let lastKeyTime = Date.now();
 
@@ -85,12 +93,14 @@ export function GarmentsView() {
         if (scanned.length >= 4 && /^[0-9A-F]+$/i.test(scanned)) {
           e.preventDefault();
           void run(
-            (c) => c.routineScan(scanned, "stitching"),
+            (c) => c.routineScan(scanned, activeStationCode),
             (outcome) => {
               setRecentScanOutcome(outcome);
               void q.refetch();
+              const stationLabel = activeStationCode === "finishing" ? "Finishing" : "Stitching";
+              const targetStatus = activeStationCode === "finishing" ? "Finished" : "Stitched";
               if (outcome.resolution === "accepted") {
-                return `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName ?? "Garment"}) stitching complete! Status updated to Stitched.`;
+                return `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName ?? "Garment"}) ${stationLabel} complete! Status updated to ${targetStatus}.`;
               }
               return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
             },
@@ -103,7 +113,7 @@ export function GarmentsView() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isStitching, q, run]);
+  }, [activeStationCode, q, run]);
 
   const effectiveTab = canAccessNfc ? activeTab : "register";
   const activeOutcome = recentScanOutcome ?? qStation.data?.lastScanOutcome ?? null;
@@ -186,8 +196,8 @@ export function GarmentsView() {
 
           return (
             <div className="space-y-6">
-              {/* Station 4 Stitching Live Hardware Reader Status */}
-              {isStitching && (
+              {/* Station 4/5 Stitching & Finishing Live Hardware Reader Status */}
+              {activeStationCode && (
                 <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -201,14 +211,18 @@ export function GarmentsView() {
                       <div>
                         <div className="flex items-center gap-2">
                           <h2 className="text-sm font-bold text-foreground">
-                            Station 4 — Stitching Line Reader (Live Scanner 4 Active)
+                            {activeStationCode === "finishing"
+                              ? "Station 5 — Finishing Line Reader (Live Scanner 5 Active)"
+                              : "Station 4 — Stitching Line Reader (Live Scanner 4 Active)"}
                           </h2>
                           <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success border border-success/30">
                             Ready for Scans
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Zero manual clicks required. Simply present physical garment tag to Scanner 4. Details are fetched and status dynamically updates to Stitched.
+                          {activeStationCode === "finishing"
+                            ? "Zero manual clicks required. Simply present physical garment tag to Scanner 5. Details are fetched and status dynamically updates to Finished."
+                            : "Zero manual clicks required. Simply present physical garment tag to Scanner 4. Details are fetched and status dynamically updates to Stitched."}
                         </p>
                       </div>
                     </div>
@@ -238,7 +252,9 @@ export function GarmentsView() {
                           </span>
                           <span className="text-muted-foreground ml-2">
                             {activeOutcome.resolution === "accepted"
-                              ? "· Stitching Complete → Status Updated to Stitched"
+                              ? activeStationCode === "finishing"
+                                ? "· Finishing Complete → Status Updated to Finished"
+                                : "· Stitching Complete → Status Updated to Stitched"
                               : `· ${activeOutcome.rejectReason ?? activeOutcome.resolution}`}
                           </span>
                         </div>
