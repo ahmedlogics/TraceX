@@ -19,6 +19,10 @@ export function getDataMode(): DataMode {
     return "live";
   }
 
+  const envMode = import.meta.env?.["VITE_DATA_MODE"] as string | undefined;
+  if (envMode === "live") return "live";
+  if (envMode === "mock") return "mock";
+
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem(DATA_MODE_STORAGE_KEY);
@@ -27,10 +31,6 @@ export function getDataMode(): DataMode {
       /* ignore */
     }
   }
-
-  const envMode = import.meta.env?.["VITE_DATA_MODE"] as string | undefined;
-  if (envMode === "live") return "live";
-  if (envMode === "mock") return "mock";
 
   // When backend is explicitly configured via VITE_API_URL or VITE_API_BASE_URL, default to live
   if (import.meta.env?.["VITE_API_URL"] || import.meta.env?.["VITE_API_BASE_URL"]) return "live";

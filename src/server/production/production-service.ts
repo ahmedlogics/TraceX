@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
@@ -5,6 +6,8 @@ import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
 import type { ISubjectRevisionService } from "../contracts/services";
 import { toActorRef } from "../materials/materials-service";
+import { createInternalCommitment } from "../ledger/commitment-service";
+import type { ScanOutcome, ScanResolution } from "@/domain/types";
 import type {
   ApproveOrderInput,
   BindGarmentTagInput,
@@ -13,6 +16,7 @@ import type {
   ConfirmCuttingSourceResult,
   GarmentDetailDTO,
   GarmentDTO,
+  GarmentStage,
   OrderStatus,
   PlanOrderInput,
   ProductionOrderDetailDTO,
@@ -351,7 +355,10 @@ export async function getOrderDetail(
       qualityDisposition: g.quality_disposition,
       createdAt: g.created_at.toISOString(),
       revision: g.revision,
-      activeTagUid: g.rfid_tag_bindings?.tag_uid ?? null,
+      activeTagUid:
+        (g.rfid_tag_bindings as any)?.[0]?.tag_uid ??
+        (g.rfid_tag_bindings as any)?.tag_uid ??
+        null,
     }));
 
     return {
@@ -960,19 +967,62 @@ export async function replaceGarmentCard(
 
 // ---------------------------------------------------------------- Routine Assembly Scans (Stitching & Finishing)
 
-export async function routineProductionScan(
+async function recordRfidScanLog(
+  db: PrismaTransactionClient,
+  tagUid: string,
+  stationCode: string,
+  outcome: "accepted" | "rejected",
+  outcomeCode: string,
+  outcomeMessage: string,
+  extra?: { garmentId?: string | null; materialLotId?: string | null; tagBindingId?: string | null },
+) {
+  try {
+    const deviceId = "00000000-0000-0000-0000-000000000000";
+    const scanId = `routine-${crypto.randomUUID()}`;
+    const bootId = `boot-routine`;
+    const fingerprint = crypto.createHash("sha256").update(scanId).digest();
+    await (db as any).rfid_scans.create({
+      data: {
+        device_id: deviceId,
+        scan_id: scanId,
+        boot_id: bootId,
+        sequence: BigInt(Date.now()),
+        reader_index: stationCode === "stitching" ? 6 : 7,
+        reported_mapping_version: 1,
+        tag_uid: tagUid,
+        station_code: stationCode,
+        tag_binding_id: extra?.tagBindingId ?? null,
+        garment_id: extra?.garmentId ?? null,
+        material_lot_id: extra?.materialLotId ?? null,
+        request_sha256: new Uint8Array(fingerprint),
+        received_at: new Date(),
+        outcome,
+        outcome_code: outcomeCode,
+        outcome_message: outcomeMessage,
+      },
+    });
+  } catch {
+    // Non-blocking scan log recording
+  }
+}
+
+export async function executeRoutineScan(
   input: RoutineScanInput,
   actor?: unknown,
-  tx?: PrismaTransactionClient,
-): Promise<RoutineScanResult> {
-  const actorRef = toActorRef(actor);
+  txClient?: PrismaTransactionClient,
+): Promise<ScanOutcome> {
   const normalizedUid = normalizeTagUid(input.tagUid);
+  const now = new Date();
+  const actorRef = toActorRef(actor);
 
   return runInTransaction(async (db) => {
+    // 1. Identify active binding
     const binding = await db.rfid_tag_bindings.findFirst({
       where: {
-        tag_uid: normalizedUid,
-        unbound_at: null,
+        OR: [
+          { tag_uid: normalizedUid, unbound_at: null },
+          { tag_identifier: normalizedUid, unbound_at: null },
+        ],
       },
       include: {
         garments: {
@@ -990,67 +1040,181 @@ export async function routineProductionScan(
     });
 
     if (!binding) {
-      throw ApiError.notFound(
-        `RFID card UID '${normalizedUid}' is not recognized or has no active binding.`,
-        { tagUid: normalizedUid },
+      await recordRfidScanLog(
+        db,
+        normalizedUid,
+        input.stationCode,
+        "rejected",
         "WT_ERR_UNKNOWN_CARD",
+        `UID ${normalizedUid} is not recognised.`,
       );
+
+      return {
+        uid: normalizedUid,
+        resolution: "rejected_unknown_card",
+        rejectReason: `UID ${normalizedUid} is not recognised.`,
+        at: now.toISOString(),
+      };
     }
 
     if (!binding.garments || !binding.garment_id) {
-      throw ApiError.badRequest(
-        `Card '${normalizedUid}' is bound to a fabric bundle, not a garment. Routine assembly station requires a garment card.`,
-        { tagUid: normalizedUid },
+      await recordRfidScanLog(
+        db,
+        normalizedUid,
+        input.stationCode,
+        "rejected",
         "WT_ERR_WRONG_SUBJECT_TYPE",
+        `Card '${normalizedUid}' is bound to a fabric bundle, not a garment. Routine ${input.stationCode} station requires a garment card.`,
+        { materialLotId: binding.material_lot_id, tagBindingId: binding.id },
       );
+
+      return {
+        uid: normalizedUid,
+        resolution: "rejected_wrong_subject_type",
+        rejectReason: `Card '${normalizedUid}' is bound to a fabric bundle, not a garment. Routine ${input.stationCode} station requires a garment card.`,
+        at: now.toISOString(),
+      };
     }
 
     const garment = binding.garments;
-    if (garment.quality_disposition === "held") {
-      throw ApiError.badRequest(
-        `Garment '${garment.code}' has an active quality hold. Routine assembly progression is blocked until cleared by QC.`,
-        { garmentId: garment.id },
-        "WT_ERR_ACTIVE_HOLD",
-      );
-    }
-    const currentStage = garment.stage;
-    let nextStage: GarmentDTO["stage"] = currentStage;
-    let nextExpectedStation = "";
+    const productName =
+      garment.cutting_jobs?.production_orders?.product_spec_versions?.product_name || "Garment";
 
-    if (input.stationCode === "stitching") {
-      if (currentStage !== "cut" && currentStage !== "stitched") {
-        throw ApiError.badRequest(
-          `Garment '${garment.code}' is at stage '${currentStage}'. Expected stage 'cut' for stitching station.`,
-          { currentStage, station: "stitching" },
-          "WT_ERR_WRONG_STAGE",
-        );
-      }
-      nextStage = "finished";
-      nextExpectedStation = "finishing";
-    } else if (input.stationCode === "finishing") {
-      if (currentStage !== "finished" && currentStage !== "stitched") {
-        throw ApiError.badRequest(
-          `Garment '${garment.code}' is at stage '${currentStage}'. Expected stage 'finished' or 'stitched' for finishing station.`,
-          { currentStage, station: "finishing" },
-          "WT_ERR_WRONG_STAGE",
-        );
-      }
-      nextStage = "finished";
-      nextExpectedStation = "final_qc";
+    // 2. Active quality hold check
+    const activeHold = await db.garment_holds.findFirst({
+      where: { garment_id: garment.id, released_at: null },
+    });
+    if (garment.quality_disposition === "held" || activeHold) {
+      const reason = activeHold?.reason || "Active quality hold is in effect";
+      const rejectReason = `Garment '${garment.code}' has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`;
+
+      await recordRfidScanLog(
+        db,
+        normalizedUid,
+        input.stationCode,
+        "rejected",
+        "WT_ERR_ACTIVE_HOLD",
+        rejectReason,
+        { garmentId: garment.id, tagBindingId: binding.id },
+      );
+
+      return {
+        uid: normalizedUid,
+        resolution: "rejected_business_rule",
+        garmentCode: garment.code,
+        subjectId: garment.id,
+        productName,
+        rejectReason,
+        at: now.toISOString(),
+      };
     }
+
+    // 3. Duplicate scan check
+    const existingTrace = await db.trace_events.findFirst({
+      where: {
+        garment_id: garment.id,
+        event_type: `${input.stationCode}_completed`,
+      },
+    });
+    if (
+      (input.stationCode === "stitching" &&
+        (garment.stage === "stitched" || garment.stage === "finished")) ||
+      existingTrace
+    ) {
+      const rejectReason = `Duplicate scan: Garment '${garment.code}' has already completed ${input.stationCode} and advanced to Finishing.`;
+
+      await recordRfidScanLog(
+        db,
+        normalizedUid,
+        input.stationCode,
+        "rejected",
+        "WT_ERR_DUPLICATE_SCAN",
+        rejectReason,
+        { garmentId: garment.id, tagBindingId: binding.id },
+      );
+
+      return {
+        uid: normalizedUid,
+        resolution: "rejected_duplicate",
+        garmentCode: garment.code,
+        subjectId: garment.id,
+        productName,
+        rejectReason,
+        at: now.toISOString(),
+      };
+    }
+
+    // 4. Current stage / cutting completion check
+    if (input.stationCode === "stitching") {
+      if (garment.stage !== "cut") {
+        const rejectReason = `Garment '${garment.code}' is at stage '${garment.stage}'. Expected stage 'cut' (cutting completed) for stitching station.`;
+
+        await recordRfidScanLog(
+          db,
+          normalizedUid,
+          input.stationCode,
+          "rejected",
+          "WT_ERR_WRONG_STAGE",
+          rejectReason,
+          { garmentId: garment.id, tagBindingId: binding.id },
+        );
+
+        return {
+          uid: normalizedUid,
+          resolution: "rejected_wrong_stage",
+          garmentCode: garment.code,
+          subjectId: garment.id,
+          productName,
+          rejectReason,
+          at: now.toISOString(),
+        };
+      }
+    } else if (input.stationCode === "finishing") {
+      if (garment.stage !== "stitched") {
+        const rejectReason = `Garment '${garment.code}' is at stage '${garment.stage}'. Expected stage 'stitched' for finishing station.`;
+
+        await recordRfidScanLog(
+          db,
+          normalizedUid,
+          input.stationCode,
+          "rejected",
+          "WT_ERR_WRONG_STAGE",
+          rejectReason,
+          { garmentId: garment.id, tagBindingId: binding.id },
+        );
+
+        return {
+          uid: normalizedUid,
+          resolution: "rejected_wrong_stage",
+          garmentCode: garment.code,
+          subjectId: garment.id,
+          productName,
+          rejectReason,
+          at: now.toISOString(),
+        };
+      }
+    }
+
+    // 5. Valid: Advance stage to next stage
+    const nextStage: GarmentStage = input.stationCode === "stitching" ? "stitched" : "finished";
+    const nextExpectedStation = input.stationCode === "stitching" ? "finishing" : "final_qc";
 
     let staffUserId = actorRef.id;
-    const existingStaff = await db.staff_users.findUnique({
-      where: { id: staffUserId },
-    });
-    if (!existingStaff) {
+    let staffName = "Sam Stitching";
+    const staff = await db.staff_users.findUnique({ where: { id: staffUserId } });
+    if (staff) {
+      staffName = staff.display_name;
+    } else {
       const fallback = await db.staff_users.findFirst({
         where: { suspended_at: null },
       });
-      staffUserId = fallback ? fallback.id : "00000000-0000-0000-0000-000000000000";
+      if (fallback) {
+        staffUserId = fallback.id;
+        staffName = fallback.display_name;
+      }
     }
 
-    await db.garments.update({
+    const updatedGarment = await db.garments.update({
       where: { id: garment.id },
       data: {
         stage: nextStage,
@@ -1059,6 +1223,44 @@ export async function routineProductionScan(
       },
     });
 
+    // Record trace event (public journey & manufacturing history)
+    const traceEvent = await db.trace_events.create({
+      data: {
+        event_type: `${input.stationCode}_completed`,
+        garment_id: garment.id,
+        subject_revision: updatedGarment.revision,
+        actor_id: staffUserId,
+        details: {
+          garmentCode: garment.code,
+          tagUid: normalizedUid,
+          station: input.stationCode,
+          operator: staffName,
+          source: input.isHardware ? "rfid_reader_hw" : "workstation_manual_entry",
+          timestamp: now.toISOString(),
+        },
+      },
+    });
+
+    try {
+      await createInternalCommitment(
+        {
+          traceEventId: traceEvent.id,
+          payload: {
+            version: 1,
+            eventType: `${input.stationCode}_completed`,
+            garmentId: garment.id,
+            garmentCode: garment.code,
+            station: input.stationCode,
+            timestamp: now.toISOString(),
+          },
+        },
+        db,
+      );
+    } catch {
+      // ledger fallback
+    }
+
+    // Record audit event
     await db.audit_events.create({
       data: {
         actor_staff_id: staffUserId,
@@ -1069,26 +1271,72 @@ export async function routineProductionScan(
         details: {
           garmentId: garment.id,
           code: garment.code,
-          fromStage: currentStage,
+          fromStage: garment.stage,
           toStage: nextStage,
           station: input.stationCode,
+          operator: staffName,
+          isManual: !input.isHardware,
+          timestamp: now.toISOString(),
         },
       },
     });
 
-    const productName =
-      garment.cutting_jobs.production_orders.product_spec_versions.product_name;
+    // Record accepted scan
+    await recordRfidScanLog(
+      db,
+      normalizedUid,
+      input.stationCode,
+      "accepted",
+      `${input.stationCode}_completed`,
+      `Garment ${garment.code} ${input.stationCode} completed. Ready for ${nextExpectedStation}.`,
+      { garmentId: garment.id, tagBindingId: binding.id },
+    );
 
     return {
-      accepted: true,
-      garmentId: garment.id,
+      uid: normalizedUid,
+      resolution: "accepted",
+      subjectId: garment.id,
       garmentCode: garment.code,
       productName,
-      stage: nextStage,
-      nextExpectedStation,
-      qualityDisposition: "awaiting_inspection",
+      at: now.toISOString(),
     };
-  }, tx);
+  }, txClient);
+}
+
+export async function routineProductionScan(
+  input: RoutineScanInput,
+  actor?: unknown,
+  tx?: PrismaTransactionClient,
+): Promise<RoutineScanResult> {
+  const outcome = await executeRoutineScan(input, actor, tx);
+  if (outcome.resolution !== "accepted") {
+    if (outcome.resolution === "rejected_unknown_card") {
+      throw ApiError.notFound(outcome.rejectReason || "RFID card not recognized", undefined, "WT_ERR_UNKNOWN_CARD");
+    }
+    if (outcome.resolution === "rejected_duplicate") {
+      throw ApiError.conflict(outcome.rejectReason || "Duplicate scan", undefined, "WT_ERR_DUPLICATE_SCAN");
+    }
+    if (outcome.resolution === "rejected_business_rule") {
+      throw ApiError.badRequest(outcome.rejectReason || "Quality hold in effect", undefined, "WT_ERR_ACTIVE_HOLD");
+    }
+    throw ApiError.badRequest(outcome.rejectReason || "Wrong stage", undefined, "WT_ERR_WRONG_STAGE");
+  }
+
+  const nextStage: GarmentStage = input.stationCode === "stitching" ? "stitched" : "finished";
+  const nextExpectedStation = input.stationCode === "stitching" ? "finishing" : "final_qc";
+
+  return {
+    accepted: true,
+    garmentId: outcome.subjectId || "",
+    garmentCode: outcome.garmentCode || "",
+    productName: outcome.productName || "",
+    stage: nextStage,
+    nextExpectedStation,
+    qualityDisposition: "awaiting_inspection",
+    uid: outcome.uid,
+    resolution: "accepted",
+    at: outcome.at,
+  };
 }
 
 // ---------------------------------------------------------------- Garments Directory & Detail
@@ -1115,6 +1363,9 @@ export async function listGarments(
         rfid_tag_bindings: {
           where: { unbound_at: null },
         },
+        garment_holds: {
+          where: { released_at: null },
+        },
       },
       orderBy: { created_at: "desc" },
     });
@@ -1133,7 +1384,11 @@ export async function listGarments(
       qualityDisposition: g.quality_disposition,
       createdAt: g.created_at.toISOString(),
       revision: g.revision,
-      activeTagUid: g.rfid_tag_bindings?.tag_uid ?? null,
+      activeTagUid:
+        (g.rfid_tag_bindings as any)?.[0]?.tag_uid ??
+        (g.rfid_tag_bindings as any)?.tag_uid ??
+        null,
+      holdReason: (g as any).garment_holds?.[0]?.reason ?? null,
     }));
   }, tx);
 }

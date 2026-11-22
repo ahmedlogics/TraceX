@@ -186,6 +186,7 @@ export interface ReplaceGarmentCardResult {
 export interface RoutineScanInput {
   tagUid: string;
   stationCode: "stitching" | "finishing";
+  isHardware?: boolean;
 }
 
 export interface RoutineScanResult {
@@ -196,4 +197,8 @@ export interface RoutineScanResult {
   stage: GarmentStage;
   nextExpectedStation: string;
   qualityDisposition: QualityStatus;
+  uid?: string;
+  resolution?: string;
+  rejectReason?: string;
+  at?: string;
 }

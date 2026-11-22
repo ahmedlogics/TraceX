@@ -9,6 +9,7 @@ import { isOperatorAuthorizedForStation } from "../rfid/session-resolver";
 import { createPrismaAuthMiddleware } from "../auth/actor-context";
 import { authenticateDevice, extractDeviceSecret } from "../rfid/device-auth";
 import { getOrCreateChecklistVersion } from "../quality/quality-service";
+import { executeRoutineScan } from "../production/production-service";
 import type {
   RfidStationCode,
   VersionedScanEnvelope,
@@ -690,9 +691,12 @@ rfidRouter.post(
       const { uid, stationCode } = req.body as { uid?: string; stationCode?: "stitching" | "finishing" };
       if (!uid || !stationCode) throw ApiError.badRequest("uid and stationCode are required.");
 
-      // Route to ui-scan
-      req.body = { uid, stationCode };
-      return (rfidRouter as any).handle(req, res, next);
+      const staff = getStaffUser(req);
+      const outcome = await executeRoutineScan(
+        { tagUid: uid, stationCode, isHardware: false },
+        staff,
+      );
+      sendSuccess(res, outcome, 200);
     } catch (err) {
       next(err);
     }

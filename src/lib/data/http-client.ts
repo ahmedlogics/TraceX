@@ -17,6 +17,8 @@ import type {
   Department,
   Garment,
   Inspection,
+  GarmentHold,
+  LifecycleStage,
   MaterialLot,
   ProductSpecification,
   ProductionOrder,
@@ -25,6 +27,7 @@ import type {
   ReworkCase,
   Role,
   ScanOutcome,
+  ScanResolution,
   SensorId,
   Settings,
   Shipment,
@@ -384,10 +387,29 @@ export function createHttpClient(): WearTrailClient {
       });
     },
     async routineScan(uid: string, stationCode: "stitching" | "finishing"): Promise<ScanOutcome> {
-      return await req<ScanOutcome>("/api/rfid/routine-scan", {
-        method: "POST",
-        body: { uid, stationCode },
-      });
+      try {
+        return await req<ScanOutcome>("/api/rfid/routine-scan", {
+          method: "POST",
+          body: { uid, stationCode },
+        });
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const code = err.code.toLowerCase();
+          let resolution: ScanResolution = "rejected_unknown_card";
+          if (code.includes("stage")) resolution = "rejected_wrong_stage";
+          else if (code.includes("hold")) resolution = "rejected_business_rule";
+          else if (code.includes("duplicate")) resolution = "rejected_duplicate";
+          else if (code.includes("subject")) resolution = "rejected_wrong_subject_type";
+
+          return {
+            uid,
+            resolution,
+            rejectReason: err.message,
+            at: new Date().toISOString(),
+          };
+        }
+        throw err;
+      }
     },
     async simulateRfidScan(uid: string): Promise<ScanOutcome> {
       return await req<ScanOutcome>("/api/rfid/ui-scan", {
@@ -540,18 +562,39 @@ export function createHttpClient(): WearTrailClient {
     },
     async listGarments(): Promise<Garment[]> {
       const raw = await req<any[]>("/api/production/garments", { method: "GET" });
-      return (raw || []).map((g: any) => ({
-        id: g.code || g.id,
-        orderId: g.productionOrderCode || g.productionOrderId || g.orderId || "",
-        publicId: g.publicId || "",
-        productName: g.productName || "Unknown Garment",
-        size: g.sizeLabel || g.size || "M",
-        cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
-        stage: g.stage || "cutting",
-        disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
-        hold: null,
-        rfidUid: g.activeTagUid || g.rfidUid || undefined,
-      }));
+      return (raw || []).map((g: any) => {
+        const dbStage = g.stage;
+        let lifecycleStage: LifecycleStage = "cutting";
+        if (dbStage === "cut") lifecycleStage = "stitching";
+        else if (dbStage === "stitched") lifecycleStage = "finishing";
+        else if (dbStage === "finished") lifecycleStage = "final-qc";
+        else if (dbStage === "packed") lifecycleStage = "packing";
+        else if (dbStage === "warehoused") lifecycleStage = "warehouse";
+        else if (dbStage === "dispatched") lifecycleStage = "dispatched";
+        else if (dbStage) lifecycleStage = dbStage as LifecycleStage;
+
+        const isHeld = g.qualityDisposition === "held" || Boolean(g.holdReason || g.hold);
+        const hold: GarmentHold | null = isHeld
+          ? {
+              reason: g.holdReason || g.hold?.reason || "Active Quality Hold",
+              since: g.createdAt || new Date().toISOString(),
+              inspectionId: g.inspectionId || g.hold?.inspectionId || "INSP-HOLD",
+            }
+          : null;
+
+        return {
+          id: g.code || g.id,
+          orderId: g.productionOrderCode || g.productionOrderId || g.orderId || "",
+          publicId: g.publicId || "",
+          productName: g.productName || "Unknown Garment",
+          size: g.sizeLabel || g.size || "M",
+          cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
+          stage: lifecycleStage,
+          disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
+          hold,
+          rfidUid: g.activeTagUid || g.rfidUid || undefined,
+        };
+      });
     },
     async getGarment(id: string): Promise<GarmentDetail | null> {
       try {
