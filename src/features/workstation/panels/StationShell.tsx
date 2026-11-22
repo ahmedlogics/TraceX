@@ -113,8 +113,8 @@ export function StationShell() {
               </div>
             </div>
 
-            {/* Station Status Banner (Dedicated panel for Station 2 handles its own layout) */}
-            {effectiveStation !== "fabric_issue" && (
+            {/* Station Status Banner (Dedicated panels for Station 2 & Station 3 handle their own layout) */}
+            {effectiveStation !== "fabric_issue" && effectiveStation !== "cutting" && (
               <section
                 aria-label="Active Station Context"
                 className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-xs"
