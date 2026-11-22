@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { Loadable } from "@/components/wt/states";
 import type { RfidStationCode } from "@/domain/types";
 import { useWtQuery } from "@/lib/data/hooks";
@@ -14,7 +13,7 @@ import { LogisticsPanel } from "./LogisticsPanel";
 
 export function StationShell() {
   const me = useMe();
-  const [stationCode, setStationCode] = useState<RfidStationCode>("finishing");
+  const [stationCode] = useState<RfidStationCode>("finishing");
 
   const qStation = useWtQuery(["rfid-station", stationCode], (c) =>
     c.getRfidStationData(stationCode),
@@ -28,36 +27,13 @@ export function StationShell() {
           <div className="space-y-6">
             {/* Station Status Bar */}
             <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Active Station:
+                  Active RFID Station:
                 </span>
-                <div className="inline-flex rounded-lg border bg-muted/60 p-0.5 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setStationCode("finishing")}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      stationCode === "finishing"
-                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Station 5 · Finishing
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStationCode("stitching")}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      stationCode === "stitching"
-                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Station 4 · Stitching
-                  </button>
-                </div>
+                <span className="inline-flex items-center rounded-md bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                  Finishing Station (Station 5 / S4)
+                </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
