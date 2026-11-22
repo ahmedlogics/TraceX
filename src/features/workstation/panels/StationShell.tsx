@@ -27,11 +27,13 @@ import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
 import { DispatchPanel } from "./DispatchPanel";
 import { WarehousePanel } from "./WarehousePanel";
+import { PackingPanel } from "./PackingPanel";
 
 function defaultStationForUser(user: StaffUser): RfidStationCode {
   if (user.username === "receiving.demo") return "fabric_receiving";
   if (user.username === "rawstore.demo") return "fabric_issue";
   if (user.username === "dispatch.demo") return "dispatch";
+  if (user.username === "packing.demo") return "packing";
 
   switch (user.department) {
     case "receiving":
@@ -116,10 +118,11 @@ export function StationShell() {
               </div>
             </div>
 
-            {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 9 handle their own layout) */}
+            {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 7, 9 handle their own layout) */}
             {effectiveStation !== "fabric_issue" &&
               effectiveStation !== "cutting" &&
               effectiveStation !== "final_qc" &&
+              effectiveStation !== "packing" &&
               effectiveStation !== "dispatch" && (
               <section
                 aria-label="Active Station Context"
@@ -252,7 +255,7 @@ export function StationShell() {
             {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
             {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
             {effectiveStation === "dispatch" && <DispatchPanel stationData={stData} />}
-            {effectiveStation === "packing" && <LogisticsPanel stationData={stData} />}
+            {effectiveStation === "packing" && <PackingPanel stationData={stData} />}
             {effectiveStation === "warehouse" && <WarehousePanel stationData={stData} />}
           </div>
         );

@@ -281,8 +281,8 @@ export interface WearTrailClient {
 
   // Fulfilment & shipments
   getFulfilment(): Promise<FulfilmentData>;
-  packGarment(garmentId: string): Promise<string>;
-  createPackage(): Promise<string>;
+  packGarment(garmentId: string, packageId?: string): Promise<string>;
+  createPackage(rfidUid?: string, customId?: string): Promise<string>;
   sealPackage(packageId: string): Promise<void>;
   receiveStock(garmentId: string): Promise<void>;
   allocateStock(garmentId: string, shipmentId: string): Promise<void>;

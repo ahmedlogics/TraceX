@@ -774,19 +774,19 @@ export function createHttpClient(): WearTrailClient {
     async getFulfilment(): Promise<FulfilmentData> {
       return await req<FulfilmentData>("/api/fulfilment", { method: "GET" });
     },
-    async packGarment(garmentId: string): Promise<string> {
-      const res = await req<{ packageId?: string; id?: string }>("/api/fulfilment/pack", {
+    async packGarment(garmentId: string, packageId?: string): Promise<string> {
+      const res = await req<{ packageId?: string; id?: string }>("/api/fulfilment/pack-garment", {
         method: "POST",
-        body: { garmentId },
+        body: { garmentId, ...(packageId ? { packageId } : {}) },
       });
       return res.packageId || res.id || String(res);
     },
-    async createPackage(): Promise<string> {
-      const res = await req<{ packageId?: string; id?: string }>("/api/fulfilment/packages", {
+    async createPackage(rfidUid?: string, customId?: string): Promise<string> {
+      const res = await req<{ packageId?: string; id?: string; code?: string }>("/api/fulfilment/packages", {
         method: "POST",
-        body: {},
+        body: { code: rfidUid || customId },
       });
-      return res.packageId || res.id || String(res);
+      return res.packageId || res.id || res.code || String(res);
     },
     async sealPackage(packageId: string): Promise<void> {
       await req(`/api/fulfilment/packages/${encodeURIComponent(packageId)}/seal`, {

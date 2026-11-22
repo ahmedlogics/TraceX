@@ -23,6 +23,7 @@ import type {
   DemoState,
   Department,
   Garment,
+  Package,
   Inspection,
   ProductSpecification,
   RfidStationCode,
@@ -151,14 +152,19 @@ function normalizeUid(uid: string): RfidUid {
 }
 
 function isCardAlreadyBound(s: DemoState, uid: RfidUid): boolean {
-  return s.rfidTagBindings.some((b) => b.uid === uid && b.active);
+  return (
+    s.rfidTagBindings.some((b) => b.uid === uid && b.active) ||
+    s.lots.some((l) => l.rfidUid === uid) ||
+    s.garments.some((g) => g.rfidUid === uid) ||
+    s.packages.some((p) => p.rfidUid === uid)
+  );
 }
 
 function bindCard(
   s: DemoState,
   actor: StaffUser,
   uid: RfidUid,
-  subjectType: "lot" | "garment",
+  subjectType: "lot" | "garment" | "package",
   subjectId: string,
 ): RfidTagBinding {
   const id = nextId(s, "binding", "BIND");
@@ -175,9 +181,12 @@ function bindCard(
   if (subjectType === "lot") {
     const lot = s.lots.find((l) => l.id === subjectId);
     if (lot) lot.rfidUid = uid;
-  } else {
+  } else if (subjectType === "garment") {
     const garment = s.garments.find((g) => g.id === subjectId);
     if (garment) garment.rfidUid = uid;
+  } else if (subjectType === "package") {
+    const pkg = s.packages.find((p) => p.id === subjectId);
+    if (pkg) pkg.rfidUid = uid;
   }
   return binding;
 }
@@ -2663,16 +2672,26 @@ export function completeRework(s: DemoState, actor: StaffUser, caseId: string, n
 
 // ---------------------------------------------------------------- fulfilment
 
-export function createPackage(s: DemoState, actor: StaffUser): string {
+export function createPackage(
+  s: DemoState,
+  actor: StaffUser,
+  rfidUid?: string,
+  customId?: string,
+): string {
   ensure(can.packGarment(actor), "forbidden", "Only packing staff can create packages.");
-  const id = nextId(s, "package", "PKG");
-  s.packages.push({
+  const id = customId || nextId(s, "package", "PKG");
+  const pkg: Package = {
     id,
     garmentIds: [],
     status: "open",
     packedBy: actor.id,
     createdAt: now(),
-  });
+    rfidUid,
+  };
+  s.packages.push(pkg);
+  if (rfidUid) {
+    bindCard(s, actor, normalizeUid(rfidUid), "package", id);
+  }
   audit(s, actor, "logistics", "Package created", "package", id);
   return id;
 }
@@ -2718,7 +2737,12 @@ export function verifyGarmentDispatch(
   audit(s, actor, "logistics", "Garment verified on manifest", "garment", g.id, sh.id);
 }
 
-export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
+export function packGarment(
+  s: DemoState,
+  actor: StaffUser,
+  garmentId: string,
+  packageId?: string,
+) {
   ensure(can.packGarment(actor), "forbidden", "Only packing staff can add garments to a package.");
   const g = getGarment(s, garmentId);
   ensure(!g.hold, "conflict", `${g.id} is on quality hold and cannot be packed.`);
@@ -2728,7 +2752,12 @@ export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
     "conflict",
     `${g.id} has not passed quality control.`,
   );
-  let pkg = s.packages.find((p) => p.status === "open");
+  let pkg = packageId
+    ? s.packages.find(
+        (p) =>
+          (p.id === packageId || p.rfidUid === packageId) && p.status === "open",
+      )
+    : s.packages.find((p) => p.status === "open");
   if (!pkg) {
     pkg = {
       id: nextId(s, "package", "PKG"),
