@@ -17,6 +17,7 @@ import type {
   Department,
   Garment,
   Inspection,
+  LifecycleStage,
   MaterialLot,
   ProductSpecification,
   ProductionOrder,
@@ -202,6 +203,25 @@ export function notImplemented(methodName: string): never {
     "WT_ERR_NOT_YET_IMPLEMENTED",
     `[Milestone 1 Live Client] Method '${methodName}' is not yet connected to the backend. It will be implemented in subsequent milestones.`,
   );
+}
+
+function mapDbStageToLifecycleStage(stage: string): LifecycleStage {
+  switch (stage) {
+    case "cut":
+      return "stitching";
+    case "stitched":
+      return "finishing";
+    case "finished":
+      return "final-qc";
+    case "packed":
+      return "warehouse";
+    case "warehoused":
+      return "allocated";
+    case "dispatched":
+      return "dispatched";
+    default:
+      return (stage as LifecycleStage) || "cutting";
+  }
 }
 
 /**
@@ -547,7 +567,7 @@ export function createHttpClient(): WearTrailClient {
         productName: g.productName || "Unknown Garment",
         size: g.sizeLabel || g.size || "M",
         cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
-        stage: g.stage || "cutting",
+        stage: mapDbStageToLifecycleStage(g.stage),
         disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
         hold: null,
         rfidUid: g.activeTagUid || g.rfidUid || undefined,

@@ -60,9 +60,14 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
           {(tasks) => (
             <Loadable query={qRework}>
               {(allRework) => {
-                // Filter production queue (garments at stitching, finishing, or recently advanced)
-                const productionQueue = garments.filter(
-                  (g) => (g.stage === "finishing" || g.stage === "final-qc") && !g.hold,
+                // 1. Awaiting Finishing: strictly garments that completed stitching and are ready on the bench
+                const awaitingFinishing = garments.filter(
+                  (g) => g.stage === "finishing" && !g.hold,
+                );
+
+                // 2. Handed Over to Station 6 (Final QC): garments processed here that advanced to next station
+                const handedOverToQc = garments.filter(
+                  (g) => g.stage === "final-qc" && !g.hold,
                 );
 
                 // Filter rework queue specifically assigned to finishing
@@ -95,7 +100,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                               <Sparkles className="size-3.5 text-primary" />
                               <span>Production Dashboard</span>
                               <span className="rounded-full bg-primary/20 text-primary px-1.5 py-0.2 text-[10px] font-bold">
-                                {productionQueue.length}
+                                {awaitingFinishing.length}
                               </span>
                             </TabsTrigger>
                             <TabsTrigger value="rework" className="flex items-center gap-2 text-xs font-semibold">
@@ -232,17 +237,17 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                         <ScanLine className="size-4 mr-1.5" /> Record Routine Scan
                                       </Button>
 
-                                      {productionQueue.find((g) => g.stage === "finishing" && g.rfidUid) && (
+                                      {awaitingFinishing.find((g) => g.rfidUid) && (
                                         <Button
                                           variant="secondary"
                                           size="sm"
                                           disabled={pending}
                                           onClick={() => {
-                                            const next = productionQueue.find((g) => g.stage === "finishing" && g.rfidUid);
+                                            const next = awaitingFinishing.find((g) => g.rfidUid);
                                             if (next?.rfidUid) setScanUid(next.rfidUid);
                                           }}
                                         >
-                                          Pre-fill Next ({productionQueue.find((g) => g.stage === "finishing" && g.rfidUid)?.id})
+                                          Pre-fill Next ({awaitingFinishing.find((g) => g.rfidUid)?.id})
                                         </Button>
                                       )}
                                     </div>
@@ -265,12 +270,12 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                           {/* Work Queue & Active Ingestion Table */}
                           <Section
                             title="Finishing Work Queue"
-                            description="Garments currently awaiting or completed at the finishing station."
+                            description="Only garments completed at Stitching (Station 4) awaiting finishing operations."
                           >
                             <DataTable
-                              rows={productionQueue}
+                              rows={awaitingFinishing}
                               rowKey={(g) => g.id}
-                              empty="No garments currently awaiting finishing."
+                              empty="No garments awaiting finishing. Items will appear here once stitched at Station 4."
                               columns={[
                                 {
                                   header: "Garment ID",
@@ -316,13 +321,6 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                 {
                                   header: "Quick Scan",
                                   cell: (g) => {
-                                    if (g.stage !== "finishing") {
-                                      return (
-                                        <span className="text-xs text-muted-foreground italic flex items-center gap-1">
-                                          <CheckCircle2 className="size-3 text-success" /> Completed
-                                        </span>
-                                      );
-                                    }
                                     if (g.hold) {
                                       return (
                                         <span className="text-xs text-destructive font-medium flex items-center gap-1">
@@ -346,7 +344,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                             (c) => c.routineScan(g.rfidUid!, "finishing"),
                                             (outcome) =>
                                               outcome.resolution === "accepted"
-                                                ? `Garment ${outcome.garmentCode ?? outcome.subjectId} completed at Finishing → Advanced to Final QC.`
+                                                ? `Garment ${outcome.garmentCode ?? outcome.subjectId} completed at Finishing → Advanced to Station 6 (Final QC).`
                                                 : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
                                           )
                                         }
@@ -359,6 +357,62 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                               ]}
                             />
                           </Section>
+
+                          {/* Handed Over to Next Station Section */}
+                          {handedOverToQc.length > 0 && (
+                            <Section
+                              title="Handed Over to Station 6 (Final QC)"
+                              description="Garments that completed finishing and advanced forward to Quality Control."
+                            >
+                              <DataTable
+                                rows={handedOverToQc}
+                                rowKey={(g) => g.id}
+                                columns={[
+                                  {
+                                    header: "Garment ID",
+                                    cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
+                                  },
+                                  {
+                                    header: "Product & Size",
+                                    cell: (g) => (
+                                      <div>
+                                        <p className="font-medium text-xs sm:text-sm">{g.productName}</p>
+                                        {g.size && (
+                                          <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
+                                            Size {g.size}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ),
+                                  },
+                                  {
+                                    header: "Active RFID Tag",
+                                    cell: (g) => (
+                                      <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                        {g.rfidUid}
+                                      </span>
+                                    ),
+                                  },
+                                  {
+                                    header: "Status",
+                                    cell: () => (
+                                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success">
+                                        <CheckCircle2 className="size-3.5" /> Ready for QC Inspection
+                                      </span>
+                                    ),
+                                  },
+                                  {
+                                    header: "Next Station",
+                                    cell: () => (
+                                      <span className="text-xs text-muted-foreground font-medium">
+                                        Station 6 · Final QC (GPIO 15)
+                                      </span>
+                                    ),
+                                  },
+                                ]}
+                              />
+                            </Section>
+                          )}
                         </div>
                       </div>
                     )}
