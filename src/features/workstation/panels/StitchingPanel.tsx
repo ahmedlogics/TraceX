@@ -167,12 +167,6 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                   </span>
                                 </div>
 
-                                <p className="text-xs text-muted-foreground">
-                                  Workflow: Cutting completed → Stitching → RFID scan → Validate
-                                  garment & active holds → Record stitching completion → Ready for
-                                  Finishing.
-                                </p>
-
                                 {!isAuthorized && (
                                   <ScopeNote>
                                     Only Stitching operators or managers can record stitching
@@ -246,18 +240,6 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                     </div>
                                   </div>
                                 )}
-                              </div>
-
-                              <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-                                <p className="font-semibold text-foreground">
-                                  Workstation Validation Invariants:
-                                </p>
-                                <ul className="list-disc pl-4 space-y-0.5">
-                                  <li>Garment must have completed cutting and be at stage "stitching".</li>
-                                  <li>Garments on active quality hold are blocked until cleared by QC.</li>
-                                  <li>Duplicate stitching events are safely rejected.</li>
-                                  <li>Operator session and exact timestamp are stored in audit trail.</li>
-                                </ul>
                               </div>
                             </div>
                           </Section>

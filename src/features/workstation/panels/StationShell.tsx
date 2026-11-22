@@ -116,9 +116,33 @@ export function StationShell() {
             {/* Station Status Banner */}
             <section
               aria-label="Station header"
-              className="rounded-lg border-2 border-primary/30 bg-card p-5 space-y-4"
+              className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 space-y-4 shadow-xs ${
+                effectiveStation === "stitching"
+                  ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
+                  : "bg-card"
+              }`}
             >
-              <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+              {/* Aesthetic stitching backdrop blend for stitching workstation */}
+              {effectiveStation === "stitching" && (
+                <div
+                  className="pointer-events-none absolute right-0 top-0 bottom-0 w-64 md:w-80 select-none overflow-hidden"
+                  style={{
+                    maskImage:
+                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
+                    WebkitMaskImage:
+                      "linear-gradient(to left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)",
+                  }}
+                >
+                  <img
+                    src="/images/stitching/vintage-sewing-aesthetic.jpg"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-full w-full object-cover object-right opacity-30 mix-blend-multiply dark:opacity-15 dark:mix-blend-luminosity"
+                  />
+                </div>
+              )}
+
+              <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="wt-eyebrow">
@@ -142,13 +166,11 @@ export function StationShell() {
                 </div>
 
                 <div className="flex flex-col items-start gap-2 md:items-end">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Hardware Bridge:</span>
-                    <StatusBadge
-                      status={stData.bridgeConnected ? "Connected" : "Disconnected (Simulated)"}
-                      tone={stData.bridgeConnected ? "success" : "neutral"}
-                    />
-                  </div>
+                  {stData.bridgeConnected && (
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status="Hardware RFID: Connected" tone="success" />
+                    </div>
+                  )}
                   {stData.lastConfirmedSubjectId && (
                     <div className="flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-xs">
                       <span className="text-muted-foreground">Latest Subject:</span>
