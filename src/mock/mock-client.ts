@@ -503,7 +503,7 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
         href: "/staff/ledger",
       }),
     );
-  if (["M", "O", "Q"].includes(u.role))
+  if (["M", "Q"].includes(u.role))
     awaitingLots.forEach((l) =>
       alerts.push({
         tone: "info",

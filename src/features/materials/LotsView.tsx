@@ -13,7 +13,13 @@ import { can } from "@/domain/permissions";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
 
-function ReceiveLotDialog() {
+export function ReceiveLotDialog({
+  triggerLabel,
+  onSuccess,
+}: {
+  triggerLabel?: string;
+  onSuccess?: (lotId: string) => void;
+}) {
   const { run } = useWtAction();
   const navigate = useAppNavigate();
   const [material, setMaterial] = useState("Cotton poplin, natural white, 140 cm");
@@ -23,27 +29,33 @@ function ReceiveLotDialog() {
 
   return (
     <FormDialog
-      trigger="Receive fabric lot"
+      trigger={triggerLabel ?? "Receive fabric lot"}
       title="Record Fabric Bundle Receipt"
-      description="Enter incoming fabric roll details. Raw fabric bundles are labelled by material name, never finished garment type."
-      submitLabel="Record receipt"
+      description="Enter incoming fabric roll details (cloth type, received amount, supplier). Once recorded, present an RFID card at Station 1 to assign it."
+      submitLabel="Record lot"
       onSubmit={async () => {
         const id = await run(
           (c) => c.receiveLot({ material, supplierRef, qty: Number(qty), unit }),
-          (r) => `${r} recorded in inventory.`,
+          (r) => `${r} recorded. Ready for Station 1 RFID card assignment.`,
         );
-        if (id) void navigate(paths.lot(id));
+        if (id) {
+          if (onSuccess) {
+            onSuccess(id);
+          } else {
+            void navigate(paths.workstation);
+          }
+        }
         return !!id;
       }}
     >
-      <Field label="Fabric material description" htmlFor="rl-mat" hint="e.g. 100% Cotton Poplin, 140cm width">
+      <Field label="Cloth / Fabric material type" htmlFor="rl-mat" hint="e.g. Cotton twill, Denim, Poplin 140cm">
         <Input id="rl-mat" value={material} onChange={(e) => setMaterial(e.target.value)} />
       </Field>
-      <Field label="Supplier reference / packing slip" htmlFor="rl-sup">
+      <Field label="Supplier reference / delivery slip" htmlFor="rl-sup">
         <Input id="rl-sup" value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Received quantity" htmlFor="rl-qty">
+        <Field label="Received amount" htmlFor="rl-qty">
           <Input
             id="rl-qty"
             type="number"
@@ -67,7 +79,7 @@ function ReceiveLotDialog() {
         </Field>
       </div>
       <p className="text-xs text-muted-foreground pt-1">
-        After recording receipt, present a fresh, unassigned RFID card at Station 1 (Fabric Receiving) to bind the bundle card.
+        After recording, select this lot in the Workstation (Station 1: Fabric Receiving) and present a physical RFID card to assign the bundle card.
       </p>
     </FormDialog>
   );

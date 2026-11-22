@@ -11,6 +11,7 @@ import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
+import { ReceiveLotDialog } from "@/features/materials/LotsView";
 
 function generateFreshUid(): string {
   return "04" + Array.from({ length: 6 }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join("");
@@ -28,7 +29,11 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
   return (
     <Loadable query={qLots}>
       {(lots) => {
-        const lotId = selectedLotId || lots[0]?.id || "";
+        const unassignedLots = lots.filter((l) => !l.rfidUid);
+        const lotId =
+          selectedLotId && lots.some((l) => l.id === selectedLotId)
+            ? selectedLotId
+            : unassignedLots[0]?.id || lots[0]?.id || "";
         const currentLot = lots.find((l) => l.id === lotId);
         const activeCtx = stationData.activeContext;
         const isCtxForThisStation = activeCtx && activeCtx.stationCode === "fabric_receiving";
@@ -40,6 +45,14 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
               <Section
                 title="Fabric Bundle Selection"
                 description="Select a physical fabric bundle to assign or verify an RFID card."
+                actions={
+                  isReceivingStaff ? (
+                    <ReceiveLotDialog
+                      triggerLabel="+ New Fabric Roll"
+                      onSuccess={(newId) => setSelectedLotId(newId)}
+                    />
+                  ) : undefined
+                }
               >
                 {lots.length === 0 ? (
                   <EmptyState title="No fabric lots recorded" />
@@ -50,10 +63,18 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                         id="rcv-lot"
                         value={lotId}
                         onChange={(v) => setSelectedLotId(v)}
-                        options={lots.map((l) => ({
-                          value: l.id,
-                          label: `${l.id} — ${l.material} (${l.balanceQty} ${l.unit ?? "m"}${l.rfidUid ? ` · UID: ${l.rfidUid}` : " · Unassigned"})`,
-                        }))}
+                        options={[
+                          ...unassignedLots.map((l) => ({
+                            value: l.id,
+                            label: `[NEW · Card Pending] ${l.id} — ${l.material} (${l.balanceQty} ${l.unit ?? "m"})`,
+                          })),
+                          ...lots
+                            .filter((l) => !!l.rfidUid)
+                            .map((l) => ({
+                              value: l.id,
+                              label: `${l.id} — ${l.material} (${l.balanceQty} ${l.unit ?? "m"} · UID: ${l.rfidUid})`,
+                            })),
+                        ]}
                       />
                     </Field>
 

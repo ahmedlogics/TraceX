@@ -49,8 +49,8 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   workstation: ["M", "O", "P", "Q", "L"],
   materialLots: ["M", "O", "Q"],
   materialLot: ["M", "O", "Q"],
-  productionOrders: ["M", "O", "P", "Q"],
-  productionOrder: ["M", "O", "P", "Q"],
+  productionOrders: ["M", "P", "Q"],
+  productionOrder: ["M", "P", "Q"],
   garments: ["M", "P", "Q", "L"],
   garment: ["M", "P", "Q", "L"],
   quality: ["M", "Q"],
@@ -68,7 +68,14 @@ export const routeAccess: Record<RouteKey, Role[]> = {
 };
 
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
-  return !!user && user.status === "active" && routeAccess[key].includes(user.role);
+  if (!user || user.status !== "active") return false;
+  if (
+    (user.username === "receiving.demo" || user.department === "receiving") &&
+    (key === "productionOrders" || key === "productionOrder")
+  ) {
+    return false;
+  }
+  return routeAccess[key].includes(user.role);
 }
 
 const is = (u: StaffUser, role: Role, dept?: Department) =>
@@ -76,6 +83,11 @@ const is = (u: StaffUser, role: Role, dept?: Department) =>
 
 /** Action permissions. Each returns true when the actor may perform it. */
 export const can = {
+  createLot: (u: StaffUser) =>
+    u.status === "active" &&
+    (u.role === "M" ||
+      u.role === "A" ||
+      (u.role === "O" && (u.department === "receiving" || u.username === "receiving.demo"))),
   receiveLot: (u: StaffUser) => is(u, "O", "receiving"),
   issueMaterial: (u: StaffUser) => is(u, "O", "raw-store"),
   planOrder: (u: StaffUser) => is(u, "M"),
@@ -88,6 +100,17 @@ export const can = {
 
   // RFID station access: operator must be in the station's department (or manager reads)
   operateStation: (u: StaffUser, stationCode: RfidStationCode): boolean => {
+    if (u.status !== "active") return false;
+    if (u.role === "M" || u.role === "A") return true; // manager / admin can supervise any station
+
+    // Dedicated receiving operator only handles fabric_receiving
+    if (u.username === "receiving.demo") {
+      return stationCode === "fabric_receiving";
+    }
+    if (u.username === "rawstore.demo") {
+      return stationCode === "fabric_issue";
+    }
+
     const stationDepts: Record<RfidStationCode, Department[]> = {
       fabric_receiving: ["receiving"],
       fabric_issue: ["raw-store"],
@@ -99,9 +122,8 @@ export const can = {
       warehouse: ["warehouse"],
       dispatch: ["dispatch"],
     };
-    if (u.role === "M") return true; // manager can read any station
     const allowed = stationDepts[stationCode];
-    return u.status === "active" && allowed.includes(u.department);
+    return allowed ? allowed.includes(u.department) : false;
   },
 
   // RFID scan actions

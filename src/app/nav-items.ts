@@ -32,7 +32,6 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Work",
     items: [
       { key: "home", label: "Home", href: paths.home, icon: Home },
-      { key: "tasks", label: "Tasks", href: paths.tasks, icon: ClipboardList },
       { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
     ],
   },

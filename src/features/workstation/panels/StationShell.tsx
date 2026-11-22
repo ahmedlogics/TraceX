@@ -17,6 +17,8 @@ import { rfidStationCodes, rfidStationLabels, stationDepartment } from "@/domain
 import type { RfidStationCode, ScanOutcome } from "@/domain/types";
 import { useWtQuery } from "@/lib/data/hooks";
 import { UserName } from "@/features/shared/directory";
+import { can } from "@/domain/permissions";
+import type { StaffUser } from "@/domain/types";
 import { useMe } from "@/features/shared/useMe";
 import { ReceivingPanel } from "./ReceivingPanel";
 import { IssuePanel } from "./IssuePanel";
@@ -25,8 +27,11 @@ import { RoutinePanel } from "./RoutinePanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
 
-function defaultStationForDept(dept: string): RfidStationCode {
-  switch (dept) {
+function defaultStationForUser(user: StaffUser): RfidStationCode {
+  if (user.username === "receiving.demo") return "fabric_receiving";
+  if (user.username === "rawstore.demo") return "fabric_issue";
+
+  switch (user.department) {
     case "receiving":
       return "fabric_receiving";
     case "raw-store":
@@ -52,12 +57,19 @@ function defaultStationForDept(dept: string): RfidStationCode {
 
 export function StationShell() {
   const me = useMe();
-  const [stationCode, setStationCode] = useState<RfidStationCode>(() =>
-    defaultStationForDept(me.department),
-  );
+  const availableStations = rfidStationCodes.filter((code) => can.operateStation(me, code));
+  const activeStations =
+    availableStations.length > 0 ? availableStations : [defaultStationForUser(me)];
 
-  const qStation = useWtQuery(["rfid-station", stationCode], (c) =>
-    c.getRfidStationData(stationCode),
+  const [stationCode, setStationCode] = useState<RfidStationCode>(() => {
+    const def = defaultStationForUser(me);
+    return activeStations.includes(def) ? def : activeStations[0]!;
+  });
+
+  const effectiveStation = activeStations.includes(stationCode) ? stationCode : activeStations[0]!;
+
+  const qStation = useWtQuery(["rfid-station", effectiveStation], (c) =>
+    c.getRfidStationData(effectiveStation),
     { refetchInterval: 3000 },
   );
 
@@ -74,17 +86,23 @@ export function StationShell() {
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Active RFID Station:
                 </span>
-                <select
-                  value={stationCode}
-                  onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                  className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {rfidStationCodes.map((code) => (
-                    <option key={code} value={code}>
-                      {rfidStationLabels[code]} ({code})
-                    </option>
-                  ))}
-                </select>
+                {activeStations.length > 1 ? (
+                  <select
+                    value={effectiveStation}
+                    onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
+                    className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {activeStations.map((code) => (
+                      <option key={code} value={code}>
+                        {rfidStationLabels[code]} ({code})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="inline-flex items-center rounded-md border bg-muted/60 px-2.5 py-1 text-xs font-semibold">
+                    {rfidStationLabels[effectiveStation]} ({effectiveStation})
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -105,10 +123,12 @@ export function StationShell() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="wt-eyebrow">
-                      Station #{rfidStationCodes.indexOf(stationCode) + 1} of 9
+                      {activeStations.length > 1
+                        ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
+                        : "Assigned Workstation"}
                     </p>
                     <span className="text-xs font-mono text-muted-foreground">
-                      code: {stationCode}
+                      code: {effectiveStation}
                     </span>
                   </div>
                   <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -117,7 +137,7 @@ export function StationShell() {
                   <p className="text-xs text-muted-foreground">
                     Assigned department:{" "}
                     <span className="font-medium text-foreground">
-                      {stationDepartment[stationCode]}
+                      {stationDepartment[effectiveStation]}
                     </span>
                   </p>
                 </div>
@@ -174,16 +194,16 @@ export function StationShell() {
             </section>
 
             {/* Feature-owned Panel Switch */}
-            {stationCode === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
-            {stationCode === "fabric_issue" && <IssuePanel stationData={stData} />}
-            {stationCode === "cutting" && <CuttingPanel stationData={stData} />}
-            {(stationCode === "stitching" || stationCode === "finishing") && (
+            {effectiveStation === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
+            {effectiveStation === "fabric_issue" && <IssuePanel stationData={stData} />}
+            {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
+            {(effectiveStation === "stitching" || effectiveStation === "finishing") && (
               <RoutinePanel stationData={stData} />
             )}
-            {stationCode === "final_qc" && <QAPanel stationData={stData} />}
-            {(stationCode === "packing" ||
-              stationCode === "warehouse" ||
-              stationCode === "dispatch") && <LogisticsPanel stationData={stData} />}
+            {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
+            {(effectiveStation === "packing" ||
+              effectiveStation === "warehouse" ||
+              effectiveStation === "dispatch") && <LogisticsPanel stationData={stData} />}
           </div>
         );
       }}
