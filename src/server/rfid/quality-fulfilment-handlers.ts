@@ -652,6 +652,10 @@ export class DispatchScanHandler implements DomainScanHandler<ScanOutcomeResult>
       (await tx.staff_users.findFirstOrThrow()).id;
 
     const now = new Date();
+    await tx.garments.update({
+      where: { id: subject.subjectId },
+      data: { stage: "dispatched", revision: { increment: 1 } },
+    });
     const traceEvent = await tx.trace_events.create({
       data: {
         event_type: "shipment_dispatched",

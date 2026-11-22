@@ -251,7 +251,7 @@ export interface ScanOutcome {
 export interface RfidTagBinding {
   id: string;
   uid: RfidUid;
-  subjectType: "lot" | "garment";
+  subjectType: "lot" | "garment" | "package" | "box";
   subjectId: string;
   boundAt: string;
   boundBy: string;
@@ -471,7 +471,7 @@ export interface Task {
   completedAt?: string | undefined;
 }
 
-export type PackageStatus = "open" | "sealed";
+export type PackageStatus = "open" | "sealed" | "dispatched";
 
 export interface Package {
   id: string;
@@ -481,9 +481,10 @@ export interface Package {
   createdAt: string;
   sealedAt?: string | undefined;
   binId?: string | undefined;
+  rfidUid?: string | undefined;
 }
 
-export type ShipmentStatus = "draft" | "planned" | "departed";
+export type ShipmentStatus = "draft" | "planned" | "loading" | "departed";
 
 export interface Shipment {
   id: string;

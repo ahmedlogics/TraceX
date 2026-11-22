@@ -25,10 +25,12 @@ import { StitchingPanel } from "./StitchingPanel";
 import { FinishingPanel } from "./FinishingPanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
+import { DispatchPanel } from "./DispatchPanel";
 
 function defaultStationForUser(user: StaffUser): RfidStationCode {
   if (user.username === "receiving.demo") return "fabric_receiving";
   if (user.username === "rawstore.demo") return "fabric_issue";
+  if (user.username === "dispatch.demo") return "dispatch";
 
   switch (user.department) {
     case "receiving":
@@ -113,8 +115,10 @@ export function StationShell() {
               </div>
             </div>
 
-            {/* Station Status Banner (Dedicated panels for Station 2 & Station 3 handle their own layout) */}
-            {effectiveStation !== "fabric_issue" && effectiveStation !== "cutting" && (
+            {/* Station Status Banner (Dedicated panels for Station 2, Station 3 & Station 9 handle their own layout) */}
+            {effectiveStation !== "fabric_issue" &&
+              effectiveStation !== "cutting" &&
+              effectiveStation !== "dispatch" && (
               <section
                 aria-label="Active Station Context"
                 className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-xs"
@@ -199,9 +203,10 @@ export function StationShell() {
             {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
             {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
             {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
-            {(effectiveStation === "packing" ||
-              effectiveStation === "warehouse" ||
-              effectiveStation === "dispatch") && <LogisticsPanel stationData={stData} />}
+            {effectiveStation === "dispatch" && <DispatchPanel stationData={stData} />}
+            {(effectiveStation === "packing" || effectiveStation === "warehouse") && (
+              <LogisticsPanel stationData={stData} />
+            )}
           </div>
         );
       }}

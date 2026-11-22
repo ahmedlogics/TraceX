@@ -688,7 +688,7 @@ rfidRouter.post(
   prismaAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { uid, stationCode } = req.body as { uid?: string; stationCode?: "stitching" | "finishing" };
+      const { uid, stationCode } = req.body as { uid?: string; stationCode?: "stitching" | "finishing" | "dispatch" };
       if (!uid || !stationCode) throw ApiError.badRequest("uid and stationCode are required.");
 
       // Route to ui-scan
