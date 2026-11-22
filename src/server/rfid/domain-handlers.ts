@@ -654,10 +654,24 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
     const garment = binding.garments;
     if (garment.stage !== "stitched" && garment.stage !== "finished") {
       throw ApiError.badRequest(
-        `Garment ${garment.code} cannot be processed at finishing; current stage is '${garment.stage}'.`,
+        `Wrong Stage: Garment ${garment.code} cannot be processed at finishing; current stage is '${garment.stage}'. Expected stitching completion first.`,
         { garmentId: garment.id, stage: garment.stage },
         "WT_ERR_INVALID_STAGE",
       );
+    }
+
+    // Safety Guard: Check for active quality hold
+    if ("garment_holds" in (tx as any)) {
+      const activeHold = await (tx as any).garment_holds.findFirst({
+        where: { garment_id: garment.id, released_at: null },
+      });
+      if (activeHold) {
+        throw ApiError.badRequest(
+          `Blocked: Garment ${garment.code} has an active quality hold in place (${activeHold.reason || "QC defect"}). Garment must be set aside for rework.`,
+          { garmentId: garment.id, holdId: activeHold.id },
+          "WT_ERR_HOLD_ACTIVE",
+        );
+      }
     }
 
     return {
@@ -680,9 +694,48 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
       where: { id: subject.subjectId },
       data: {
         stage: "finished",
+        quality_disposition: "awaiting_inspection",
         revision: { increment: 1 },
       },
     });
+
+    // Close any open 'finish' task and generate 'final-qc-presentation' task
+    try {
+      if ("work_tasks" in (tx as any)) {
+        await (tx as any).work_tasks.updateMany({
+          where: {
+            garment_id: subject.subjectId,
+            task_kind: "finish",
+            status: { in: ["open", "claimed"] },
+          },
+          data: {
+            status: "done",
+            completed_at: new Date(),
+          },
+        });
+
+        const existingQcTask = await (tx as any).work_tasks.findFirst({
+          where: {
+            garment_id: subject.subjectId,
+            task_kind: "final-qc-presentation",
+            status: { in: ["open", "claimed"] },
+          },
+        });
+        if (!existingQcTask) {
+          await (tx as any).work_tasks.create({
+            data: {
+              title: `Final QC for Garment ${subject.subjectCode}`,
+              task_kind: "final-qc-presentation",
+              department_code: "quality",
+              garment_id: subject.subjectId,
+              status: "open",
+            },
+          });
+        }
+      }
+    } catch {
+      // Allow fallback if work_tasks table is absent in test harness
+    }
 
     // Record internal commitment
     try {

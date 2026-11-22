@@ -115,6 +115,16 @@ export function createSeed(): DemoState {
       boundBy: "u-cutting",
       active: true,
     },
+    // SHIRT-003 garment card (assigned to finishing rework)
+    {
+      id: "BIND-SHIRT-003",
+      uid: "04003344",
+      subjectType: "garment",
+      subjectId: "SHIRT-003",
+      boundAt: "2026-11-05T09:10:00Z",
+      boundBy: "u-cutting",
+      active: true,
+    },
   ];
 
   const actionContexts: ActionContext[] = [];
@@ -354,6 +364,23 @@ export function createSeed(): DemoState {
         hold: null,
         rfidUid: "04001122",
       },
+      {
+        id: "SHIRT-003",
+        orderId: "ORDER-001",
+        publicId: "shirt-003-demo",
+        productName: "Oxford Classic — Linen Casual, Size M",
+        size: "M",
+        cuttingOutputId: "CUT-001",
+        stage: "finishing",
+        disposition: "failed",
+        hold: {
+          reason: "Untrimmed loose thread ends at armhole & severe pressing crease on front placket",
+          since: "2026-11-20T11:00:00Z",
+          inspectionId: "INSP-002F",
+          reworkCaseId: "RW-003",
+        },
+        rfidUid: "04003344",
+      },
     ],
     garmentEvents: [
       {
@@ -550,6 +577,28 @@ export function createSeed(): DemoState {
       },
     ],
     rework: [
+      {
+        id: "RW-003",
+        garmentId: "SHIRT-003",
+        inspectionId: "INSP-002F",
+        defectReason: "Untrimmed loose thread ends at armhole; severe pressing crease on front placket",
+        status: "assigned",
+        assignedDepartment: "finishing",
+        assignedBy: "u-manager",
+        createdAt: "2026-11-20T11:00:00Z",
+        history: [
+          {
+            at: "2026-11-20T11:00:00Z",
+            label: "Opened from INSP-002F: Untrimmed loose thread ends at armhole",
+            actorId: "u-quality",
+          },
+          {
+            at: "2026-11-20T11:15:00Z",
+            label: "Assigned to finishing department for thread trimming and steam re-pressing",
+            actorId: "u-manager",
+          },
+        ],
+      },
       {
         id: "RW-001",
         garmentId: "SHIRT-001",

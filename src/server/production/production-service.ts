@@ -1032,11 +1032,26 @@ export async function routineProductionScan(
     } else if (input.stationCode === "finishing") {
       if (currentStage !== "finished" && currentStage !== "stitched") {
         throw ApiError.badRequest(
-          `Garment '${garment.code}' is at stage '${currentStage}'. Expected stage 'finished' or 'stitched' for finishing station.`,
+          `Garment '${garment.code}' is at stage '${currentStage}'. Expected stage 'stitched' or 'finished' for finishing station.`,
           { currentStage, station: "finishing" },
           "WT_ERR_WRONG_STAGE",
         );
       }
+
+      // Safety Guard: Check for active quality hold
+      if ("garment_holds" in (db as any)) {
+        const activeHold = await (db as any).garment_holds.findFirst({
+          where: { garment_id: garment.id, released_at: null },
+        });
+        if (activeHold) {
+          throw ApiError.badRequest(
+            `Blocked: Garment '${garment.code}' has an active quality hold in place (${activeHold.reason || "QC defect"}). Garment must be set aside for rework.`,
+            { garmentId: garment.id, holdId: activeHold.id },
+            "WT_ERR_HOLD_ACTIVE",
+          );
+        }
+      }
+
       nextStage = "finished";
       nextExpectedStation = "final_qc";
     }

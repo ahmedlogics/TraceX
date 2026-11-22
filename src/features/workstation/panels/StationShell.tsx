@@ -22,6 +22,7 @@ import { ReceivingPanel } from "./ReceivingPanel";
 import { IssuePanel } from "./IssuePanel";
 import { CuttingPanel } from "./CuttingPanel";
 import { RoutinePanel } from "./RoutinePanel";
+import { FinishingPanel } from "./FinishingPanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
 
@@ -105,10 +106,12 @@ export function StationShell() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="wt-eyebrow">
-                      Station #{rfidStationCodes.indexOf(stationCode) + 1} of 9
+                      {stationCode === "finishing"
+                        ? "Station 5 / S4 · Finishing Station"
+                        : `Station #${rfidStationCodes.indexOf(stationCode) + 1} of 9`}
                     </p>
                     <span className="text-xs font-mono text-muted-foreground">
-                      code: {stationCode}
+                      {stationCode === "finishing" ? "GPIO 16 · Reader Index 5" : `code: ${stationCode}`}
                     </span>
                   </div>
                   <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -177,9 +180,8 @@ export function StationShell() {
             {stationCode === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
             {stationCode === "fabric_issue" && <IssuePanel stationData={stData} />}
             {stationCode === "cutting" && <CuttingPanel stationData={stData} />}
-            {(stationCode === "stitching" || stationCode === "finishing") && (
-              <RoutinePanel stationData={stData} />
-            )}
+            {stationCode === "stitching" && <RoutinePanel stationData={stData} />}
+            {stationCode === "finishing" && <FinishingPanel stationData={stData} />}
             {stationCode === "final_qc" && <QAPanel stationData={stData} />}
             {(stationCode === "packing" ||
               stationCode === "warehouse" ||

@@ -1151,12 +1151,20 @@ export function routineScan(
     });
     audit(s, actor, "production", "Stitching completed via RFID scan", "garment", g.id);
   } else {
+    if (g.hold) {
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_business_rule",
+        `Blocked: Garment ${g.id} has an active quality hold (${g.hold.reason}). Progression blocked until reinspection clearance.`,
+      );
+    }
     if (g.stage !== "finishing") {
       return rejectScan(
         s,
         normUid,
         "rejected_wrong_stage",
-        `${g.id} is at '${g.stage}', not 'finishing'.`,
+        `Wrong Stage: Garment ${g.id} is at '${g.stage}', not 'finishing'. Expected stitching completion first.`,
       );
     }
     const recent = s.garmentEvents.filter(
