@@ -419,6 +419,7 @@ export function TasksSection() {
                             {
                               header: "Actions",
                               cell: (t) => {
+                                const prereq = getTaskPrerequisite(t, lots, orders, garments);
                                 const stCode = taskStationCode(t.checkpoint);
                                 let domainHref = "";
                                 if (t.subjectType === "order") domainHref = paths.order(t.subjectId);
