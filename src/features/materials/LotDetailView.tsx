@@ -78,11 +78,6 @@ export function LotDetailView({ lotId }: { lotId: string }) {
             <PageHeader
               title={<span className="wt-id text-2xl font-bold">{lot.id}</span>}
               description={lot.material}
-              crumbs={[
-                { label: "Staff", href: paths.home },
-                { label: "Material lots", href: paths.lots },
-                { label: lot.id },
-              ]}
               meta={
                 <div className="flex items-center gap-2">
                   <StatusBadge status={lot.status} label="Incoming QC" />

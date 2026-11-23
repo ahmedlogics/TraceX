@@ -889,7 +889,6 @@ export function QualityView() {
             ? "Managerial quality oversight. Only certified inspectors record operational decisions."
             : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
         }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality" }]}
       />
 
       <div className="space-y-6">
