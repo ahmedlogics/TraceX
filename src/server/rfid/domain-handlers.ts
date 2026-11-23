@@ -523,26 +523,19 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
     const tagUid = normalizeTagUid(envelope.tagUid);
 
     // 1. Check if this is a cutting source selection scan (material lot card)
-    if (envelope.actionContextId) {
-      const ctx = await tx.rfid_action_contexts.findFirst({
-        where: { id: envelope.actionContextId },
-      });
-      if (ctx?.action_code === "select_cutting_source") {
-        const binding = await tx.rfid_tag_bindings.findFirst({
-          where: { tag_uid: tagUid, unbound_at: null },
-          include: { material_lots: true },
-        });
-        if (binding?.material_lots) {
-          return {
-            kind: "material_lot",
-            subjectId: binding.material_lots.id,
-            subjectCode: binding.material_lots.code,
-            isNewEnrollment: false,
-            tagUid,
-            tagBindingId: binding.id,
-          };
-        }
-      }
+    const lotBinding = await tx.rfid_tag_bindings.findFirst({
+      where: { tag_uid: tagUid, unbound_at: null },
+      include: { material_lots: true },
+    });
+    if (lotBinding?.material_lots) {
+      return {
+        kind: "material_lot",
+        subjectId: lotBinding.material_lots.id,
+        subjectCode: lotBinding.material_lots.code,
+        isNewEnrollment: false,
+        tagUid,
+        tagBindingId: lotBinding.id,
+      };
     }
 
     // 2. Garment enrollment scan: Verify tag is not already bound

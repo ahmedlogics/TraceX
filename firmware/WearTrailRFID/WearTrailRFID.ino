@@ -20,15 +20,15 @@
 // ===========================================================================
 // PIN DEFINITIONS (Exact hardware layout: 9 physical reader stations)
 // ===========================================================================
-#define SS_PIN1  27  // Reader 0: fabric_receiving
-#define SS_PIN2  12  // Reader 1: fabric_issue
-#define SS_PIN3  15  // Reader 2: final_qc
-#define SS_PIN4  2   // Reader 3: cutting
-#define SS_PIN5  4   // Reader 4: warehouse
-#define SS_PIN6  16  // Reader 5: finishing
-#define SS_PIN7  5   // Reader 6: stitching
-#define SS_PIN8  17  // Reader 7: packing
-#define SS_PIN9  21  // Reader 8: dispatch
+#define SS_PIN1  27  // Reader 0: Station 1 - fabric_receiving
+#define SS_PIN2  12  // Reader 1: Station 2 - fabric_issue
+#define SS_PIN3  15  // Reader 2: Station 3 - cutting
+#define SS_PIN4  2   // Reader 3: Station 4 - stitching
+#define SS_PIN5  4   // Reader 4: Station 5 - finishing
+#define SS_PIN6  16  // Reader 5: Station 6 - final_qc
+#define SS_PIN7  5   // Reader 6: Station 7 - packing
+#define SS_PIN8  17  // Reader 7: Station 8 - warehouse
+#define SS_PIN9  21  // Reader 8: Station 9 - dispatch
 #define SS_SPARE 22  // Spare / unallocated
 
 #define RST_PIN1 26
@@ -46,12 +46,12 @@ const int SS_PINS[NUM_READERS] = {
 const char* const STATION_NAMES[NUM_READERS] = {
   "fabric_receiving",
   "fabric_issue",
-  "final_qc",
   "cutting",
-  "warehouse",
-  "finishing",
   "stitching",
+  "finishing",
+  "final_qc",
   "packing",
+  "warehouse",
   "dispatch"
 };
 

@@ -137,7 +137,7 @@ export async function getOrCreateSupplier(
 
 // ---------------------------------------------------------------- Material Lots
 
-const EXCLUDED_LOT_CODES = ["FAB-011", "FAB-007", "LOT-2026-DEMO-01"];
+const EXCLUDED_LOT_CODES: string[] = [];
 
 export async function listLots(
   actor?: unknown,

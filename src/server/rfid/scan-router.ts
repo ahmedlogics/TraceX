@@ -165,7 +165,7 @@ export class ScanRoutingService implements IScanRoutingService {
 
     if (
       !contextIdToValidate &&
-      stationCode === "fabric_issue" &&
+      (stationCode === "fabric_issue" || stationCode === "cutting") &&
       typeof (db as any).rfid_action_contexts?.findFirst === "function"
     ) {
       // First check if an armed or awaiting_ack context already exists for this reader session
@@ -181,6 +181,57 @@ export class ScanRoutingService implements IScanRoutingService {
 
       if (existingSessionContext) {
         contextIdToValidate = existingSessionContext.id;
+      }
+    }
+
+    if (
+      !contextIdToValidate &&
+      stationCode === "cutting" &&
+      typeof (db as any).rfid_action_contexts?.create === "function"
+    ) {
+      const tagUid = normalizeTagUid(envelope.tagUid);
+      const lotBinding = await (db as any).rfid_tag_bindings?.findFirst?.({
+        where: { tag_uid: tagUid, unbound_at: null },
+      });
+
+      const targetExpiry = new Date(Date.now() + 10 * 60 * 1000);
+      const sessionExpiry = new Date(session.expiresAt);
+      const expiresAt =
+        sessionExpiry < targetExpiry ? new Date(sessionExpiry.getTime() - 1000) : targetExpiry;
+
+      if (lotBinding) {
+        const autoCtx = await (db as any).rfid_action_contexts.create({
+          data: {
+            reader_session_id: session.id,
+            action_code: "select_cutting_source",
+            status: "armed",
+            acknowledged_at: new Date(),
+            expires_at: expiresAt,
+            answers: { tagUid },
+          },
+        });
+        contextIdToValidate = autoCtx.id;
+      } else {
+        const order =
+          typeof (db as any).production_orders?.findFirst === "function"
+            ? await (db as any).production_orders.findFirst({
+                where: { status: { in: ["approved", "in_progress", "draft"] } },
+                orderBy: { created_at: "desc" },
+              })
+            : null;
+
+        const autoCtx = await (db as any).rfid_action_contexts.create({
+          data: {
+            reader_session_id: session.id,
+            action_code: "bind_garment_tag",
+            status: "armed",
+            acknowledged_at: new Date(),
+            expires_at: expiresAt,
+            production_order_id: order?.id,
+            answers: { tagUid, orderId: order?.id },
+          },
+        });
+        contextIdToValidate = autoCtx.id;
       }
     }
 
