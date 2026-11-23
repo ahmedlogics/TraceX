@@ -57,6 +57,8 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
           destination = paths.shipments;
         } else if (cleanUsername.toLowerCase() === "warehouse.demo") {
           destination = paths.workstation;
+        } else if (cleanUsername.toLowerCase() === "packing.demo") {
+          destination = paths.workstation;
         }
       }
 

@@ -130,6 +130,22 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     }
   }
 
+  // Packing operators only handle workstation box cartoning (strictly remove garments, fulfilment, and shipments)
+  if (
+    user.username === "packing.demo" ||
+    (user.role === "L" && user.department === "packing")
+  ) {
+    if (
+      key === "garments" ||
+      key === "garment" ||
+      key === "fulfilment" ||
+      key === "shipments" ||
+      key === "shipment"
+    ) {
+      return false;
+    }
+  }
+
   // Strict role + department scoping for Quality Inspector role (Q)
   if (user.role === "Q") {
     const isIncomingQc =

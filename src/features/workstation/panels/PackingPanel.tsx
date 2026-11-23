@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -6,31 +6,22 @@ import {
   Box,
   Boxes,
   CheckCircle2,
-  Clock,
-  Layers,
-  Lock,
-  Package,
   PackageCheck,
   PackagePlus,
   Radio,
-  RotateCcw,
   ScanLine,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   Tag,
-  Truck,
-  Warehouse,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
-import { Field, ScopeNote } from "@/components/wt/forms";
-import { fmt, IdLink, KeyValue, Section } from "@/components/wt/layout";
-import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
+import { fmt, IdLink, Section } from "@/components/wt/layout";
+import { HoldBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
-import type { Garment, MaterialLot, Package as PkgType, ScanOutcome } from "@/domain/types";
+import type { Garment, MaterialLot, Package as PkgType } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { paths } from "@/app/paths";
@@ -41,7 +32,7 @@ function generateFreshBoxUid(): string {
 }
 
 interface ScanFeedback {
-  type: "accepted_box" | "accepted_product" | "sealed" | "rejected" | "idle";
+  type: "accepted_box" | "accepted_product" | "sealed" | "rejected" | "waiting_box" | "idle";
   title: string;
   message: string;
   boxId?: string | undefined;
@@ -64,19 +55,20 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
 
-  // Scanner 7 input & simulation
-  const [scanUid, setScanUid] = useState<string>("04B5C6D7");
-  const [isArmingForBox, setIsArmingForBox] = useState<boolean>(false);
+  // Hardware Scanner State
+  const [isWaitingForBoxScan, setIsWaitingForBoxScan] = useState<boolean>(false);
   const [localActiveBoxId, setLocalActiveBoxId] = useState<string | null>(null);
+  const [testBoxUid, setTestBoxUid] = useState<string>(() => generateFreshBoxUid());
 
-  // Live scan feedback box state
+  // Durable live scan feedback box state
   const [feedback, setFeedback] = useState<ScanFeedback>({
     type: "idle",
-    title: "Scanner 7 Ready — Awaiting Clean Box Tag",
-    message: "Click 'Scan Box' below to arm Scanner 7 for a clean container RFID tag (zero prior history required).",
+    title: "Station 7 — Packaging & Master Carton Aggregation",
+    message: "Click 'Scan Box Tag' below. Next scanned tag on hardware will be bound as a clean master shipping carton.",
   });
 
-  const isPackingStaff = me.role === "M" || me.department === "packing";
+  const isPackingStaff =
+    me.role === "M" || me.role === "A" || me.role === "L" || me.department === "packing";
 
   return (
     <Loadable query={qFulfilment}>
@@ -87,14 +79,13 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
               {(lots) => {
                 const packages: PkgType[] = fulfilment.packages || [];
 
-                // Determine active open box
-                // Priority: explicitly selected/created local box > existing open package
+                // Determine active open box:
+                // Priority: explicitly initialized local box > any existing open package
                 const openPackages = packages.filter((p) => p.status === "open");
                 const activeBox: PkgType | undefined =
                   packages.find((p) => p.id === localActiveBoxId && p.status === "open") ||
                   openPackages[0];
 
-                const activeBoxId = activeBox?.id;
                 const isBoxOpen = !!activeBox && activeBox.status === "open";
 
                 // Garments inside the active box
@@ -115,36 +106,16 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                     (g.stage === "packing" || (g.stage as string) === "final-qc"),
                 );
 
-                // Centralized Scanner 7 Tag Resolution & Guard Pipeline
-                const handleScanner7Scan = async (rawUid: string) => {
+                // Centralized Hardware Scan Processor for Scanner 7
+                const handleTagScan = async (rawUid: string) => {
                   const uid = rawUid.trim().toUpperCase();
-                  if (!uid) return;
+                  if (!uid || pending || !isPackingStaff) return;
 
                   // -------------------------------------------------------------
-                  // RULE E: Post-"Box Filled" Lockdown Check
+                  // 1. STATE: Waiting for clean Box Tag Scan
                   // -------------------------------------------------------------
-                  if (!isBoxOpen && !isArmingForBox) {
-                    // Check if tag is a product tag attempted when no box is open
-                    const isGarmentTag = garments.some((g) => g.rfidUid === uid);
-                    if (isGarmentTag) {
-                      setFeedback({
-                        type: "rejected",
-                        title: "Scan Rejected — Scan Box First",
-                        message: "Rejected: No active box open. Click 'Scan Box' and scan a box tag first.",
-                        rejectReason: "Rejected: No active box open. Click 'Scan Box' and scan a box tag first.",
-                        tagUid: uid,
-                        timestamp: new Date().toLocaleTimeString(),
-                      });
-                      return;
-                    }
-                  }
-
-                  // -------------------------------------------------------------
-                  // FLOW STEP 2: Scanning a Clean Master Box Tag
-                  // -------------------------------------------------------------
-                  if (isArmingForBox || !isBoxOpen) {
-                    // RULE A: Fresh Box Tag Rule (Zero History Requirement)
-                    // If tag was previously used for another box, an issued fabric bundle, or an existing garment
+                  if (isWaitingForBoxScan) {
+                    // Rule A: Clean Box Tag Rule (Zero History Requirement)
                     const isUsedByLot = lots.some((l) => l.rfidUid === uid);
                     const isUsedByGarment = garments.some((g) => g.rfidUid === uid);
                     const isUsedByPackage = packages.some(
@@ -154,30 +125,18 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                     if (isUsedByLot || isUsedByGarment || isUsedByPackage) {
                       setFeedback({
                         type: "rejected",
-                        title: "Scan Rejected — Box Tag Already Used",
-                        message: "Rejected: Tag already has history (Assigned to Lot/Garment/Box). Use a clean, unassigned box card.",
-                        rejectReason: "Rejected: Tag already has history (Assigned to Lot/Garment/Box). Use a clean, unassigned box card.",
+                        title: "Scan Rejected — Tag Already Has History",
+                        message: `Rejected: Tag ${uid} is already assigned to a ${
+                          isUsedByLot ? "Fabric Bundle" : isUsedByGarment ? "Garment" : "Box"
+                        }. Please present a fresh, unassigned Box RFID tag.`,
+                        rejectReason: `Tag ${uid} already bound in production lineage. Clean box card required.`,
                         tagUid: uid,
                         timestamp: new Date().toLocaleTimeString(),
                       });
                       return;
                     }
 
-                    // RULE D Check: Ensure not a fabric bundle card or garment card
-                    if (isUsedByLot || isUsedByGarment) {
-                      setFeedback({
-                        type: "rejected",
-                        title: "Scan Rejected — Invalid Tag Type",
-                        message: "Rejected: Invalid tag type. Expected an enrolled box tag, got a bundle/garment card.",
-                        rejectReason: "Rejected: Invalid tag type. Expected an enrolled box tag, got a bundle/garment card.",
-                        tagUid: uid,
-                        timestamp: new Date().toLocaleTimeString(),
-                      });
-                      return;
-                    }
-
-                    // Fresh Box Tag Validated! Create new Box Session
-                    // Generate clean sequential BOX ID
+                    // Fresh Box Tag Validated! Initialize new Master Box
                     const existingBoxNums = packages
                       .map((p) => {
                         const m = p.id.match(/BOX-(\d+)/i) || p.id.match(/PKG-(\d+)/i);
@@ -193,62 +152,77 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       },
                       () => {
                         setLocalActiveBoxId(newBoxId);
-                        setIsArmingForBox(false);
+                        setIsWaitingForBoxScan(false);
+                        setTestBoxUid(generateFreshBoxUid());
                         setFeedback({
                           type: "accepted_box",
-                          title: `Accepted Box: ${newBoxId}`,
-                          message: "Box Initialized → Ready to Pack Products",
+                          title: `✓ Box ${newBoxId} Initialized`,
+                          message: `Bound with Tag ${uid}. Station 7 is now in Packing Mode — Scan finished product tags one by one on hardware.`,
                           boxId: newBoxId,
                           tagUid: uid,
                           timestamp: new Date().toLocaleTimeString(),
                         });
-                        return `Box ${newBoxId} registered with Tag ${uid}. Ready for garment packing.`;
+                        void qFulfilment.refetch();
+                        void qGarments.refetch();
+                        return `Box ${newBoxId} registered with Tag ${uid}. Ready for product packing.`;
                       },
                     );
                     return;
                   }
 
                   // -------------------------------------------------------------
-                  // FLOW STEP 3: Subsequent Scans: Finished Garment Tags
+                  // 2. STATE: Box is Open -> Associate Product Tags One-by-One
                   // -------------------------------------------------------------
                   if (isBoxOpen && activeBox) {
-                    // Check if operator scans an unassigned or bundle tag
+                    // Check if tag is a fabric bundle card
                     const matchingLot = lots.find((l) => l.rfidUid === uid);
                     if (matchingLot) {
-                      // RULE D: Authentic Product Tag Rule (No Bundle Cards)
                       setFeedback({
                         type: "rejected",
                         title: "Scan Rejected — Invalid Tag Type: Bundle Card",
-                        message: "Rejected: Invalid tag type. Expected an enrolled garment tag, got a bundle/unknown card.",
-                        rejectReason: "Rejected: Invalid tag type. Expected an enrolled garment tag, got a bundle/unknown card.",
+                        message: `Rejected: Scanned tag ${uid} belongs to fabric lot ${matchingLot.id}. Expected an individual garment product tag.`,
+                        rejectReason: `Tag belongs to fabric lot ${matchingLot.id}. Not an enrolled garment card.`,
                         tagUid: uid,
                         timestamp: new Date().toLocaleTimeString(),
                       });
                       return;
                     }
 
-                    // Locate Garment by Tag UID
-                    const garment = garments.find((g) => g.rfidUid === uid);
-                    if (!garment) {
-                      // Tag is unrecognised / not an enrolled garment tag
+                    // Check if tag is another box tag
+                    const matchingPkg = packages.find((p) => p.rfidUid === uid || p.id === uid);
+                    if (matchingPkg) {
                       setFeedback({
                         type: "rejected",
-                        title: "Scan Rejected — Invalid Tag Type",
-                        message: "Rejected: Invalid tag type. Expected an enrolled garment tag, got a bundle/unknown card.",
-                        rejectReason: "Rejected: Invalid tag type. Expected an enrolled garment tag, got a bundle/unknown card.",
+                        title: "Scan Rejected — Invalid Tag Type: Box Tag",
+                        message: `Rejected: Scanned tag ${uid} belongs to carton ${matchingPkg.id}. Expected a product garment tag.`,
+                        rejectReason: `Tag belongs to box ${matchingPkg.id}. Not a garment tag.`,
                         tagUid: uid,
                         timestamp: new Date().toLocaleTimeString(),
                       });
                       return;
                     }
 
-                    // RULE C1: Quality Hold Guard
+                    // Locate Garment by Tag UID or ID
+                    const garment = garments.find((g) => g.rfidUid === uid || g.id.toUpperCase() === uid);
+                    if (!garment) {
+                      setFeedback({
+                        type: "rejected",
+                        title: "Scan Rejected — Unrecognised Garment Tag",
+                        message: `Rejected: Tag ${uid} is not bound to any registered garment in the system.`,
+                        rejectReason: `UID ${uid} is not recognised as an enrolled garment tag.`,
+                        tagUid: uid,
+                        timestamp: new Date().toLocaleTimeString(),
+                      });
+                      return;
+                    }
+
+                    // Quality Hold check
                     if (garment.hold) {
                       setFeedback({
                         type: "rejected",
-                        title: "Scan Rejected — QC Not Passed / Active Hold",
-                        message: `Rejected: Garment ${garment.id} has an active Quality Hold. Cannot pack.`,
-                        rejectReason: `Rejected: Garment ${garment.id} has an active Quality Hold. Cannot pack.`,
+                        title: `Scan Rejected — Active Quality Hold (${garment.id})`,
+                        message: `Rejected: Garment ${garment.id} is locked under an active quality hold. Cannot pack into box.`,
+                        rejectReason: `Garment ${garment.id} is on quality hold and cannot be packed.`,
                         garmentCode: garment.id,
                         tagUid: uid,
                         timestamp: new Date().toLocaleTimeString(),
@@ -256,13 +230,13 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       return;
                     }
 
-                    // RULE C2: Mandatory QC Clearance & Station Lineage Guard
+                    // Final QC Passed check
                     if (garment.disposition !== "passed" && garment.disposition !== "released") {
                       setFeedback({
                         type: "rejected",
-                        title: "Scan Rejected — QC Clearance Required",
-                        message: `Rejected: Garment ${garment.id} has not passed Final QC (Station 6).`,
-                        rejectReason: `Rejected: Garment ${garment.id} has not passed Final QC (Station 6).`,
+                        title: `Scan Rejected — QC Clearance Required (${garment.id})`,
+                        message: `Rejected: Garment ${garment.id} has not passed Final QC (disposition: ${garment.disposition}).`,
+                        rejectReason: `Garment ${garment.id} has not passed Final QC inspection.`,
                         garmentCode: garment.id,
                         tagUid: uid,
                         timestamp: new Date().toLocaleTimeString(),
@@ -270,13 +244,27 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       return;
                     }
 
-                    // RULE C3: Duplicate Packing Guard
+                    // Stage / Station lineage check
+                    if (garment.stage !== "packing" && (garment.stage as string) !== "final-qc") {
+                      setFeedback({
+                        type: "rejected",
+                        title: `Scan Rejected — Wrong Lifecycle Stage (${garment.id})`,
+                        message: `Rejected: Garment ${garment.id} is at stage '${garment.stage}', not ready for packing.`,
+                        rejectReason: `Garment ${garment.id} is at stage '${garment.stage}'.`,
+                        garmentCode: garment.id,
+                        tagUid: uid,
+                        timestamp: new Date().toLocaleTimeString(),
+                      });
+                      return;
+                    }
+
+                    // Duplicate packing check
                     if (garment.packageId) {
                       setFeedback({
                         type: "rejected",
-                        title: "Scan Rejected — Duplicate Packing Guard",
-                        message: `Rejected: Garment ${garment.id} is already packed inside ${garment.packageId}.`,
-                        rejectReason: `Rejected: Garment ${garment.id} is already packed inside ${garment.packageId}.`,
+                        title: `Scan Rejected — Already Packed (${garment.id})`,
+                        message: `Rejected: Garment ${garment.id} is already packed inside carton ${garment.packageId}.`,
+                        rejectReason: `Garment ${garment.id} is already packed into ${garment.packageId}.`,
                         garmentCode: garment.id,
                         tagUid: uid,
                         timestamp: new Date().toLocaleTimeString(),
@@ -284,8 +272,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       return;
                     }
 
-                    // Valid Garment Scan Accepted! Add to Active Box
-                    const currentPackedCount = packedGarments.length + 1;
+                    // All checks passed! Pack garment into active box
+                    const newCount = packedGarments.length + 1;
                     void run(
                       async (c) => {
                         return await c.packGarment(garment.id, activeBox.id);
@@ -293,22 +281,36 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       () => {
                         setFeedback({
                           type: "accepted_product",
-                          title: `Accepted Product: ${garment.id}`,
-                          message: `Linked into Box ${activeBox.id} (Item ${currentPackedCount} of Box)`,
+                          title: `✓ Product Added: ${garment.id}`,
+                          message: `${garment.productName} (Size: ${(garment as any).size ?? "M"}) linked into Box ${activeBox.id} · Carton Total: ${newCount} units.`,
                           boxId: activeBox.id,
                           garmentCode: garment.id,
                           productStyle: garment.productName,
                           size: (garment as any).size || "Standard",
-                          itemIndex: currentPackedCount,
-                          totalPacked: currentPackedCount,
+                          itemIndex: newCount,
+                          totalPacked: newCount,
                           tagUid: uid,
                           timestamp: new Date().toLocaleTimeString(),
                         });
-                        return `Garment ${garment.id} packed into ${activeBox.id}. Item count: ${currentPackedCount}.`;
+                        void qFulfilment.refetch();
+                        void qGarments.refetch();
+                        return `✓ Garment ${garment.id} packed into ${activeBox.id} (Item #${newCount}).`;
                       },
                     );
                     return;
                   }
+
+                  // -------------------------------------------------------------
+                  // 3. STATE: No box open and not waiting for box scan
+                  // -------------------------------------------------------------
+                  setFeedback({
+                    type: "rejected",
+                    title: "Scan Rejected — Scan Box First",
+                    message: "Rejected: No active box open. Click 'Scan Box Tag' first before scanning product tags.",
+                    rejectReason: "No active box open. Box tag must be scanned first.",
+                    tagUid: uid,
+                    timestamp: new Date().toLocaleTimeString(),
+                  });
                 };
 
                 // Operator Action: Finalize "Box Filled"
@@ -318,8 +320,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                     setFeedback({
                       type: "rejected",
                       title: "Cannot Seal Empty Box",
-                      message: "Cannot seal an empty box. Scan at least one finished garment tag first.",
-                      rejectReason: "Cannot seal an empty box. Scan at least one finished garment tag first.",
+                      message: "Cannot seal an empty carton. Please scan at least one finished product tag first.",
+                      rejectReason: "Cannot seal an empty box. Minimum 1 product required.",
                       timestamp: new Date().toLocaleTimeString(),
                     });
                     return;
@@ -330,22 +332,69 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       await c.sealPackage(activeBox.id);
                     },
                     () => {
-                      const sealedCount = packedGarments.length;
+                      const count = packedGarments.length;
                       const sealedId = activeBox.id;
                       setLocalActiveBoxId(null);
-                      setIsArmingForBox(false);
+                      setIsWaitingForBoxScan(false);
+                      setTestBoxUid(generateFreshBoxUid());
                       setFeedback({
                         type: "sealed",
-                        title: `Box ${sealedId} Sealed & Frozen`,
-                        message: `Carton manifest frozen (${sealedCount} units). Container routed to Station 8 (Warehouse Inbound). Ready for next box.`,
+                        title: `✓ Box ${sealedId} Packed & Sealed`,
+                        message: `Carton manifest frozen (${count} units). Scans unlinked. Box routed to Station 8 (Warehouse Intake). Ready for next box!`,
                         boxId: sealedId,
-                        totalPacked: sealedCount,
+                        totalPacked: count,
                         timestamp: new Date().toLocaleTimeString(),
                       });
-                      return `Box ${sealedId} sealed with ${sealedCount} units. Routed to Station 8 (Warehouse).`;
+                      void qFulfilment.refetch();
+                      void qGarments.refetch();
+                      return `✓ Box ${sealedId} sealed with ${count} units. Routed to Warehouse.`;
                     },
                   );
                 };
+
+                // Auto-detect hardware scans arriving via MQTT/backend reader at Station 7
+                const lastSeenOutcomeRef = useRef<string | null>(null);
+                useEffect(() => {
+                  const outcome = stationData?.lastScanOutcome;
+                  if (!outcome) return;
+                  if (outcome.at && outcome.at !== lastSeenOutcomeRef.current) {
+                    lastSeenOutcomeRef.current = outcome.at;
+                    if (outcome.uid) {
+                      void handleTagScan(outcome.uid);
+                    }
+                  }
+                }, [stationData?.lastScanOutcome]);
+
+                // Global USB Keyboard Wedge RFID reader listener for Station 7
+                // Zero manual typing/selecting needed: barcode/RFID reader automatically triggers scan
+                useEffect(() => {
+                  let buffer = "";
+                  let lastKeyTime = Date.now();
+
+                  const handleKeyDown = (e: KeyboardEvent) => {
+                    const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+                    if (tag === "input" || tag === "textarea") return;
+
+                    const now = Date.now();
+                    if (now - lastKeyTime > 500) {
+                      buffer = "";
+                    }
+                    lastKeyTime = now;
+
+                    if (e.key === "Enter") {
+                      const scanned = buffer.trim().toUpperCase();
+                      if (scanned) {
+                        void handleTagScan(scanned);
+                      }
+                      buffer = "";
+                    } else if (e.key.length === 1) {
+                      buffer += e.key;
+                    }
+                  };
+
+                  window.addEventListener("keydown", handleKeyDown);
+                  return () => window.removeEventListener("keydown", handleKeyDown);
+                }, [isWaitingForBoxScan, isBoxOpen, activeBox, packedGarments, lots, garments, packages]);
 
                 return (
                   <div className="space-y-6">
@@ -372,7 +421,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       </div>
                     </div>
 
-                    {/* Section 2.A: Header & Station Hardware Status */}
+                    {/* Station 7 Hardware Status Banner */}
                     <section
                       aria-label="Packaging Station Hardware Status"
                       className="relative overflow-hidden rounded-xl border-2 border-primary/25 bg-card p-5 shadow-xs"
@@ -385,21 +434,21 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                               Station 7 · Packaging & Aggregation (Scanner 7)
                             </span>
                             <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
-                              Bench Reader: Armed
+                              Hardware Reader: Armed
                             </span>
                             {isBoxOpen ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                                <Box className="size-3" />
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                                <Box className="size-3.5" />
                                 Packing Mode: {activeBox.id}
                               </span>
-                            ) : isArmingForBox ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse">
-                                <Radio className="size-3" />
-                                Awaiting Box Card Scan
+                            ) : isWaitingForBoxScan ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse">
+                                <Radio className="size-3.5" />
+                                Awaiting Fresh Box Tag Scan
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                                Idle · Click &quot;Scan Box&quot;
+                              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                                Idle · Ready to Scan Box
                               </span>
                             )}
                           </div>
@@ -407,8 +456,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             Packaging & Master Carton Aggregation
                           </h2>
                           <p className="text-xs text-muted-foreground">
-                            Inspected garment packing station. Scans clean Master Box Tags, binds finished
-                            shirts into shipping cartons, and advances container batches to Station 8 (Warehouse).
+                            Scan clean Box Tag first, then scan finished product tags one by one on hardware. Click &quot;Box Filled&quot; to freeze carton and route to Warehouse.
                           </p>
                         </div>
 
@@ -426,26 +474,26 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Scanner Hardware:</span>
+                            <span className="text-muted-foreground">Hardware Reader:</span>
                             <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">
-                              Active / Ready
+                              Scanner 7 Active
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Live Scan Feedback Box */}
+                      {/* Live Feedback Card */}
                       <div className="mt-4 pt-4 border-t">
                         <div
                           className={`rounded-lg border p-4 shadow-xs transition-all duration-200 ${
-                            feedback.type === "accepted_box"
-                              ? "border-emerald-500/40 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100"
-                              : feedback.type === "accepted_product"
+                            feedback.type === "accepted_box" || feedback.type === "accepted_product"
                               ? "border-emerald-500/40 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100"
                               : feedback.type === "sealed"
                               ? "border-primary/40 bg-primary/10 text-foreground"
                               : feedback.type === "rejected"
                               ? "border-destructive/40 bg-destructive/10 text-destructive dark:text-destructive-foreground"
+                              : feedback.type === "waiting_box"
+                              ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
                               : "border-primary/20 bg-muted/30 text-foreground"
                           }`}
                         >
@@ -475,7 +523,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 {feedback.message}
                               </p>
 
-                              {/* Rich Details Chips */}
+                              {/* Details Chips */}
                               <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono">
                                 {feedback.boxId && (
                                   <span className="rounded bg-background/80 px-2 py-0.5 border shadow-2xs font-semibold">
@@ -509,164 +557,205 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       </div>
                     </section>
 
-                    {/* Section 2.B: Active Container Manifest Panel */}
-                    <div className="grid gap-6 lg:grid-cols-3">
-                      <div className="lg:col-span-1 space-y-4">
-                        <Section
-                          title="Container Session"
-                          description="Manage active Master Carton manifest."
-                        >
-                          {!isBoxOpen ? (
-                            <div className="rounded-xl border-2 border-dashed border-primary/30 bg-muted/20 p-6 text-center space-y-4">
-                              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                                <Boxes className="size-6" />
-                              </div>
-                              <div className="space-y-1">
-                                <h3 className="font-bold text-foreground">No Active Box Open</h3>
-                                <p className="text-xs text-muted-foreground">
-                                  Click &quot;Scan Box&quot; to arm Scanner 7 and scan an unassigned Master Box Tag (zero history).
-                                </p>
-                              </div>
+                    {/* Main Container Session & Packing Workspace */}
+                    {!isBoxOpen ? (
+                      /* STATE A & B: No Active Box Open */
+                      <Section
+                        title="Master Carton Session"
+                        description="Step 1: Scan a clean box tag on hardware to initiate container."
+                      >
+                        <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-muted/15 p-8 text-center space-y-5 max-w-2xl mx-auto my-4">
+                          <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
+                            <Boxes className="size-8" />
+                          </div>
 
+                          <div className="space-y-1.5">
+                            <h3 className="text-xl font-bold tracking-tight text-foreground">
+                              {isWaitingForBoxScan ? "Scanner 7 Armed — Scan Box Tag" : "Ready to Pack Master Carton"}
+                            </h3>
+                            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                              {isWaitingForBoxScan
+                                ? "Present an unassigned Box RFID tag (zero prior history) to Scanner 7 hardware reader."
+                                : "Click below to begin. The next tag scanned on hardware will be bound as a new Master Carton."}
+                            </p>
+                          </div>
+
+                          {!isWaitingForBoxScan ? (
+                            <div className="space-y-4 pt-2">
                               <Button
                                 size="lg"
-                                className="w-full font-bold shadow-md gap-2"
+                                className="w-full sm:w-auto min-w-[240px] text-base font-bold shadow-md gap-2 h-12 bg-primary hover:bg-primary/90"
                                 disabled={pending || !isPackingStaff}
                                 onClick={() => {
-                                  setIsArmingForBox(true);
+                                  setIsWaitingForBoxScan(true);
                                   setFeedback({
-                                    type: "idle",
-                                    title: "Scanner 7 Armed: Scan Master Box Tag",
-                                    message: "Awaiting clean Box Tag: Present an unassigned RFID tag on Scanner 7 to initiate container.",
+                                    type: "waiting_box",
+                                    title: "Scanner 7 Armed — Scan Clean Box Tag",
+                                    message: "Ready on hardware! Tap an unassigned RFID tag on Scanner 7 to initialize container.",
                                     timestamp: new Date().toLocaleTimeString(),
                                   });
                                 }}
                               >
-                                <Radio className="size-4 animate-pulse" />
-                                Scan Box
+                                <ScanLine className="size-5" />
+                                Scan Box Tag
                               </Button>
 
-                              {isArmingForBox && (
-                                <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium animate-pulse">
-                                  Bench antenna armed for Container Tag. Tap fresh tag below.
+                              {/* Quick Test Helper for Testing Without Physical Hardware */}
+                              <div className="pt-2">
+                                <p className="text-xs text-muted-foreground mb-1.5">
+                                  No physical RFID reader connected? Test directly:
                                 </p>
-                              )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-xs font-mono text-primary border-primary/30 hover:bg-primary/10 gap-1.5"
+                                  disabled={pending || !isPackingStaff}
+                                  onClick={() => {
+                                    setIsWaitingForBoxScan(true);
+                                    void handleTagScan(testBoxUid);
+                                  }}
+                                >
+                                  <Sparkles className="size-3.5" />
+                                  Simulate Fresh Box Tag ({testBoxUid})
+                                </Button>
+                              </div>
                             </div>
                           ) : (
-                            <div className="rounded-xl border-2 border-emerald-500/30 bg-card p-5 space-y-4 shadow-sm">
-                              {/* Active Box Banner */}
-                              <div className="flex items-center justify-between pb-3 border-b">
-                                <div className="space-y-0.5">
-                                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                                    Master Carton ID
-                                  </span>
-                                  <div className="flex items-center gap-2">
-                                    <Box className="size-5 text-emerald-600 dark:text-emerald-400" />
-                                    <span className="font-mono text-lg font-black text-foreground">
-                                      {activeBox.id}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                  open / packing
-                                </span>
+                            <div className="space-y-4 pt-2">
+                              <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/15 border border-amber-500/30 px-4 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 animate-pulse">
+                                <Radio className="size-4 animate-spin" />
+                                Listening for Box RFID Scan on Hardware Reader...
                               </div>
 
-                              <div className="space-y-2 text-xs">
-                                <div className="flex items-center justify-between py-1 border-b border-muted">
-                                  <span className="text-muted-foreground">Bound Box Tag:</span>
-                                  <span className="font-mono font-bold text-primary">
-                                    {activeBox.rfidUid || "04B5C6D7"}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between py-1 border-b border-muted">
-                                  <span className="text-muted-foreground">Created:</span>
-                                  <span>{fmt.date(activeBox.createdAt)}</span>
-                                </div>
-                                <div className="flex items-center justify-between py-1">
-                                  <span className="text-muted-foreground">Downstream Route:</span>
-                                  <span className="font-medium text-foreground">
-                                    Station 8 (Warehouse)
-                                  </span>
-                                </div>
+                              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setIsWaitingForBoxScan(false);
+                                    setFeedback({
+                                      type: "idle",
+                                      title: "Scanner 7 Idle",
+                                      message: "Box scan cancelled. Click 'Scan Box Tag' when ready.",
+                                    });
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs gap-1.5"
+                                  disabled={pending || !isPackingStaff}
+                                  onClick={() => void handleTagScan(testBoxUid)}
+                                >
+                                  <Sparkles className="size-3.5" />
+                                  Tap Simulated Clean Tag ({testBoxUid})
+                                </Button>
                               </div>
-
-                              {/* Live Carton Unit Counter */}
-                              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-4 text-center space-y-1">
-                                <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
-                                  Live Carton Unit Count
-                                </span>
-                                <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                                  {packedGarments.length}
-                                </div>
-                                <span className="text-[11px] text-muted-foreground">
-                                  units packed in manifest
-                                </span>
-                              </div>
-
-                              {/* Box Filled Action Button */}
-                              <Button
-                                size="lg"
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md gap-2"
-                                disabled={pending || packedGarments.length === 0 || !isPackingStaff}
-                                onClick={() => void handleBoxFilled()}
-                              >
-                                <PackageCheck className="size-4" />
-                                Box Filled
-                              </Button>
-
-                              <p className="text-[11px] text-center text-muted-foreground">
-                                Finalizes and seals {activeBox.id}, freezes container manifest, and generates Station 8 intake task.
-                              </p>
                             </div>
                           )}
-                        </Section>
-                      </div>
+                        </div>
+                      </Section>
+                    ) : (
+                      /* STATE C: Active Box Open -> Stream Products Under Box */
+                      <div className="space-y-6">
+                        {/* Active Box Container Banner */}
+                        <div className="rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-r from-card via-card/95 to-emerald-50/30 dark:to-emerald-950/20 p-6 shadow-md">
+                          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b">
+                            <div className="flex items-center gap-3.5">
+                              <div className="flex size-14 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-xs">
+                                <Box className="size-7" />
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                  Active Master Carton
+                                </span>
+                                <h3 className="text-2xl font-black font-mono text-foreground flex items-center gap-2">
+                                  {activeBox.id}
+                                </h3>
+                                <p className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                                  <span>Bound RFID Tag:</span>
+                                  <span className="font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                    {activeBox.rfidUid || "04B5C6D7"}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
 
-                      {/* Section 2.C: Packed Products Manifest Table */}
-                      <div className="lg:col-span-2 space-y-4">
+                            <div className="flex items-center gap-4">
+                              {/* Live Carton Unit Counter */}
+                              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-center">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                                  Packed Units
+                                </span>
+                                <div className="text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                                  {packedGarments.length}
+                                </div>
+                              </div>
+
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                open / packing
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Zero-Touch Hardware Scan Beacon */}
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="font-medium text-foreground">
+                                Hardware Reader Active:
+                              </span>
+                              <span>
+                                Scan product tags one by one on Scanner 7. Scanned products will automatically link into {activeBox.id} below.
+                              </span>
+                            </div>
+
+                            <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                              Downstream Route: Station 8 (Warehouse)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Packed Products Manifest Table Under Active Box */}
                         <Section
-                          title={
-                            isBoxOpen
-                              ? `Packed Products Manifest · ${activeBox.id} (${packedGarments.length} units)`
-                              : "Packed Products Manifest"
-                          }
-                          description="Real-time manifest of finished shirts bound into the active carton."
+                          title={`Packed Products in ${activeBox.id} (${packedGarments.length} units)`}
+                          description="Runtime manifest of shirts linked to this Master Carton. Updated instantly as tags are scanned on hardware."
                         >
-                          {!isBoxOpen ? (
-                            <EmptyState title="No active box open">
-                              <p className="text-xs text-muted-foreground">
-                                Click &quot;Scan Box&quot; and scan a clean Master Box Tag to view and build the container manifest.
-                              </p>
-                            </EmptyState>
-                          ) : packedGarments.length === 0 ? (
-                            <div className="rounded-xl border border-dashed p-8 text-center space-y-2">
-                              <PackagePlus className="mx-auto size-8 text-muted-foreground/60" />
-                              <h4 className="text-sm font-semibold">Box is Ready for Products</h4>
-                              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                                Scan or tap finished garment tags below to link inspected shirts into {activeBox.id}.
-                              </p>
+                          {packedGarments.length === 0 ? (
+                            <div className="rounded-xl border-2 border-dashed border-emerald-500/30 bg-emerald-500/5 p-8 text-center space-y-3">
+                              <PackagePlus className="mx-auto size-10 text-emerald-600/70" />
+                              <div className="space-y-1">
+                                <h4 className="text-base font-bold text-foreground">
+                                  Carton {activeBox.id} is Open & Ready
+                                </h4>
+                                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                                  Scan finished garment RFID tags on hardware reader one by one. Backend will verify QC clearance and push each product directly under this box.
+                                </p>
+                              </div>
                             </div>
                           ) : (
                             <DataTable
                               rows={packedGarments}
                               rowKey={(g) => g.id}
-                              empty="No products in manifest."
+                              empty="No products in carton yet."
                               columns={[
                                 {
                                   header: "Garment ID",
                                   cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
                                 },
                                 {
-                                  header: "Product Details",
+                                  header: "Product Style",
                                   cell: (g) => (
                                     <div className="space-y-0.5">
-                                      <div className="font-medium text-foreground">
+                                      <span className="font-semibold text-foreground">
                                         {g.productName}
-                                      </div>
+                                      </span>
                                       <div className="text-[11px] text-muted-foreground">
-                                        Order: {g.orderId} · Size: {(g as any).size ?? "M"}
+                                        Order: <span className="font-mono">{g.orderId}</span> · Size:{" "}
+                                        <span className="font-medium">{(g as any).size ?? "M"}</span>
                                       </div>
                                     </div>
                                   ),
@@ -691,56 +780,42 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                     </span>
                                   ),
                                 },
+                                {
+                                  header: "Status",
+                                  cell: () => (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 border border-emerald-500/20">
+                                      <Box className="size-3" />
+                                      Packed in {activeBox.id}
+                                    </span>
+                                  ),
+                                },
                               ]}
                             />
                           )}
+
+                          {/* "Box Filled" Action Button Below Products */}
+                          <div className="pt-6 border-t mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="text-xs text-muted-foreground text-center sm:text-left">
+                              When carton is full, click <strong>Box Filled</strong> to freeze manifest, mark products packed, and reset workstation for next box.
+                            </div>
+
+                            <Button
+                              size="lg"
+                              className="w-full sm:w-auto min-w-[220px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md gap-2 h-11"
+                              disabled={pending || packedGarments.length === 0 || !isPackingStaff}
+                              onClick={() => void handleBoxFilled()}
+                            >
+                              <PackageCheck className="size-5" />
+                              Box Filled
+                            </Button>
+                          </div>
                         </Section>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Section 3: Hardware RFID Reader */}
+                    {/* Section: Available Inspected Garments Awaiting Packaging */}
                     <Section
-                      title="Scanner 7 — Packing Station Reader"
-                      description="Present RFID tag to Scanner 7 to aggregate garments into containers or register box shipping tags."
-                    >
-                      <div className="rounded-xl border bg-card p-5 space-y-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                          <div className="flex-1">
-                            <Field
-                              label="Container / Garment Tag UID"
-                              htmlFor="packing-scan-uid"
-                              hint="Present an RFID tag to Scanner 7 or enter tag UID manually."
-                            >
-                              <Input
-                                id="packing-scan-uid"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                className="font-mono uppercase text-sm"
-                                placeholder="e.g. 04B5C6D7"
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && scanUid.trim() && !pending && isPackingStaff) {
-                                    void handleScanner7Scan(scanUid);
-                                  }
-                                }}
-                              />
-                            </Field>
-                          </div>
-
-                          <Button
-                            disabled={pending || !scanUid.trim() || !isPackingStaff}
-                            onClick={() => void handleScanner7Scan(scanUid)}
-                            className="font-bold gap-2 shrink-0"
-                          >
-                            <ScanLine className="size-4" />
-                            Scan at Scanner 7
-                          </Button>
-                        </div>
-                      </div>
-                    </Section>
-
-                    {/* Section 4: Available Garments Awaiting Packing */}
-                    <Section
-                      title="Garments Cleared from Final QC (Awaiting Packaging)"
+                      title={`Garments Cleared from Final QC · Ready for Packaging (${readyForPacking.length})`}
                       description="Serialized shirts that passed Station 6 inspection with zero active holds, ready to pack into shipping cartons."
                     >
                       <DataTable
@@ -784,7 +859,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             ),
                           },
                           {
-                            header: "Action",
+                            header: "Hardware Simulation",
                             cell: (g) => (
                               <Button
                                 size="sm"
@@ -793,13 +868,12 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 disabled={pending || !isPackingStaff || !g.rfidUid}
                                 onClick={() => {
                                   if (g.rfidUid) {
-                                    setScanUid(g.rfidUid);
-                                    void handleScanner7Scan(g.rfidUid);
+                                    void handleTagScan(g.rfidUid);
                                   }
                                 }}
                               >
                                 <ScanLine className="size-3" />
-                                Tap Tag
+                                Simulate Scan
                               </Button>
                             ),
                           },
