@@ -621,8 +621,8 @@ export function QualityView() {
     return (
       <>
         <PageHeader
-          title="Incoming Material Quality Assurance (qc.incoming)"
-          crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality (Incoming QC)" }]}
+          title="Incoming Material Quality Assurance"
+          description="Fabric inspection queues, 4-point defect evaluation, and quarantine hold management."
         />
 
         <div className="space-y-6">
