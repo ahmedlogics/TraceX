@@ -201,15 +201,7 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     warehouseIntake: (tagUid: string, binId?: string) =>
       act((s, u) => {
-        E.receiveStock(s, u, tagUid);
-        return {
-          uid: tagUid,
-          resolution: "accepted" as const,
-          subjectId: tagUid,
-          garmentCode: tagUid,
-          productName: `Received into ${binId || "BIN-A1"}`,
-          at: new Date().toISOString(),
-        };
+        return E.receiveStock(s, u, tagUid, binId);
       }),
 
     dispatchBoxScan: (boxTagOrId: string, shipmentId?: string) =>

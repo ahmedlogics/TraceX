@@ -2822,20 +2822,110 @@ export function packGarment(
   return pkg.id;
 }
 
-export function receiveStock(s: DemoState, actor: StaffUser, garmentId: string) {
+export function receiveStock(
+  s: DemoState,
+  actor: StaffUser,
+  boxTagOrGarmentId: string,
+  binId: string = "BIN-A1",
+): ScanOutcome {
   ensure(can.receiveStock(actor), "forbidden", "Only warehouse staff can receive finished stock.");
-  const g = getGarment(s, garmentId);
+  const cleanInput = boxTagOrGarmentId.trim();
+  const normUid = normalizeUid(cleanInput);
+
+  // 1. Resolve package by ID, rfidUid, or binding
+  let pkg = s.packages.find(
+    (p) =>
+      p.id.toUpperCase() === cleanInput.toUpperCase() ||
+      (p.rfidUid && p.rfidUid.toUpperCase() === normUid),
+  );
+
+  if (!pkg) {
+    const binding = findBindingByUid(s, normUid);
+    if (binding) {
+      if (binding.subjectType === "package" || (binding.subjectType as any) === "box") {
+        pkg = s.packages.find((p) => p.id === binding.subjectId);
+      } else if (binding.subjectType === "garment") {
+        pkg = s.packages.find((p) => p.garmentIds.includes(binding.subjectId));
+      }
+    }
+  }
+
+  if (pkg) {
+    pkg.status = "warehoused";
+    const linkedGarments = pkg.garmentIds
+      .map((gid) => s.garments.find((g) => g.id === gid))
+      .filter(Boolean) as Garment[];
+
+    // Quality hold check: do any garments have an active hold?
+    const holdGarment = linkedGarments.find((g) => Boolean(g.hold));
+    if (holdGarment) {
+      const reason = holdGarment.hold?.reason ? ` ("${holdGarment.hold.reason}")` : "";
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_business_rule",
+        `Blocked: Garment ${holdGarment.id} inside Box ${pkg.id} has an active Quality Hold${reason}.`,
+      );
+    }
+
+    for (const g of linkedGarments) {
+      g.stage = "warehouse";
+      closeTasks(s, g.id, ["warehouse-receive"]);
+      garmentEvent(
+        s,
+        g.id,
+        `Received into finished stock (bin: ${binId}) in container ${pkg.id}`,
+        actor,
+      );
+    }
+
+    closeTasks(s, pkg.id, ["warehouse-receive"]);
+    audit(
+      s,
+      actor,
+      "logistics",
+      `Box ${pkg.id} (${linkedGarments.length} garments) received into warehouse bin ${binId}`,
+      "package" as any,
+      pkg.id,
+      binId,
+    );
+
+    const outcome: ScanOutcome = {
+      uid: normUid,
+      resolution: "accepted",
+      subjectId: pkg.id,
+      garmentCode: pkg.id,
+      productName: `Box ${pkg.id} (${linkedGarments.length} garments) received into ${binId}`,
+      at: now(),
+    };
+    appendScanLog(s, outcome);
+    return outcome;
+  }
+
+  // 2. Fallback: single garment
+  const g = getGarment(s, cleanInput);
   ensure(
-    g.stage === "packing" && g.packageId,
+    (g.stage === "packing" || g.stage === "packed") && g.packageId,
     "conflict",
     `${g.id} is not packed and waiting for the warehouse.`,
   );
   g.stage = "warehouse";
-  const pkg = s.packages.find((p) => p.id === g.packageId);
-  if (pkg) pkg.status = "sealed";
+  const parentPkg = s.packages.find((p) => p.id === g.packageId);
+  if (parentPkg) parentPkg.status = "warehoused";
   closeTasks(s, g.id, ["warehouse-receive"]);
-  garmentEvent(s, g.id, "Received into finished stock", actor);
+  garmentEvent(s, g.id, `Received into finished stock (bin: ${binId})`, actor);
   audit(s, actor, "logistics", "Stock received", "garment", g.id);
+
+  const outcome: ScanOutcome = {
+    uid: normUid,
+    resolution: "accepted",
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: `${g.productName} received into ${binId}`,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  return outcome;
 }
 
 export function allocateStock(
