@@ -9,7 +9,7 @@ import { Field, FormDialog, NativeSelect, ScopeNote } from "@/components/wt/form
 import { fmt, IdLink, KeyValue, PageHeader, Section, Timeline } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type { MaterialLot, ProductionOrder } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { UserName } from "@/features/shared/directory";
@@ -110,23 +110,27 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                   {lot.status === "awaiting-inspection" && (me.role === "Q" || me.role === "M" || me.role === "A") && (
                     lot.rfidUid ? (
                       <Button asChild size="sm" className="bg-primary">
-                        <AppLink href={paths.quality}>
+                        <AppLink href={paths.home}>
                           Evaluate at QC Gate <ArrowRight className="size-3.5 ml-1" />
                         </AppLink>
                       </Button>
                     ) : (
-                      <Button asChild size="sm" variant="outline" className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
-                        <AppLink href={paths.workstation}>
-                          Assign Card at Station 1 <ArrowRight className="size-3.5 ml-1" />
-                        </AppLink>
-                      </Button>
+                      canAccessRoute(me, "workstation") && (
+                        <Button asChild size="sm" variant="outline" className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                          <AppLink href={paths.workstation}>
+                            Assign Card at Station 1 <ArrowRight className="size-3.5 ml-1" />
+                          </AppLink>
+                        </Button>
+                      )
                     )
                   )}
-                  <Button asChild variant="outline" size="sm">
-                    <AppLink href={paths.workstation}>
-                      Station Panel <ArrowRight className="size-3.5 ml-1" />
-                    </AppLink>
-                  </Button>
+                  {canAccessRoute(me, "workstation") && (
+                    <Button asChild variant="outline" size="sm">
+                      <AppLink href={paths.workstation}>
+                        Station Panel <ArrowRight className="size-3.5 ml-1" />
+                      </AppLink>
+                    </Button>
+                  )}
                 </div>
               }
             />

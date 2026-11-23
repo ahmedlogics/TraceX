@@ -26,7 +26,7 @@ import { Field, FormDialog, NativeSelect } from "@/components/wt/forms";
 import { fmt, IdLink, KeyValue, PageHeader, Section } from "@/components/wt/layout";
 import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type {
   ChecklistItem,
   Inspection,
@@ -524,11 +524,13 @@ function IncomingLotsTable({
                   if (isAwaitingReceiving) {
                     return (
                       <div className="flex items-center gap-1.5">
-                        <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
-                          <AppLink href={paths.workstation}>
-                            Station 1 <ArrowRight className="size-3" />
-                          </AppLink>
-                        </Button>
+                        {canAccessRoute(me, "workstation") && (
+                          <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                            <AppLink href={paths.workstation}>
+                              Station 1 <ArrowRight className="size-3" />
+                            </AppLink>
+                          </Button>
+                        )}
                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
                           <AppLink href={paths.lot(l.id)}>View</AppLink>
                         </Button>
@@ -734,7 +736,7 @@ export function QualityView() {
 
               {/* Mode 1: Incoming Fabric Inspection Queue */}
               <TabsContent value="queue" className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
                     <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input

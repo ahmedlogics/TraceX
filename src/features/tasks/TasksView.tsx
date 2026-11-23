@@ -9,7 +9,7 @@ import { fmt, PageHeader } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { departmentLabels } from "@/domain/labels";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type { Department, Garment, MaterialLot, ProductionOrder, Task } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useDirectory, UserName } from "@/features/shared/directory";
@@ -439,21 +439,24 @@ export function TasksSection() {
                                     )}
 
                                     {t.kind === "incoming-qc" && (me.role === "Q" || isManager) && t.status !== "done" && (
-                                      <Button
-                                        asChild
-                                        size="sm"
-                                        variant={prereq.ready ? "default" : "outline"}
-                                        className={
-                                          prereq.ready
-                                            ? "h-7 text-xs bg-primary"
-                                            : "h-7 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
-                                        }
-                                      >
-                                        <AppLink href={prereq.ready ? paths.quality : paths.workstation}>
-                                          {prereq.ready ? "Evaluate" : "Station 1"}{" "}
-                                          <ArrowRight className="size-3 ml-0.5" />
-                                        </AppLink>
-                                      </Button>
+                                      prereq.ready ? (
+                                        <Button asChild size="sm" className="h-7 text-xs bg-primary">
+                                          <AppLink href={paths.home}>
+                                            Evaluate <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      ) : canAccessRoute(me, "workstation") ? (
+                                        <Button
+                                          asChild
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                                        >
+                                          <AppLink href={paths.workstation}>
+                                            Station 1 <ArrowRight className="size-3 ml-0.5" />
+                                          </AppLink>
+                                        </Button>
+                                      ) : null
                                     )}
 
                                     {t.kind === "receive-lot" && (me.department === "receiving" || isManager) && t.status !== "done" && (

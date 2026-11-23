@@ -595,7 +595,7 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                       {/* Available Inspected Bundles (Reference Panel) */}
                       <Section
                         title="Available Inspected Bundles (Reference Panel)"
-                        description="Read-only warehouse fabric inventory. Only rolls inspected and accepted by qc.incoming are issuable."
+                        description="Read-only warehouse fabric inventory. Only rolls inspected and accepted by Incoming QC are issuable."
                       >
                         <div className="space-y-3">
                           <div className="flex items-center justify-between text-xs text-muted-foreground border-b pb-2">
@@ -739,7 +739,7 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                               }
                               return (
                                 <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600">
-                                  <Clock className="size-3" /> Awaiting qc.incoming
+                                  <Clock className="size-3" /> Awaiting Incoming QC
                                 </span>
                               );
                             },
@@ -772,7 +772,7 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                         <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
                           <p className="font-semibold text-foreground">2. QC.incoming Clearance Prerequisite</p>
                           <p className="text-muted-foreground">
-                            Lot must be approved by qc.incoming. Awaiting-inspection or quarantined lots reject immediately: <em>&ldquo;Rejected: Lot has not passed Incoming QC inspection.&rdquo;</em>
+                            Lot must be approved by Incoming QC. Awaiting-inspection or quarantined lots reject immediately: <em>&ldquo;Rejected: Lot has not passed Incoming QC inspection.&rdquo;</em>
                           </p>
                         </div>
                         <div className="rounded-lg border bg-muted/20 p-3 space-y-1">

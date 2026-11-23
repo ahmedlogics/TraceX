@@ -155,14 +155,13 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       (user.department as string)?.toLowerCase() === "raw_store";
 
     if (isIncomingQc) {
-      // Incoming Material QC Inspector: strictly Home, Tasks, Material Lots, and Quality (incoming sign-offs)
+      // Incoming Material QC Inspector: strictly Home, Tasks, Material Lots
       const incomingAllowed: RouteKey[] = [
         "account",
         "home",
         "tasks",
         "materialLots",
         "materialLot",
-        "quality",
         "inspection",
       ];
       return incomingAllowed.includes(key);

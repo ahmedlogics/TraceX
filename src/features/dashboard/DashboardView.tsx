@@ -21,6 +21,7 @@ import { useMe } from "@/features/shared/useMe";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { ReceiveLotDialog } from "@/features/materials/LotsView";
 import { TasksSection } from "@/features/tasks/TasksView";
+import { QualityView } from "@/features/quality/QualityView";
 
 const toneIcon = { danger: OctagonAlert, warning: AlertTriangle, info: Info } as const;
 const toneClass = {
@@ -191,9 +192,19 @@ function IncomingQcQueue() {
 
 export function DashboardView() {
   const me = useMe();
+  const isIncomingQC =
+    me.username?.toLowerCase() === "qc.incoming" ||
+    me.department?.toLowerCase() === "receiving" ||
+    me.department?.toLowerCase() === "raw-store" ||
+    (me.department as string)?.toLowerCase() === "raw_store";
+
+  if (isIncomingQC) {
+    return <QualityView />;
+  }
+
   const q = useWtQuery(["dashboard"], (c) => c.getDashboard());
   const isReceivingUser = me.username === "receiving.demo" || me.department === "receiving";
-  const isQualityUser = me.role === "Q" || me.username === "qc.incoming";
+  const isQualityUser = me.role === "Q";
 
   return (
     <div className="space-y-6">
@@ -264,7 +275,7 @@ export function DashboardView() {
             ) : isQualityUser ? (
               <Section
                 title="Incoming Fabric Quality Inspection Queue (Awaiting QC Sign-Off)"
-                description="Physical fabric rolls scanned and tagged at Station 1 awaiting inspection and 4-point defect sign-off by qc.incoming."
+                description="Physical fabric rolls scanned and tagged at Station 1 awaiting inspection and 4-point defect sign-off by Incoming QC."
                 actions={
                   <Button asChild size="sm" className="gap-1.5">
                     <AppLink href={paths.quality}>

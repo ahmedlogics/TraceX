@@ -48,7 +48,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
       let destination = target;
       if (!redirectTo || redirectTo === paths.home) {
         if (cleanUsername.toLowerCase() === "qc.incoming") {
-          destination = paths.quality;
+          destination = paths.home;
         } else if (cleanUsername.toLowerCase() === "qc.demo") {
           destination = paths.quality;
         } else if (cleanUsername.toLowerCase() === "dispatch.demo") {
