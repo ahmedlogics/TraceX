@@ -120,6 +120,16 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return false;
   }
 
+  // Dispatch operators only handle outbound shipments and dock gate dispatch (strictly remove garments and fulfilment)
+  if (
+    user.username === "dispatch.demo" ||
+    (user.role === "L" && user.department === "dispatch")
+  ) {
+    if (key === "garments" || key === "garment" || key === "fulfilment") {
+      return false;
+    }
+  }
+
   // Strict role + department scoping for Quality Inspector role (Q)
   if (user.role === "Q") {
     const isIncomingQc =

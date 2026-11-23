@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -55,6 +55,66 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
   // Authorization check
   const isAuthorized =
     me.department === "dispatch" || me.role === "L" || me.role === "M" || me.role === "A";
+
+  // Auto-detect scans arriving via MQTT/backend hardware reader at Station 9 Dock Gate
+  const lastSeenScanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isAuthorized) return;
+    const outcome = stationData?.lastScanOutcome;
+    if (!outcome) return;
+    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
+      lastSeenScanRef.current = outcome.at;
+      setLocalLastOutcome(outcome);
+      void qShipments.refetch();
+      void qFulfilment.refetch();
+      void qGarments.refetch();
+    }
+  }, [isAuthorized, stationData?.lastScanOutcome]);
+
+  // Global USB Keyboard Wedge RFID reader listener for Station 9 Dock Gate
+  useEffect(() => {
+    if (!isAuthorized) return;
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      const now = Date.now();
+      if (now - lastKeyTime > 500) {
+        buffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const scanned = buffer.trim().toUpperCase();
+        buffer = "";
+        if (scanned.length >= 3) {
+          e.preventDefault();
+          void run(
+            async (c) => {
+              const outcome = await c.dispatchBoxScan(scanned, selectedShipmentId || undefined);
+              setLocalLastOutcome(outcome);
+              void qShipments.refetch();
+              void qFulfilment.refetch();
+              void qGarments.refetch();
+              return outcome;
+            },
+            (outcome) =>
+              outcome.resolution === "accepted"
+                ? `Carton ${outcome.garmentCode ?? outcome.subjectId} accepted! Linked units marked dispatched.`
+                : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+          );
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isAuthorized, selectedShipmentId]);
 
   return (
     <Loadable query={qShipments}>
