@@ -43,11 +43,11 @@ function ReceivingLotsQueue() {
 
         return (
           <div className="space-y-6">
-            {/* Step 1: Newly Created Lots Awaiting RFID Assignment */}
+            {/* Newly Created Lots Awaiting RFID Assignment */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Step 1: Lots Awaiting RFID Assignment at Station 1 ({unassigned.length})
+                  Lots Awaiting RFID Assignment ({unassigned.length})
                 </p>
               </div>
               {unassigned.length === 0 ? (
@@ -57,9 +57,6 @@ function ReceivingLotsQueue() {
                   </div>
                   <p className="text-sm font-medium text-foreground">
                     All lots have active bundle cards assigned
-                  </p>
-                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                    New incoming rolls created by managers will appear here ready for RFID tagging at Station 1.
                   </p>
                 </div>
               ) : (
@@ -91,11 +88,11 @@ function ReceivingLotsQueue() {
               )}
             </div>
 
-            {/* Step 2 Quality Tracking: Fabric Lots Quality & Inspection Status */}
+            {/* Quality Tracking: Fabric Lots Quality & Inspection Status */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Step 2 QC Status: Material Inspection Tracking ({assignedLots.length})
+                  Material Inspection Tracking ({assignedLots.length})
                 </p>
               </div>
               {assignedLots.length === 0 ? (
@@ -124,21 +121,6 @@ function ReceivingLotsQueue() {
 
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={lot.status} />
-                          {lot.status === "accepted" && (
-                            <span className="hidden sm:inline-block text-[11px] text-success font-medium">
-                              (Approved for Step 3)
-                            </span>
-                          )}
-                          {lot.status === "awaiting-inspection" && (
-                            <span className="hidden sm:inline-block text-[11px] text-warning font-medium">
-                              (Pending Step 2 QC)
-                            </span>
-                          )}
-                          {lot.status === "rejected" && (
-                            <span className="hidden sm:inline-block text-[11px] text-destructive font-medium">
-                              (Disapproved)
-                            </span>
-                          )}
                         </div>
 
                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
@@ -328,8 +310,7 @@ export function DashboardView() {
             {/* Department-tailored operational work */}
             {isReceivingUser ? (
               <Section
-                title="Step 1 & Step 2: Fabric Receiving & Inspection Tracking"
-                description="Manager-registered fabric lots awaiting bundle card tagging at Station 1 and downstream Step 2 QC clearance."
+                title="Fabric Receiving & Inspection Tracking"
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <ReceiveLotDialog triggerLabel="+ New Fabric Lot" />
