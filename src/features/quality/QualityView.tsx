@@ -327,11 +327,19 @@ function IncomingLotsTable({
       {(allLots) => {
         const filteredLots = allLots
           .filter((l) => {
-            // Unassigned fabric rolls are pending Station 1 scan and must not be shown in Incoming QC
-            if (!l.rfidUid || l.rfidUid === "unassigned") return false;
+            const isReadyForQc =
+              l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned";
+            const isAwaitingReceiving =
+              l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned");
+            const isPassed = l.status === "accepted";
+            const isFailed = l.status === "rejected";
+
+            if (statusFilter === "ready" && !isReadyForQc) return false;
+            if (statusFilter === "awaiting_receiving" && !isAwaitingReceiving) return false;
             if (statusFilter === "open" && l.status !== "awaiting-inspection") return false;
-            if (statusFilter === "passed" && l.status !== "accepted") return false;
-            if (statusFilter === "failed" && l.status !== "rejected") return false;
+            if (statusFilter === "passed" && !isPassed) return false;
+            if (statusFilter === "failed" && !isFailed) return false;
+
             if (search.trim()) {
               const s = search.toLowerCase();
               const matchId = l.id.toLowerCase().includes(s);
@@ -343,9 +351,20 @@ function IncomingLotsTable({
             return true;
           })
           .sort((a, b) => {
-            const aOpen = a.status === "awaiting-inspection" ? 0 : 1;
-            const bOpen = b.status === "awaiting-inspection" ? 0 : 1;
-            if (aOpen !== bOpen) return aOpen - bOpen;
+            // Sort: ready for QC first, then awaiting receiving, then passed/failed
+            const aReady =
+              a.status === "awaiting-inspection" && Boolean(a.rfidUid) && a.rfidUid !== "unassigned"
+                ? 0
+                : a.status === "awaiting-inspection"
+                  ? 1
+                  : 2;
+            const bReady =
+              b.status === "awaiting-inspection" && Boolean(b.rfidUid) && b.rfidUid !== "unassigned"
+                ? 0
+                : b.status === "awaiting-inspection"
+                  ? 1
+                  : 2;
+            if (aReady !== bReady) return aReady - bReady;
             return (b.receivedAt ?? "").localeCompare(a.receivedAt ?? "");
           });
 
@@ -385,11 +404,27 @@ function IncomingLotsTable({
               },
               {
                 header: "Bundle Card (Station 1)",
-                cell: (l) => (
-                  <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
-                    <Radio className="size-3" /> {l.rfidUid}
-                  </span>
-                ),
+                cell: (l) => {
+                  if (l.rfidUid && l.rfidUid !== "unassigned") {
+                    return (
+                      <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
+                        <Radio className="size-3" /> {l.rfidUid}
+                      </span>
+                    );
+                  }
+                  if (l.status === "accepted") {
+                    return (
+                      <span className="inline-flex items-center text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
+                        Unassigned (Dashboard Verified)
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      Card Pending (Station 1)
+                    </span>
+                  );
+                },
               },
               {
                 header: "Incoming QC",
@@ -399,6 +434,10 @@ function IncomingLotsTable({
                       i.kind === "incoming" &&
                       (i.subjectId === l.id || (l as any).code === i.subjectId),
                   );
+                  const isReadyForQc =
+                    l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned";
+                  const isAwaitingReceiving =
+                    l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned");
 
                   return (
                     <div className="flex flex-col gap-0.5">
@@ -408,9 +447,14 @@ function IncomingLotsTable({
                           Approved for Step 3
                         </span>
                       )}
-                      {l.status === "awaiting-inspection" && (
-                        <span className="text-[11px] font-medium text-warning">
+                      {isReadyForQc && (
+                        <span className="text-[11px] font-semibold text-warning">
                           Ready for QC Sign-Off
+                        </span>
+                      )}
+                      {isAwaitingReceiving && (
+                        <span className="text-[11px] font-medium text-amber-600">
+                          Awaiting Station 1 Scan
                         </span>
                       )}
                       {l.status === "rejected" && (
@@ -419,7 +463,10 @@ function IncomingLotsTable({
                         </span>
                       )}
                       {matchingInsp?.defectReason && (
-                        <span className="text-[11px] text-destructive truncate max-w-[200px]">
+                        <span
+                          className="text-[11px] text-destructive truncate max-w-[200px]"
+                          title={matchingInsp.defectReason}
+                        >
                           {matchingInsp.defectReason}
                         </span>
                       )}
@@ -454,7 +501,12 @@ function IncomingLotsTable({
                     createdAt: l.receivedAt,
                   };
 
-                  if (l.status === "awaiting-inspection") {
+                  const isReadyForQc =
+                    l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned";
+                  const isAwaitingReceiving =
+                    l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned");
+
+                  if (isReadyForQc) {
                     return canEvaluate ? (
                       <IncomingQcDialog
                         inspection={inspObj}
@@ -465,6 +517,21 @@ function IncomingLotsTable({
                       <Button asChild size="sm" variant="outline" className="h-7 text-xs">
                         <AppLink href={paths.lot(l.id)}>View Lot</AppLink>
                       </Button>
+                    );
+                  }
+
+                  if (isAwaitingReceiving) {
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                          <AppLink href={paths.workstation}>
+                            Station 1 <ArrowRight className="size-3" />
+                          </AppLink>
+                        </Button>
+                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                          <AppLink href={paths.lot(l.id)}>View</AppLink>
+                        </Button>
+                      </div>
                     );
                   }
 
@@ -561,11 +628,16 @@ export function QualityView() {
           {/* Key Metric Counters */}
           <Loadable query={insp}>
             {() => {
-              const awaitingLotsCount = (lots.data ?? []).filter(
+              const readyLotsCount = (lots.data ?? []).filter(
                 (l) =>
                   l.status === "awaiting-inspection" &&
                   Boolean(l.rfidUid) &&
                   l.rfidUid !== "unassigned",
+              ).length;
+              const awaitingReceivingCount = (lots.data ?? []).filter(
+                (l) =>
+                  l.status === "awaiting-inspection" &&
+                  (!l.rfidUid || l.rfidUid === "unassigned"),
               ).length;
               const quarantinedLots = (lots.data ?? []).filter(
                 (l) => l.status === "rejected" || (l.heldQty ?? 0) > 0,
@@ -577,21 +649,33 @@ export function QualityView() {
               );
 
               return (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span className="text-xs font-semibold uppercase tracking-wider">
-                        Incoming Lots Pending
+                        Ready for QC
                       </span>
                       <Sparkles className="size-4 text-warning" />
                     </div>
-                    <p className="mt-2 text-2xl font-bold">{awaitingLotsCount}</p>
+                    <p className="mt-2 text-2xl font-bold">{readyLotsCount}</p>
                   </div>
 
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span className="text-xs font-semibold uppercase tracking-wider">
-                        Active Quarantine / Lot Holds
+                        Awaiting Receiving
+                      </span>
+                      <Radio className="size-4 text-amber-500" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-amber-600">
+                      {awaitingReceivingCount}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-semibold uppercase tracking-wider">
+                        Quarantine / Holds
                       </span>
                       <ShieldAlert className="size-4 text-destructive" />
                     </div>
@@ -633,9 +717,6 @@ export function QualityView() {
                             l.status === "awaiting-inspection" &&
                             Boolean(l.rfidUid) &&
                             l.rfidUid !== "unassigned",
-                        ).length ||
-                        (insp.data ?? []).filter(
-                          (i) => i.kind === "incoming" && i.status === "open",
                         ).length
                       }
                     </span>
@@ -665,15 +746,17 @@ export function QualityView() {
                       className="h-8 pl-8 text-xs w-[220px] sm:w-[260px]"
                     />
                   </div>
-                  <div className="w-[150px]">
+                  <div className="w-[180px]">
                     <NativeSelect
                       value={statusFilter}
                       onChange={setStatusFilter}
                       options={[
-                        { value: "all", label: "All Statuses" },
-                        { value: "open", label: "Open (Awaiting QC)" },
+                        { value: "all", label: "All Lots" },
+                        { value: "ready", label: "Ready for QC" },
+                        { value: "awaiting_receiving", label: "Awaiting Receiving" },
+                        { value: "open", label: "All Open Lots" },
                         { value: "passed", label: "Passed (Accepted)" },
-                        { value: "failed", label: "Failed (Rejected)" },
+                        { value: "failed", label: "Failed (Quarantined)" },
                       ]}
                     />
                   </div>

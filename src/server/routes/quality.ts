@@ -200,6 +200,9 @@ qualityRouter.get("/inspections/:id", async (req: Request, res: Response) => {
         code: raw.material_lots.code,
         material: raw.material_lots.material_name,
         status: "active",
+        receivedQty: Number(raw.material_lots.received_quantity ?? 0),
+        balanceQty: Number(raw.material_lots.available_accepted_quantity ?? 0),
+        unit: raw.material_lots.unit,
       };
     }
     return sendSuccess(res, detail, 200);

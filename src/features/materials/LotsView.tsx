@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, Layers, PackagePlus, Radio, Tag } from "lucide-react";
-import { AppLink, useAppNavigate } from "@/app/navigation";
+import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,6 @@ export function ReceiveLotDialog({
   onSuccess?: (lotId: string) => void;
 }) {
   const { run } = useWtAction();
-  const navigate = useAppNavigate();
   const [material, setMaterial] = useState("Cotton poplin, natural white, 140 cm");
   const [supplierRef, setSupplierRef] = useState("SUP-REF-042");
   const [qty, setQty] = useState("25");
@@ -29,21 +28,16 @@ export function ReceiveLotDialog({
 
   return (
     <FormDialog
-      trigger={triggerLabel ?? "+ Log Fabric Delivery (Receiving Dock)"}
-      title="Log Incoming Raw Fabric Roll (Receiving Dock)"
-      description="Record a physical fabric delivery arriving at the factory gate. The roll is held in receiving quarantine (0 m usable balance) until an RFID tag is bound at Station 1 and quality sign-off is completed by qc.incoming."
+      trigger={triggerLabel ?? "+ Log Fabric Delivery"}
+      title="Log Incoming Raw Fabric Roll"
       submitLabel="Log Delivery Receipt"
       onSubmit={async () => {
         const id = await run(
           (c) => c.receiveLot({ material, supplierRef, qty: Number(qty), unit }),
-          (r) => `${r} recorded. Ready for Station 1 RFID card assignment.`,
+          (r) => `${r} recorded.`,
         );
-        if (id) {
-          if (onSuccess) {
-            onSuccess(id);
-          } else {
-            void navigate(paths.workstation);
-          }
+        if (id && onSuccess) {
+          onSuccess(id);
         }
         return !!id;
       }}
@@ -78,9 +72,6 @@ export function ReceiveLotDialog({
           />
         </Field>
       </div>
-      <p className="text-xs text-muted-foreground pt-1">
-        After recording, select this lot in the Workstation (Station 1: Fabric Receiving) and present a physical RFID card to assign the bundle card.
-      </p>
     </FormDialog>
   );
 }
@@ -143,7 +134,7 @@ export function LotsView() {
                 </div>
                 <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-warning/40 hover:shadow-sm transition-all duration-200">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">Awaiting QC</span>
+                    <span className="text-xs font-medium text-muted-foreground">Lots Awaiting Inspection</span>
                     <div className="flex size-7 items-center justify-center rounded-lg bg-warning/10 text-warning group-hover:scale-105 transition-transform">
                       <PackagePlus className="size-3.5" />
                     </div>
@@ -231,16 +222,30 @@ export function LotsView() {
                   },
                   {
                     header: "Active Bundle RFID",
-                    cell: (l) =>
-                      l.rfidUid ? (
-                        <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
-                          <Radio className="size-3" /> {l.rfidUid}
+                    cell: (l) => {
+                      if (l.rfidUid) {
+                        return (
+                          <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
+                            <Radio className="size-3" /> {l.rfidUid}
+                          </span>
+                        );
+                      }
+                      if (l.status === "accepted") {
+                        return (
+                          <span
+                            className="inline-flex items-center text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded"
+                            title="Accepted via Dashboard QC · Hardware RFID card unassigned"
+                          >
+                            Unassigned (Dashboard Verified)
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          Card Pending (Station 1)
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
-                          Unassigned
-                        </span>
-                      ),
+                      );
+                    },
                   },
                   {
                     header: "Incoming QC",

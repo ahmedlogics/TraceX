@@ -4,7 +4,7 @@ import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
 import type { ISubjectRevisionService } from "../contracts/services";
-import { toActorRef } from "../materials/materials-service";
+import { toActorRef, EXCLUDED_LOT_CODES } from "../materials/materials-service";
 import type {
   ApproveOrderInput,
   BindGarmentTagInput,
@@ -237,7 +237,10 @@ export async function listOrders(
         staff_users_production_orders_created_byTostaff_users: true,
         staff_users_production_orders_approved_byTostaff_users: true,
         material_stock_movements: {
-          where: { kind: "issued" },
+          where: {
+            kind: "issued",
+            material_lots: { code: { notIn: EXCLUDED_LOT_CODES } },
+          },
           include: {
             material_lots: {
               select: { id: true, code: true, material_name: true },
@@ -289,7 +292,10 @@ export async function getOrderDetail(
         staff_users_production_orders_created_byTostaff_users: true,
         staff_users_production_orders_approved_byTostaff_users: true,
         material_stock_movements: {
-          where: { kind: "issued" },
+          where: {
+            kind: "issued",
+            material_lots: { code: { notIn: EXCLUDED_LOT_CODES } },
+          },
           include: { material_lots: true },
           orderBy: { performed_at: "desc" },
         },
@@ -644,6 +650,7 @@ export async function confirmCuttingSource(
       const lot = await db.material_lots.findFirst({
         where: {
           available_accepted_quantity: { gt: 0 },
+          code: { notIn: EXCLUDED_LOT_CODES },
         },
         include: {
           rfid_tag_bindings: {

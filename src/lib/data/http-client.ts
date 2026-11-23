@@ -539,6 +539,11 @@ export function createHttpClient(): WearTrailClient {
             ? "accepted"
             : "awaiting-inspection"),
         rfidUid: l.activeTagUid || l.rfidUid || undefined,
+        incomingInspectionId: l.incomingInspectionId || undefined,
+        acceptedQty: Number(l.availableAcceptedQuantity ?? l.acceptedQty ?? 0),
+        heldQty: Number(l.heldQty ?? 0),
+        rejectedQty: Number(l.rejectedQty ?? 0),
+        defectReason: l.defectReason || undefined,
       }));
     },
     async getLot(id: string): Promise<LotDetail | null> {
@@ -556,9 +561,27 @@ export function createHttpClient(): WearTrailClient {
           receivedBy: raw.receivedByName || raw.receivedBy || "Staff",
           status: raw.status || "accepted",
           rfidUid: raw.activeTagUid || raw.rfidUid || undefined,
+          incomingInspectionId: raw.incomingInspectionId || raw.inspection?.id || undefined,
+          acceptedQty: Number(raw.availableAcceptedQuantity ?? raw.acceptedQty ?? 0),
+          heldQty: Number(raw.heldQty ?? 0),
+          rejectedQty: Number(raw.rejectedQty ?? 0),
         };
+        const inspection = raw.inspection
+          ? {
+              id: raw.inspection.id,
+              kind: "incoming" as const,
+              subjectType: "lot" as const,
+              subjectId: raw.code || raw.id,
+              status: raw.inspection.status || "open",
+              defectReason: raw.inspection.defectReason || undefined,
+              createdAt: raw.inspection.createdAt || new Date().toISOString(),
+              checklist: [],
+              notes: "",
+            }
+          : undefined;
         return {
           lot,
+          inspection,
           issues: raw.issues || [],
           cuttingOutputs: raw.cuttingOutputs || [],
           orders: raw.orders || [],

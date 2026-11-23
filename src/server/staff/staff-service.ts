@@ -29,6 +29,7 @@ import {
 import { normalizeDbDepartment } from "../quality/quality-service";
 import { ApiError } from "../middleware/responses";
 import { generateSessionToken, hashSessionToken } from "../auth/crypto";
+import { listLots, EXCLUDED_LOT_CODES } from "../materials/materials-service";
 
 /**
  * Maps a work_tasks record to the domain Task DTO.
@@ -191,18 +192,43 @@ export async function getStaffDashboard(
   const openTasks = await prisma.work_tasks.findMany({
     where: {
       status: { notIn: ["completed", "cancelled"] },
+      OR: [
+        { material_lot_id: null },
+        { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+      ],
+    },
+    include: {
+      material_lots: { select: { code: true } },
     },
     orderBy: { created_at: "desc" },
   });
 
   const domainTasks = openTasks.map(toDomainTask);
 
-  // Filter tasks scoped to user
+  // Query material lots via listLots to ensure 100% data consistency with Materials Lots page
+  const allMaterialLots = await listLots(user, undefined, prisma as any);
+  const awaitingLots = allMaterialLots.filter((l) => l.status === "awaiting-inspection");
+  const readyForQcLots = awaitingLots.filter(
+    (l) => Boolean(l.activeTagUid) && l.activeTagUid !== "unassigned",
+  );
+  const awaitingReceivingLots = awaitingLots.filter(
+    (l) => !l.activeTagUid || l.activeTagUid === "unassigned",
+  );
+  const acceptedLots = allMaterialLots.filter((l) => l.status === "accepted");
+  const rejectedLots = allMaterialLots.filter((l) => l.status === "rejected");
+  const availableStockM = acceptedLots
+    .filter((l) => l.unit === "m" || !l.unit)
+    .reduce((sum, l) => sum + Number(l.balanceQty ?? (l as any).availableAcceptedQuantity ?? 0), 0);
+
+  // Filter tasks scoped to user — incoming QC only counts actionable tasks where lot is ready for QC
   const scopedOpenTasks = domainTasks.filter((t) => {
     if (user.role === "M") return true;
     if (t.assigneeId === user.id) return true;
     if (user.username === "qc.incoming") {
-      return t.kind === "incoming-qc" || t.department === "quality";
+      if (t.kind === "incoming-qc") {
+        return readyForQcLots.some((l) => l.id === t.subjectId || l.code === t.subjectId);
+      }
+      return t.department === "quality";
     }
     return t.department === user.department;
   });
@@ -219,22 +245,13 @@ export async function getStaffDashboard(
 
   // Query open inspections
   const openInspectionsCount = await prisma.inspections.count({
-    where: { submitted_at: null },
-  });
-
-  // Query active lots awaiting incoming inspection (must have tag bound at Station 1)
-  const awaitingLots = await prisma.material_lots.findMany({
     where: {
-      inspections: {
-        none: { outcome: "pass" },
-      },
-      rfid_tag_bindings: {
-        is: {
-          unbound_at: null,
-        },
-      },
+      submitted_at: null,
+      OR: [
+        { material_lot_id: null },
+        { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+      ],
     },
-    select: { id: true, code: true },
   });
 
   // Query active shipments (not yet dispatched or cancelled)
@@ -301,16 +318,6 @@ export async function getStaffDashboard(
     }
 
     case "O": {
-      const acceptedLots = await prisma.material_lots.findMany({
-        where: {
-          available_accepted_quantity: { gt: 0 },
-        },
-        select: { available_accepted_quantity: true, unit: true },
-      });
-      const availableStockM = acceptedLots
-        .filter((l) => l.unit === "m")
-        .reduce((sum, l) => sum + Number(l.available_accepted_quantity), 0);
-
       metrics = [
         { label: "My open tasks", value: scopedOpenTasks.length },
         { label: "Lots awaiting inspection", value: awaitingLots.length },
@@ -353,22 +360,11 @@ export async function getStaffDashboard(
         (user.department as string)?.toLowerCase() === "raw_store";
 
       if (isIncoming) {
-        const acceptedLotsCount = await prisma.material_lots.count({
-          where: {
-            inspections: { some: { outcome: "pass" } },
-          },
-        });
-        const rejectedLotsCount = await prisma.material_lots.count({
-          where: {
-            inspections: { some: { outcome: "fail" } },
-          },
-        });
-
         metrics = [
           { label: "My open tasks", value: scopedOpenTasks.length },
-          { label: "Lots awaiting inspection", value: awaitingLots.length },
-          { label: "Cleared fabric lots", value: acceptedLotsCount },
-          { label: "Held / rejected lots", value: rejectedLotsCount },
+          { label: "Lots ready for QC", value: readyForQcLots.length },
+          { label: "Awaiting receiving", value: awaitingReceivingLots.length },
+          { label: "Cleared fabric lots", value: acceptedLots.length },
         ];
         break;
       }
@@ -472,14 +468,32 @@ export async function getStaffDashboard(
     });
   }
 
-  // Info: Material Lots Awaiting Inspection (only relevant to Quality inspectors and Managers)
+  // Operational Exceptions: Quality Failures & Quarantined Lots
   if (["M", "Q"].includes(user.role)) {
-    awaitingLots.forEach((l) => {
+    rejectedLots.forEach((l) => {
       alerts.push({
-        tone: "info",
-        message: `Material Lot ${l.code} is awaiting incoming QC inspection.`,
-        href: `/staff/material-lots/${l.id}`,
+        tone: "danger",
+        message: `Material Lot ${l.code} failed incoming QC${(l as any).defectReason ? `: ${(l as any).defectReason}` : ""} — quarantined from production.`,
+        href: `/staff/quality`,
       });
+    });
+
+    const heldLots = allMaterialLots.filter((l) => Number((l as any).heldQty ?? 0) > 0);
+    heldLots.forEach((l) => {
+      alerts.push({
+        tone: "warning",
+        message: `Material Lot ${l.code} has ${(l as any).heldQty}${l.unit ?? "m"} on quality hold in quarantine.`,
+        href: `/staff/quality`,
+      });
+    });
+  }
+
+  // Single actionable notice for incoming QC (replaces repeated per-lot alerts for ordinary pending inspections)
+  if (isIncomingQcUser && readyForQcLots.length > 0) {
+    alerts.push({
+      tone: "info",
+      message: `${readyForQcLots.length} incoming fabric roll(s) ready in quarantine for QC evaluation.`,
+      href: `/staff/quality`,
     });
   }
 
@@ -587,6 +601,12 @@ export async function getStaffOperationalReports(
   // 1. Quality Role: Inspection outcomes and breakdown
   if (user.role === "Q") {
     const allInspections = await prisma.inspections.findMany({
+      where: {
+        OR: [
+          { material_lot_id: null },
+          { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+        ],
+      },
       select: {
         scope: true,
         outcome: true,
@@ -663,7 +683,9 @@ export async function getStaffOperationalReports(
   }
 
   // 3. Operations / Production / Logistics / Management
-  const totalLots = await prisma.material_lots.count();
+  const totalLots = await prisma.material_lots.count({
+    where: { code: { notIn: EXCLUDED_LOT_CODES } },
+  });
   const totalOrders = await prisma.production_orders.count();
   const totalGarments = await prisma.garments.count();
   const departedShipments = await prisma.shipments.count({

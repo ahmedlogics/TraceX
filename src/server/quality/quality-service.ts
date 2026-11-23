@@ -32,6 +32,7 @@ import type {
   ReleaseHoldPayload,
 } from "../contracts/quality-fulfilment";
 import type { ActorContext } from "../contracts/actor";
+import { EXCLUDED_LOT_CODES } from "../materials/materials-service";
 
 export interface QualityScanResult {
   accepted: boolean;
@@ -496,6 +497,51 @@ export async function executeIncomingQc(
     throw new Error(`WT_ERR_NOT_FOUND: Material lot '${input.lotId}' not found.`);
   }
 
+  // 1b. Prerequisite check: Receiving registration must be complete before incoming QC inspection
+  if (tx.work_tasks && typeof tx.work_tasks.findFirst === "function") {
+    const pendingReceiveTask = await tx.work_tasks.findFirst({
+      where: {
+        material_lot_id: lot.id,
+        action_code: "receive-lot",
+        status: { in: ["queued", "claimed", "in_progress"] },
+      },
+    });
+    if (pendingReceiveTask) {
+      throw new Error(
+        `WT_ERR_PREREQUISITE_FAILED: Material lot '${lot.code}' is still awaiting Receiving completion at Station 1. Receiving registration and bundle card assignment must be complete before incoming QC inspection.`,
+      );
+    }
+  }
+
+  // 1c. Prevent duplicate or conflicting approvals
+  const priorIncomingInsp = await tx.inspections.findFirst({
+    where: {
+      material_lot_id: lot.id,
+      scope: "incoming",
+    },
+    orderBy: { created_at: "desc" },
+  });
+
+  if (priorIncomingInsp && priorIncomingInsp.outcome === "pass") {
+    if (input.result === "pass") {
+      throw new Error(
+        `WT_ERR_DUPLICATE_APPROVAL: Material lot '${lot.code}' has already been inspected and approved (Inspection ${priorIncomingInsp.code}). Duplicate approvals are prohibited.`,
+      );
+    }
+    // If attempting to fail an already approved lot, check if fabric was already issued to production
+    const issuesCount = await tx.material_stock_movements.count({
+      where: {
+        material_lot_id: lot.id,
+        kind: "issued",
+      },
+    });
+    if (issuesCount > 0) {
+      throw new Error(
+        `WT_ERR_CONFLICTING_STATUS: Cannot reject material lot '${lot.code}' because fabric has already been issued to production orders.`,
+      );
+    }
+  }
+
   // 2. Quantity balancing check
   const acceptedQty = Math.round(Number((input as any).acceptedQty ?? (input as any).acceptedQuantity ?? 0) * 1000) / 1000;
   const heldQty = Math.round(Number((input as any).heldQty ?? (input as any).heldQuantity ?? 0) * 1000) / 1000;
@@ -555,6 +601,7 @@ export async function executeIncomingQc(
       scope: "incoming",
       checklist_version_id: checklistVer.id,
       material_lot_id: lot.id,
+      prior_inspection_id: priorIncomingInsp?.id ?? null,
       inspector_id: staffUserId,
       outcome: input.result,
       sampled_quantity: totalEvaluated,
@@ -602,6 +649,49 @@ export async function executeIncomingQc(
         revision: { increment: 1 },
       },
     });
+  } else {
+    // On failure/rejection: ensure available accepted quantity is locked to accepted quantity (0 for total reject)
+    currentAvailable = acceptedQty;
+    await tx.material_lots.update({
+      where: { id: lot.id },
+      data: {
+        available_accepted_quantity: currentAvailable,
+        revision: { increment: 1 },
+      },
+    });
+  }
+
+  // Record audit trail event
+  if (tx.audit_events && typeof tx.audit_events.create === "function") {
+    try {
+      await tx.audit_events.create({
+        data: {
+          actor_staff_id: staffUserId,
+          department_code: "quality",
+          action_code: priorIncomingInsp
+            ? "incoming_qc_reinspected"
+            : input.result === "pass"
+              ? "incoming_qc_approved"
+              : "incoming_qc_rejected",
+          target_type: "material_lot",
+          target_reference: lot.code,
+          details: {
+            lotId: lot.id,
+            lotCode: lot.code,
+            inspectionCode,
+            result: input.result,
+            acceptedQty,
+            heldQty,
+            rejectedQty,
+            defectReason: input.defectReason ?? null,
+            notes: input.notes ?? null,
+          },
+          recorded_at: inspectionTime,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[QC_AUDIT_WARN] Could not record incoming QC audit event:", auditErr);
+    }
   }
 
   // 7. Update work task pipeline hand-off (Step 2 approval -> Step 3 raw store task)
@@ -1323,6 +1413,10 @@ export async function listInspections(
       ...(options?.scope ? { scope: options.scope as any } : {}),
       ...(options?.garmentId ? { garment_id: options.garmentId } : {}),
       ...(options?.lotId ? { material_lot_id: options.lotId } : {}),
+      OR: [
+        { material_lot_id: null },
+        { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+      ],
     },
     include: {
       staff_users: { select: { id: true, username: true, display_name: true } },
@@ -1340,6 +1434,14 @@ export async function getInspectionDetail(tx: PrismaTransactionClient, id: strin
       OR: [
         ...(isValidUuid(id) ? [{ id }] : []),
         { code: id },
+      ],
+      AND: [
+        {
+          OR: [
+            { material_lot_id: null },
+            { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+          ],
+        },
       ],
     },
     include: {

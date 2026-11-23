@@ -27,6 +27,8 @@ export interface MaterialLotDTO {
   revision: number;
   activeTagUid?: string | null | undefined;
   status: "awaiting-inspection" | "accepted" | "rejected";
+  incomingInspectionId?: string | null | undefined;
+  defectReason?: string | null | undefined;
 }
 
 export interface MaterialStockMovementDTO {
@@ -48,6 +50,16 @@ export interface MaterialLotDetailDTO extends MaterialLotDTO {
   movements: MaterialStockMovementDTO[];
   issues: MaterialStockMovementDTO[];
   cuttingOutputsCount?: number | undefined;
+  inspection?: {
+    id: string;
+    inspectionId?: string;
+    status: "open" | "passed" | "failed";
+    outcome?: string | null;
+    defectReason?: string | null;
+    createdAt: string;
+    submittedAt?: string | null;
+    submittedByName?: string | null;
+  } | null | undefined;
 }
 
 export interface ReceiveLotInput {

@@ -13,6 +13,7 @@ import { normalizeTagUid } from "../contracts/rfid";
 import { ApiError } from "../middleware/responses";
 import { scanRoutingService, ScanRoutingService } from "./scan-router";
 import { createInternalCommitment } from "../ledger/commitment-service";
+import { EXCLUDED_LOT_CODES } from "../materials/materials-service";
 
 function generatePublicId(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -98,6 +99,7 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
       const latestLot = await tx.material_lots.findFirst({
         where: {
           rfid_tag_bindings: null,
+          ...(EXCLUDED_LOT_CODES.length > 0 ? { code: { notIn: EXCLUDED_LOT_CODES } } : {}),
         },
         orderBy: { received_at: "desc" },
       });

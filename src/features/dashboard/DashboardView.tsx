@@ -4,13 +4,10 @@ import {
   CheckCircle2,
   Cpu,
   Info,
-  Layers,
   OctagonAlert,
-  Package,
   Radio,
   Scissors,
   ShieldCheck,
-  Truck,
 } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
@@ -39,100 +36,51 @@ function ReceivingLotsQueue() {
     <Loadable query={qLots}>
       {(lots) => {
         const unassigned = lots.filter((l) => !l.rfidUid && l.status === "awaiting-inspection");
-        const assignedLots = lots.filter((l) => !!l.rfidUid);
+
+        if (unassigned.length === 0) {
+          return (
+            <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
+              <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
+                <Radio className="size-4" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                All lots have active bundle cards assigned
+              </p>
+            </div>
+          );
+        }
 
         return (
-          <div className="space-y-6">
-            {/* Newly Created Lots Awaiting RFID Assignment */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Lots Awaiting RFID Assignment ({unassigned.length})
-                </p>
-              </div>
-              {unassigned.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-                  <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
-                    <Radio className="size-4" />
-                  </div>
-                  <p className="text-sm font-medium text-foreground">
-                    All lots have active bundle cards assigned
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y rounded-lg border bg-card">
-                  {unassigned.map((lot) => (
-                    <div
-                      key={lot.id}
-                      className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
-                    >
-                      <div className="space-y-0.5">
-                        <p className="font-semibold text-foreground">{lot.id} · {lot.material}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Supplier: <span className="font-medium">{lot.supplierRef}</span> · Amount: <span className="font-medium">{lot.receivedQty} {lot.unit ?? "m"}</span>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                          Card Pending
-                        </span>
-                        <Button asChild size="sm" className="h-8 text-xs gap-1.5">
-                          <AppLink href={paths.workstation}>
-                            Assign Card at Station 1 <ArrowRight className="size-3" />
-                          </AppLink>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Lots Awaiting RFID Assignment ({unassigned.length})
+              </p>
             </div>
-
-            {/* Quality Tracking: Fabric Lots Quality & Inspection Status */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Material Inspection Tracking ({assignedLots.length})
-                </p>
-              </div>
-              {assignedLots.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">No fabric lots tagged yet.</p>
-              ) : (
-                <div className="divide-y rounded-lg border bg-card">
-                  {assignedLots.map((lot) => (
-                    <div
-                      key={lot.id}
-                      className="flex flex-wrap items-center justify-between gap-3 p-3.5 text-sm hover:bg-muted/30"
-                    >
-                      <div className="space-y-0.5 min-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-foreground">{lot.id}</span>
-                          <span className="text-xs font-mono text-muted-foreground">({lot.material})</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Ref: <span className="font-medium">{lot.supplierRef}</span> · Balance: <span className="font-medium tabular-nums">{lot.balanceQty} / {lot.receivedQty} {lot.unit ?? "m"}</span>
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded border border-success/30">
-                          <Radio className="size-3" /> {lot.rfidUid}
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <StatusBadge status={lot.status} />
-                        </div>
-
-                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                          <AppLink href={paths.lot(lot.id)}>
-                            View <ArrowRight className="size-3 ml-0.5" />
-                          </AppLink>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+            <div className="divide-y rounded-lg border bg-card">
+              {unassigned.map((lot) => (
+                <div
+                  key={lot.id}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
+                >
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-foreground">{lot.id} · {lot.material}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Supplier: <span className="font-medium">{lot.supplierRef}</span> · Amount: <span className="font-medium">{lot.receivedQty} {lot.unit ?? "m"}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                      Card Pending
+                    </span>
+                    <Button asChild size="sm" className="h-8 text-xs gap-1.5">
+                      <AppLink href={paths.workstation}>
+                        Assign Card at Station 1 <ArrowRight className="size-3" />
+                      </AppLink>
+                    </Button>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         );
@@ -152,8 +100,41 @@ function IncomingQcQueue() {
         const awaitingQc = lots.filter(
           (l) => l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned",
         );
+        const awaitingReceiving = lots.filter(
+          (l) => l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned"),
+        );
 
         if (awaitingQc.length === 0) {
+          if (awaitingReceiving.length > 0) {
+            return (
+              <div className="rounded-xl border border-dashed p-6 text-center space-y-3 bg-muted/20">
+                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                  <Radio className="size-4" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    All tagged fabric rolls evaluated · {awaitingReceiving.length} lot(s) awaiting Receiving completion
+                  </p>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                    {awaitingReceiving.length} incoming fabric lot(s) are registered but pending bundle card assignment at Station 1 Receiving. Once tagged, they will automatically appear here for incoming QC evaluation.
+                  </p>
+                </div>
+                <div className="pt-1 flex items-center justify-center gap-2">
+                  <Button asChild size="sm" variant="outline" className="h-8 text-xs gap-1.5">
+                    <AppLink href={paths.workstation}>
+                      Open Station 1 (Receiving) <ArrowRight className="size-3" />
+                    </AppLink>
+                  </Button>
+                  <Button asChild size="sm" variant="ghost" className="h-8 text-xs gap-1.5">
+                    <AppLink href={paths.quality}>
+                      Open Quality Gate
+                    </AppLink>
+                  </Button>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
               <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
@@ -163,7 +144,7 @@ function IncomingQcQueue() {
                 All scanned incoming fabric rolls have been evaluated
               </p>
               <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                No tagged fabric rolls are currently awaiting incoming inspection in quarantine. New deliveries logged and tagged at Station 1 will appear here.
+                No fabric rolls are currently awaiting incoming inspection in quarantine. New deliveries logged and tagged at Station 1 will appear here.
               </p>
             </div>
           );
@@ -235,38 +216,6 @@ export function DashboardView() {
         }
       />
 
-      {/* Quick Navigation Shortcuts */}
-      <div className="flex flex-wrap gap-2 pt-0.5">
-        {canAccessRoute(me, "materialLots") && (
-          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
-            <AppLink href={paths.lots}>
-              <Layers className="size-3.5 text-primary" /> Fabric Lots
-            </AppLink>
-          </Button>
-        )}
-        {canAccessRoute(me, "quality") && (
-          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
-            <AppLink href={paths.quality}>
-              <ShieldCheck className="size-3.5 text-primary" /> Quality
-            </AppLink>
-          </Button>
-        )}
-        {canAccessRoute(me, "fulfilment") && (
-          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
-            <AppLink href={paths.fulfilment}>
-              <Package className="size-3.5 text-primary" /> Fulfilment
-            </AppLink>
-          </Button>
-        )}
-        {canAccessRoute(me, "shipments") && (
-          <Button variant="outline" size="sm" asChild className="h-8 text-xs gap-1.5">
-            <AppLink href={paths.shipments}>
-              <Truck className="size-3.5 text-primary" /> Shipments
-            </AppLink>
-          </Button>
-        )}
-      </div>
-
       <Loadable query={q}>
         {(d) => (
           <div className="space-y-6">
@@ -309,19 +258,7 @@ export function DashboardView() {
 
             {/* Department-tailored operational work */}
             {isReceivingUser ? (
-              <Section
-                title="Fabric Receiving & Inspection Tracking"
-                actions={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ReceiveLotDialog triggerLabel="+ New Fabric Lot" />
-                    <Button asChild size="sm" variant="outline" className="gap-1.5">
-                      <AppLink href={paths.workstation}>
-                        <Cpu className="size-4" /> Open Station 1
-                      </AppLink>
-                    </Button>
-                  </div>
-                }
-              >
+              <Section title="Fabric Receiving">
                 <ReceivingLotsQueue />
               </Section>
             ) : isQualityUser ? (

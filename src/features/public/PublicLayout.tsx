@@ -22,7 +22,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <AppLink
             href={paths.home}
             className="group flex items-center gap-2 transition-opacity hover:opacity-90"
-            aria-label="WearTrail home"
+            aria-label="TraceX home"
           >
             <span className="flex h-6 w-6 items-center justify-center rounded-md bg-purple-500/15 border border-purple-400/25 text-purple-200">
               <svg
@@ -42,7 +42,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 />
               </svg>
             </span>
-            <span className="text-base font-bold tracking-tight text-white">WearTrail</span>
+            <span className="text-base font-bold tracking-tight text-white">TraceX</span>
           </AppLink>
 
           <div className="flex items-center gap-3">
@@ -64,7 +64,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       <footer className="relative z-10 border-t border-purple-500/15 bg-[#140D1E]/60 mt-12">
         <div className="mx-auto flex max-w-2xl flex-col sm:flex-row items-center justify-between gap-3 px-4 py-6 text-xs text-purple-300/60">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-purple-200/90">WearTrail</span>
+            <span className="font-semibold text-purple-200/90">TraceX</span>
             <span>· Public garment traceability</span>
           </div>
           <button

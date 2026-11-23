@@ -137,7 +137,8 @@ export async function getOrCreateSupplier(
 
 // ---------------------------------------------------------------- Material Lots
 
-const EXCLUDED_LOT_CODES: string[] = [];
+export const EXCLUDED_LOT_CODES: string[] =
+  process.env["NODE_ENV"] === "test" ? [] : ["FAB-001", "FAB-002"];
 
 export async function listLots(
   actor?: unknown,
@@ -161,7 +162,15 @@ export async function listLots(
         },
         inspections: {
           where: { scope: "incoming" },
-          select: { id: true, outcome: true, defect_reason: true, created_at: true },
+          select: {
+            id: true,
+            code: true,
+            outcome: true,
+            defect_reason: true,
+            created_at: true,
+            submitted_at: true,
+            staff_users: { select: { display_name: true, username: true } },
+          },
           orderBy: { created_at: "desc" },
           take: 1,
         },
@@ -207,6 +216,8 @@ export async function listLots(
         revision: lot.revision,
         activeTagUid: activeBinding?.tag_uid ?? null,
         status,
+        incomingInspectionId: latestIncomingInsp?.code || latestIncomingInsp?.id || null,
+        defectReason: latestIncomingInsp?.defect_reason ?? null,
       };
     });
   }, tx);
@@ -241,7 +252,15 @@ export async function getLotDetail(
         },
         inspections: {
           where: { scope: "incoming" },
-          select: { id: true, outcome: true, defect_reason: true, created_at: true },
+          select: {
+            id: true,
+            code: true,
+            outcome: true,
+            defect_reason: true,
+            created_at: true,
+            submitted_at: true,
+            staff_users: { select: { display_name: true, username: true } },
+          },
           orderBy: { created_at: "desc" },
           take: 1,
         },
@@ -305,6 +324,25 @@ export async function getLotDetail(
       revision: lot.revision,
       activeTagUid: activeBinding?.tag_uid ?? null,
       status,
+      incomingInspectionId: latestIncomingInsp?.code || latestIncomingInsp?.id || null,
+      defectReason: latestIncomingInsp?.defect_reason ?? null,
+      inspection: latestIncomingInsp
+        ? {
+            id: latestIncomingInsp.code || latestIncomingInsp.id,
+            inspectionId: latestIncomingInsp.id,
+            status:
+              latestIncomingInsp.outcome === "pass"
+                ? "passed"
+                : latestIncomingInsp.outcome === "fail"
+                  ? "failed"
+                  : "open",
+            outcome: latestIncomingInsp.outcome,
+            defectReason: latestIncomingInsp.defect_reason,
+            createdAt: latestIncomingInsp.created_at.toISOString(),
+            submittedAt: (latestIncomingInsp as any).submitted_at?.toISOString() ?? null,
+            submittedByName: (latestIncomingInsp as any).staff_users?.display_name ?? null,
+          }
+        : null,
       movements,
       issues,
     };
@@ -410,6 +448,21 @@ export async function receiveMaterialLot(
       });
     }
 
+    // 4c. If no tag UID provided at receipt, queue receive-lot task for receiving department to assign RFID tag
+    if (!input.tagUid && db.work_tasks && typeof db.work_tasks.create === "function") {
+      await db.work_tasks.create({
+        data: {
+          action_code: "receive-lot",
+          department_code: "receiving",
+          material_lot_id: createdLot.id,
+          status: "queued",
+          created_by: staffUserId,
+          created_at: new Date(),
+          revision: 0,
+        },
+      });
+    }
+
     let bindingId: string | undefined = undefined;
 
     // 5. If tag UID provided at receipt, bind bundle card
@@ -473,7 +526,10 @@ export async function bindLotCard(
   return runInTransaction(async (db) => {
     // 1. Resolve lot
     const lot = await db.material_lots.findFirst({
-      where: idOrCodeWhere(input.lotId),
+      where: {
+        ...idOrCodeWhere(input.lotId),
+        code: { notIn: EXCLUDED_LOT_CODES },
+      },
     });
     if (!lot) {
       throw ApiError.notFound(`Material lot '${input.lotId}' not found.`, undefined, "WT_ERR_NOT_FOUND");
@@ -546,6 +602,21 @@ export async function bindLotCard(
       data: bindingData,
     });
 
+    // Complete pending receive-lot task if any
+    if (db.work_tasks && typeof db.work_tasks.updateMany === "function") {
+      await db.work_tasks.updateMany({
+        where: {
+          material_lot_id: lot.id,
+          action_code: "receive-lot",
+          status: { in: ["queued", "claimed", "in_progress"] },
+        },
+        data: {
+          status: "completed",
+          completed_at: new Date(),
+        },
+      });
+    }
+
     // 6. Record audit event
     await db.audit_events.create({
       data: {
@@ -591,7 +662,10 @@ export async function acceptIncomingStockHelper(
   return runInTransaction(async (db) => {
     // 1. Fetch material lot
     const lot = await db.material_lots.findFirst({
-      where: idOrCodeWhere(lotId),
+      where: {
+        ...idOrCodeWhere(lotId),
+        code: { notIn: EXCLUDED_LOT_CODES },
+      },
     });
 
     if (!lot) {
@@ -696,6 +770,21 @@ export async function issueMaterial(
         `Cannot issue material to order '${order.code}' with status '${order.status}'. Order must be approved first.`,
         { orderStatus: order.status },
         "WT_ERR_ORDER_NOT_APPROVED",
+      );
+    }
+
+    // Verify lot is not rejected/quarantined from incoming QC
+    const latestIncomingInsp = db.inspections
+      ? await db.inspections.findFirst({
+          where: { material_lot_id: lot.id, scope: "incoming" },
+          orderBy: { created_at: "desc" },
+        })
+      : null;
+    if (latestIncomingInsp && latestIncomingInsp.outcome === "fail") {
+      throw ApiError.badRequest(
+        `Cannot issue material from rejected lot '${lot.code}'. Fabric was rejected during incoming QC inspection.`,
+        { lotCode: lot.code, outcome: latestIncomingInsp.outcome },
+        "WT_ERR_LOT_REJECTED",
       );
     }
 

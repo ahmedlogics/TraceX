@@ -26,8 +26,22 @@ function getTaskPrerequisite(
     return { ready: true, label: "Completed" };
   }
   switch (task.kind) {
-    case "incoming-qc":
+    case "incoming-qc": {
+      const lot = lots.find(
+        (l) =>
+          l.id === task.subjectId ||
+          (l as any).lotId === task.subjectId ||
+          (l as any).code === task.subjectId,
+      );
+      if (lot && (!lot.rfidUid || lot.rfidUid === "unassigned")) {
+        return {
+          ready: false,
+          label: "Blocked: Awaiting Receiving",
+          detail: "Station 1 bundle card registration pending",
+        };
+      }
       return { ready: true, label: "Ready for Inspection", detail: "Fabric bundle in quarantine" };
+    }
     case "issue-material": {
       const order = orders.find((o) => o.id === task.subjectId);
       if (order && order.status !== "approved" && order.status !== "in-progress") {
@@ -212,17 +226,6 @@ export function TasksSection() {
                           `${t.id} ${t.title} ${t.subjectId} ${t.department}`
                             .toLowerCase()
                             .includes(search.toLowerCase());
-                        if (isIncomingQC && t.kind === "incoming-qc") {
-                          const lotMatch = lots.find(
-                            (l) =>
-                              l.id === t.subjectId ||
-                              (l as any).lotId === t.subjectId ||
-                              (l as any).code === t.subjectId,
-                          );
-                          if (lotMatch && (!lotMatch.rfidUid || lotMatch.rfidUid === "unassigned")) {
-                            return false;
-                          }
-                        }
                         return matchesStatus && matchesDept && matchesSearch;
                       });
 
@@ -435,9 +438,19 @@ export function TasksSection() {
                                     )}
 
                                     {t.kind === "incoming-qc" && (me.role === "Q" || isManager) && t.status !== "done" && (
-                                      <Button asChild size="sm" className="h-7 text-xs bg-primary">
-                                        <AppLink href={paths.quality}>
-                                          Evaluate <ArrowRight className="size-3 ml-0.5" />
+                                      <Button
+                                        asChild
+                                        size="sm"
+                                        variant={prereq.ready ? "default" : "outline"}
+                                        className={
+                                          prereq.ready
+                                            ? "h-7 text-xs bg-primary"
+                                            : "h-7 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                                        }
+                                      >
+                                        <AppLink href={prereq.ready ? paths.quality : paths.workstation}>
+                                          {prereq.ready ? "Evaluate" : "Station 1"}{" "}
+                                          <ArrowRight className="size-3 ml-0.5" />
                                         </AppLink>
                                       </Button>
                                     )}

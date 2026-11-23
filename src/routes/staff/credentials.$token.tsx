@@ -3,7 +3,7 @@ import { pageHead } from "@/app/head";
 import { CredentialsView } from "@/features/auth/CredentialsView";
 
 export const Route = createFileRoute("/staff/credentials/$token")({
-  head: () => pageHead("Set up password", "Set or reset your WearTrail staff password."),
+  head: () => pageHead("Set up password", "Set or reset your TraceX staff password."),
   component: CredentialsRoute,
 });
 

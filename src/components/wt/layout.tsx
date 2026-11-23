@@ -68,12 +68,14 @@ export function Section({
   actions,
   children,
   className,
+  contentClassName,
 }: {
   title: ReactNode;
   description?: ReactNode | undefined;
   actions?: ReactNode | undefined;
   children: ReactNode;
   className?: string | undefined;
+  contentClassName?: string | undefined;
 }) {
   return (
     <section className={cn("rounded-lg border bg-card", className)}>
@@ -84,7 +86,7 @@ export function Section({
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={cn("p-4", contentClassName)}>{children}</div>
     </section>
   );
 }

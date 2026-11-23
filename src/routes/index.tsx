@@ -5,5 +5,5 @@ export const Route = createFileRoute("/")({
   beforeLoad: () => {
     throw redirect({ to: "/staff" });
   },
-  head: () => pageHead("WearTrail", "Garment traceability for factory staff and shoppers."),
+  head: () => pageHead("TraceX", "Garment traceability for factory staff and shoppers."),
 });

@@ -432,7 +432,7 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
   const openInsp = s.inspections.filter((i) => i.status === "open");
   const failedLedger = s.ledger.filter((l) => l.status === "failed");
   const awaitingLots = s.lots.filter(
-    (l) => l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned",
+    (l) => l.status === "awaiting-inspection",
   );
   const activeShipments = s.shipments.filter((x) => x.status !== "departed");
 
@@ -493,14 +493,19 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
         u.department?.toLowerCase() === "raw-store";
 
       if (isIncoming) {
+        const readyForQc = awaitingLots.filter((l) => Boolean(l.rfidUid) && l.rfidUid !== "unassigned");
+        const awaitingRec = awaitingLots.filter((l) => !l.rfidUid || l.rfidUid === "unassigned");
+        const actionableOpen = open.filter((t) => {
+          if (t.kind === "incoming-qc") {
+            return readyForQc.some((l) => l.id === t.subjectId);
+          }
+          return true;
+        });
         return [
-          { label: "My open tasks", value: open.length },
-          { label: "Lots awaiting inspection", value: awaitingLots.length },
-          { label: "Accepted lots", value: s.lots.filter((l) => l.status === "accepted").length },
-          {
-            label: "Held / rejected lots",
-            value: s.lots.filter((l) => l.status === "rejected" || (l.heldQty ?? 0) > 0).length,
-          },
+          { label: "My open tasks", value: actionableOpen.length },
+          { label: "Lots ready for QC", value: readyForQc.length },
+          { label: "Awaiting receiving", value: awaitingRec.length },
+          { label: "Cleared fabric lots", value: s.lots.filter((l) => l.status === "accepted").length },
         ];
       }
 
@@ -558,14 +563,36 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
         href: "/staff/ledger",
       }),
     );
-  if (["M", "Q"].includes(u.role))
-    awaitingLots.forEach((l) =>
+  if (["M", "Q"].includes(u.role)) {
+    s.lots
+      .filter((l) => l.status === "rejected")
+      .forEach((l) =>
+        alerts.push({
+          tone: "danger",
+          message: `Material Lot ${l.id} failed incoming QC — quarantined from production.`,
+          href: "/staff/quality",
+        }),
+      );
+    s.lots
+      .filter((l) => (l.heldQty ?? 0) > 0)
+      .forEach((l) =>
+        alerts.push({
+          tone: "warning",
+          message: `Material Lot ${l.id} has ${l.heldQty}${l.unit ?? "m"} on quality hold in quarantine.`,
+          href: "/staff/quality",
+        }),
+      );
+  }
+  if (isIncomingQc) {
+    const readyForQc = awaitingLots.filter((l) => Boolean(l.rfidUid) && l.rfidUid !== "unassigned");
+    if (readyForQc.length > 0) {
       alerts.push({
         tone: "info",
-        message: `${l.id} is awaiting incoming inspection.`,
-        href: `/staff/material-lots/${l.id}`,
-      }),
-    );
+        message: `${readyForQc.length} incoming fabric roll(s) ready in quarantine for QC evaluation.`,
+        href: "/staff/quality",
+      });
+    }
+  }
 
   const assigned = open
     .filter((t) => u.role === "M" || t.assigneeId === u.id || !t.assigneeId)

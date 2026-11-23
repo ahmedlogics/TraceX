@@ -3,14 +3,12 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  Cpu,
   Radio,
   ScanLine,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmt, PageHeader } from "@/components/wt/layout";
-import { StatusBadge, type Tone } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { rfidStationCodes, rfidStationLabels, stationDepartment } from "@/domain/labels";
 import type { RfidStationCode, ScanOutcome, StaffUser } from "@/domain/types";
@@ -78,51 +76,38 @@ export function StationShell() {
   );
 
   return (
-    <Loadable query={qStation}>
-      {(stData) => {
-        const lastOutcome = stData.lastScanOutcome;
-
-        return (
-          <div className="space-y-6">
-            {/* Station Operator Bar */}
-            <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Station:
-                </span>
-                {activeStations.length > 1 ? (
-                  <select
-                    value={effectiveStation}
-                    onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                    className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    {activeStations.map((code) => (
-                      <option key={code} value={code}>
-                        {rfidStationLabels[code]} ({code})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary">
-                    {rfidStationLabels[effectiveStation]}
-                  </span>
-                )}
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Hardware Bridge Online
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Operator:</span>
-                <span className="font-semibold text-foreground">{me.displayName}</span>
-                <span className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-                  {me.department}
-                </span>
-              </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Workstation"
+        actions={
+          activeStations.length > 1 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Station:
+              </span>
+              <select
+                value={effectiveStation}
+                onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
+                className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {activeStations.map((code) => (
+                  <option key={code} value={code}>
+                    {rfidStationLabels[code]} ({code})
+                  </option>
+                ))}
+              </select>
             </div>
+          ) : undefined
+        }
+      />
 
-            {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 7, 9 handle their own layout) */}
+      <Loadable query={qStation}>
+        {(stData) => {
+          const lastOutcome = stData.lastScanOutcome;
+
+          return (
+            <div className="space-y-6">
+              {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 7, 9 handle their own layout) */}
             {effectiveStation !== "fabric_issue" &&
               effectiveStation !== "cutting" &&
               effectiveStation !== "final_qc" &&
@@ -186,9 +171,6 @@ export function StationShell() {
                           ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
                           : "Assigned Workstation"}
                       </p>
-                      <span className="text-xs font-mono text-muted-foreground">
-                        code: {effectiveStation}
-                      </span>
                     </div>
                     <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                       {stData.stationName}
@@ -202,11 +184,6 @@ export function StationShell() {
                   </div>
 
                   <div className="flex flex-col items-start gap-2 md:items-end">
-                    {stData.bridgeConnected && (
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status="Hardware RFID: Connected" tone="success" />
-                      </div>
-                    )}
                     {stData.lastConfirmedSubjectId && (
                       <div className="flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-xs">
                         <span className="text-muted-foreground">Latest Subject:</span>
@@ -265,5 +242,6 @@ export function StationShell() {
         );
       }}
     </Loadable>
-  );
+  </div>
+);
 }
