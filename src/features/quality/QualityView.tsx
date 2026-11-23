@@ -620,10 +620,7 @@ export function QualityView() {
   if (isIncomingQC) {
     return (
       <>
-        <PageHeader
-          title="Incoming Material Quality Assurance"
-          description="Fabric inspection queues, 4-point defect evaluation, and quarantine hold management."
-        />
+        <PageHeader title="Incoming Material Quality Assurance" />
 
         <div className="space-y-6">
           {/* Key Metric Counters */}
@@ -773,18 +770,6 @@ export function QualityView() {
 
               {/* Mode 2: Lot Rejection & Quarantine Handling */}
               <TabsContent value="quarantine" className="mt-4 space-y-4">
-                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm flex items-start gap-3">
-                  <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-destructive">
-                      Active Raw Material Quarantine Zone
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Managing failed fabric rolls and logging mill defect reasons. Unapproved rolls are locked with usable balance = 0 m. Downstream production guards strictly prevent Raw Store from issuing these rolls and prevent Cutting from starting orders on this material.
-                    </p>
-                  </div>
-                </div>
-
                 <Loadable query={lots}>
                   {(allLots) => {
                     const quarantinedLots = allLots.filter(
