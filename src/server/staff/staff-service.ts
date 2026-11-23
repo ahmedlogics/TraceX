@@ -22,6 +22,7 @@ import type {
 import type { DashboardData, ReportsData } from "@/lib/data/client";
 import type { StaffRole } from "../contracts/actor";
 import {
+  clearAllSessionCaches,
   mapPrismaDepartmentToDomain,
   toStaffUserDto,
 } from "../auth/auth-service";
@@ -921,6 +922,7 @@ export async function setStaffUserSuspended(
       await tx.staff_sessions.deleteMany({
         where: { staff_user_id: userId },
       });
+      clearAllSessionCaches();
     }
 
     // Record audit event

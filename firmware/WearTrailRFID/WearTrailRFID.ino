@@ -17,8 +17,15 @@
 
 #include "config.h"
 
+#ifndef CONTEXT_TIMEOUT_MS
+#define CONTEXT_TIMEOUT_MS  5000
+#endif
+
 // ===========================================================================
 // PIN DEFINITIONS (Exact hardware layout: 9 physical reader stations)
+// Chronological pipeline order matching factory workstation flow:
+// 0: fabric_receiving -> 1: fabric_issue -> 2: cutting -> 3: stitching ->
+// 4: finishing -> 5: final_qc -> 6: packing -> 7: warehouse -> 8: dispatch
 // ===========================================================================
 #define SS_PIN1  27  // Reader 0: Station 1 - fabric_receiving
 #define SS_PIN2  12  // Reader 1: Station 2 - fabric_issue
@@ -329,7 +336,7 @@ class WearTrailHardware {
       lastContextPollMs = millis();
 
       HTTPClient http;
-      http.setTimeout(2500);
+      http.setTimeout(CONTEXT_TIMEOUT_MS);
       String url = baseUrl() + "/context/active?deviceId=" + DEVICE_ID;
       http.begin(url);
       http.addHeader("X-Device-Secret", DEVICE_SECRET);
@@ -384,7 +391,7 @@ class WearTrailHardware {
 
     void acknowledgeContext(const String& contextId, int readerIndex) {
       HTTPClient http;
-      http.setTimeout(2500);
+      http.setTimeout(CONTEXT_TIMEOUT_MS);
       String url = baseUrl() + "/device/contexts/" + contextId + "/ack";
       http.begin(url);
       http.addHeader("Content-Type", "application/json");

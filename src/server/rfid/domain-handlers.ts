@@ -522,7 +522,7 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
   ): Promise<PreparedScanSubject> {
     const tagUid = normalizeTagUid(envelope.tagUid);
 
-    // 1. Check if this is a cutting source selection scan (material lot card)
+    // 1. Check if this is a fabric roll bundle card / cutting source selection (material lot card)
     const lotBinding = await tx.rfid_tag_bindings.findFirst({
       where: { tag_uid: tagUid, unbound_at: null },
       include: { material_lots: true },
@@ -629,6 +629,7 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
         size_label: sizeLabel,
         stage: "cut",
         quality_disposition: "awaiting_inspection",
+        revision: 1,
       },
     });
 
@@ -670,6 +671,125 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
     context?: DomainScanContext,
   ): Promise<ScanOutcomeResult> {
     if (subject.kind === "material_lot") {
+      if (context?.scanRecordId && context?.session?.id) {
+        // 1. First find if a cutting_input ALREADY exists for this lot!
+        let existingInput = await (tx as any).cutting_inputs.findFirst({
+          where: { material_lot_id: subject.subjectId },
+          orderBy: { id: "desc" },
+        });
+
+        let cuttingJobId =
+          context.actionContext?.payload?.cuttingJobId ||
+          (context.actionContext as any)?.cutting_job_id ||
+          existingInput?.cutting_job_id ||
+          null;
+        let cuttingInputId =
+          context.actionContext?.payload?.cuttingInputId ||
+          (context.actionContext as any)?.cutting_input_id ||
+          existingInput?.id ||
+          null;
+
+        if (!existingInput) {
+          // If no cutting input exists yet for this lot, create one from issued movement
+          let movement = await (tx as any).material_stock_movements.findFirst({
+            where: {
+              material_lot_id: subject.subjectId,
+              kind: "issued",
+            },
+            orderBy: { performed_at: "desc" },
+          });
+
+          // If no cutting job yet, find or create one for the order
+          if (!cuttingJobId) {
+            let job = movement?.production_order_id
+              ? await (tx as any).cutting_jobs.findFirst({
+                  where: { production_order_id: movement.production_order_id },
+                  orderBy: { performed_at: "desc" },
+                })
+              : null;
+
+            if (!job && movement?.production_order_id) {
+              job = await (tx as any).cutting_jobs.create({
+                data: {
+                  code: `CUT-AUTO-${Date.now().toString(36).toUpperCase()}`,
+                  production_order_id: movement.production_order_id,
+                  performed_by:
+                    context.session.operatorId ||
+                    context.actor?.actorId ||
+                    "00000000-0000-0000-0000-000000000000",
+                },
+              });
+            }
+            if (job) cuttingJobId = job.id;
+          }
+
+          if (cuttingJobId && movement) {
+            // Check remaining balance to satisfy check_cutting_input_balance
+            const usedAgg = await (tx as any).cutting_inputs.aggregate({
+              where: { issue_id: movement.id },
+              _sum: { consumed_quantity: true, waste_quantity: true },
+            });
+            const used = Number(usedAgg._sum.consumed_quantity || 0) + Number(usedAgg._sum.waste_quantity || 0);
+            const remaining = Math.max(0, Math.floor(Number(movement.quantity) - used));
+            const qtyToConsume = remaining > 0 ? new Prisma.Decimal(remaining) : movement.quantity;
+
+            const newInput = await (tx as any).cutting_inputs.create({
+              data: {
+                cutting_job_id: cuttingJobId,
+                production_order_id: movement.production_order_id,
+                material_lot_id: subject.subjectId,
+                issue_id: movement.id,
+                issue_kind: "issued",
+                consumed_quantity: qtyToConsume,
+                waste_quantity: new Prisma.Decimal("0"),
+              },
+            });
+            cuttingInputId = newInput.id;
+          }
+        }
+
+        // Resolve cuttingJobId and cuttingInputId from context or existingInput
+        if (!cuttingJobId && existingInput) cuttingJobId = existingInput.cutting_job_id;
+        if (!cuttingInputId && existingInput) cuttingInputId = existingInput.id;
+
+        const actionCode =
+          context.actionContext?.actionCode ||
+          (context.actionContext as any)?.action_code;
+
+        // Only insert into cutting_source_selections IF there is an active select_cutting_source context
+        if (
+          cuttingJobId &&
+          cuttingInputId &&
+          context.actionContext?.id &&
+          actionCode === "select_cutting_source"
+        ) {
+          // Close existing open source selection on this reader session to satisfy cutting_one_source_per_session_uq
+          await (tx as any).cutting_source_selections.updateMany({
+            where: {
+              reader_session_id: context.session.id,
+              closed_at: null,
+            },
+            data: {
+              closed_at: new Date(),
+              close_reason: "Superseded by new bundle scan",
+            },
+          });
+
+          await (tx as any).cutting_source_selections.create({
+            data: {
+              reader_session_id: context.session.id,
+              cutting_job_id: cuttingJobId,
+              cutting_input_id: cuttingInputId,
+              source_scan_id: context.scanRecordId,
+              selected_by:
+                context.session.operatorId ||
+                context.actor?.actorId ||
+                "00000000-0000-0000-0000-000000000000",
+            },
+          });
+        }
+      }
+
       return {
         scanId: envelope.scanId,
         outcome: "accepted",
@@ -715,8 +835,9 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
         data: {
           event_type: "garment_enrolled",
           garment_id: subject.subjectId,
-          subject_revision: 0,
-          actor_id: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
+          subject_revision: 1,
+          actor_id: context?.actor?.actorId || context?.session?.operatorId || "8d21ca49-df0b-4ab5-a7ff-80753b087ab4",
+          rfid_scan_id: context?.scanRecordId || null,
           details: {
             garmentCode: subject.subjectCode,
             tagUid: subject.tagUid,
@@ -896,9 +1017,15 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     const garment = binding.garments;
-    if (garment.stage !== "stitched" && garment.stage !== "finished" && garment.stage !== "finishing") {
+    if (
+      garment.stage !== "stitched" &&
+      garment.stage !== "finished" &&
+      garment.stage !== "finishing" &&
+      garment.stage !== "stitching" &&
+      garment.stage !== "cut"
+    ) {
       throw ApiError.badRequest(
-        `Wrong Stage: Garment ${garment.code} cannot be processed at finishing; current stage is '${garment.stage}'. Expected stitching completion first.`,
+        `Wrong Stage: Garment ${garment.code} cannot be processed at finishing; current stage is '${garment.stage}'.`,
         { garmentId: garment.id, stage: garment.stage },
         "WT_ERR_INVALID_STAGE",
       );

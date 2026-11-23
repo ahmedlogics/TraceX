@@ -52,6 +52,7 @@ const toneFor: Record<string, Tone> = {
   planned: "info",
   departed: "success",
   "in-progress": "info",
+  in_progress: "info",
   completed: "success",
   sealed: "success",
   // ledger
@@ -68,7 +69,7 @@ const toneFor: Record<string, Tone> = {
 
 const pretty = (s: string) => {
   if (s === "final-qc") return "Finished";
-  return /\s/.test(s) ? s : s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  return /\s/.test(s) ? s : s.replace(/[-_]/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 };
 
 /** Text-labelled status badge. Pass `label` to prefix a field name (e.g. "Stage"). */

@@ -402,7 +402,7 @@ export function GarmentDetailView({ garmentId }: { garmentId: string }) {
                       },
                       {
                         label: "Allocated to Departure",
-                        value: d.shipment?.allocatedGarmentIds.includes(g.id) ? "Yes" : "No",
+                        value: d.shipment?.allocatedGarmentIds?.includes(g.id) ? "Yes" : "No",
                       },
                     ]}
                   />

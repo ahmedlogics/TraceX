@@ -36,6 +36,8 @@ export interface ProductionOrderDTO {
   approvedByName?: string | null | undefined;
   approvedAt?: string | null | undefined;
   revision: number;
+  lotIds?: string[] | undefined;
+  lotCodes?: string[] | undefined;
 }
 
 export interface ProductionOrderDetailDTO extends ProductionOrderDTO {

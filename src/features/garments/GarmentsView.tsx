@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, Clock, ExternalLink, OctagonAlert, Package, Radio, Scissors, Shirt, Tag, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, ExternalLink, OctagonAlert, Package, Radio, ScanLine, Scissors, Shirt, Tag, Zap } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
 import { FilterBar, NativeSelect, SearchInput } from "@/components/wt/forms";
 import { fmt, IdLink, PageHeader } from "@/components/wt/layout";
@@ -40,7 +41,9 @@ export function GarmentsView() {
 
   const canAccessNfc = can.accessNfcHub(me);
   const q = useWtQuery(["garments"], (c) => c.listGarments());
-  const { run } = useWtAction();
+  const { run, pending } = useWtAction();
+  const [scanInput, setScanInput] = useState("");
+  const [awaitingHardware, setAwaitingHardware] = useState(false);
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("all");
   const [disposition, setDisposition] = useState("all");
@@ -221,10 +224,101 @@ export function GarmentsView() {
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {activeStationCode === "finishing"
-                            ? "Zero manual clicks required. Simply present physical garment tag to Scanner 5. Details are fetched and status dynamically updates to Finished."
-                            : "Zero manual clicks required. Simply present physical garment tag to Scanner 4. Details are fetched and status dynamically updates to Stitched."}
+                            ? "Present physical garment tag to Scanner 5, or use the quick scan controls below."
+                            : "Present physical garment tag to Scanner 4, or use the quick scan controls below."}
                         </p>
                       </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={scanInput}
+                        onChange={(e) => setScanInput(e.target.value.toUpperCase())}
+                        placeholder="Scan or enter card UID..."
+                        className="h-8 w-44 font-mono text-xs bg-card"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
+                        disabled={pending}
+                        onClick={() => {
+                          const targetUid = scanInput.trim();
+                          if (targetUid) {
+                            void run(
+                              (c) => c.routineScan(targetUid, activeStationCode),
+                              (outcome) => {
+                                setScanInput("");
+                                setRecentScanOutcome(outcome);
+                                void q.refetch();
+                                const stationLabel = activeStationCode === "finishing" ? "Finishing" : "Stitching";
+                                if (outcome.resolution === "accepted") {
+                                  return activeStationCode === "finishing"
+                                    ? `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
+                                    : `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Stitching complete! Advanced to Finishing.`;
+                                }
+                                return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                              }
+                            );
+                          } else {
+                            setAwaitingHardware(true);
+                            void run(
+                              async (c) => {
+                                const startTime = Date.now();
+                                while (Date.now() - startTime < 35000) {
+                                  const data = await c.getRfidStationData(activeStationCode);
+                                  if (data.lastScanOutcome && data.lastScanOutcome.at !== lastSeenScanRef.current) {
+                                    lastSeenScanRef.current = data.lastScanOutcome.at ?? null;
+                                    setRecentScanOutcome(data.lastScanOutcome);
+                                    void q.refetch();
+                                    return data.lastScanOutcome;
+                                  }
+                                  await new Promise((r) => setTimeout(r, 1000));
+                                }
+                                throw new Error(
+                                  `No hardware scan detected on Scanner ${activeStationCode === "finishing" ? 5 : 4} within 35 seconds. Please tap tag on reader.`
+                                );
+                              },
+                              (outcome) => {
+                                setAwaitingHardware(false);
+                                void q.refetch();
+                                return outcome?.resolution === "accepted"
+                                  ? activeStationCode === "finishing"
+                                    ? `✓ Scan accepted: Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
+                                    : `✓ Scan accepted: Garment ${outcome.garmentCode ?? outcome.subjectId} Stitched! Advanced to Finishing.`
+                                  : `Scan outcome: ${outcome?.rejectReason ?? outcome?.resolution ?? "Completed"}`;
+                              }
+                            ).finally(() => setAwaitingHardware(false));
+                          }
+                        }}
+                      >
+                        {awaitingHardware ? (
+                          <>
+                            <span className="relative flex h-2 w-2 mr-1">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                            </span>
+                            Awaiting Card Tap on Scanner {activeStationCode === "finishing" ? 5 : 4}...
+                          </>
+                        ) : scanInput.trim() ? (
+                          <>
+                            <ScanLine className="size-3.5" /> Simulate Scan ({scanInput.trim()})
+                          </>
+                        ) : (
+                          <>
+                            <Radio className="size-3.5" /> Scan Product Tag (Hardware)
+                          </>
+                        )}
+                      </Button>
+                      {scanInput && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs px-2"
+                          onClick={() => setScanInput("")}
+                        >
+                          Clear
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -403,20 +497,81 @@ export function GarmentsView() {
                   },
                   {
                     header: "Actions",
-                    cell: (g) => (
-                      <div className="flex items-center gap-1.5">
-                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                          <AppLink href={paths.garment(g.id)}>
-                            View <ArrowRight className="size-3 ml-1" />
-                          </AppLink>
-                        </Button>
-                        <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
-                          <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
-                            <ExternalLink className="size-3 mr-1" /> Passport
-                          </AppLink>
-                        </Button>
-                      </div>
-                    ),
+                    cell: (g) => {
+                      const canStitch =
+                        (activeStationCode === "stitching" || isStitching) &&
+                        (g.stage === "cut" || g.stage === "stitching");
+                      const canFinish =
+                        (activeStationCode === "finishing" || isFinishing) &&
+                        g.stage !== "warehouse" &&
+                        g.stage !== "dispatched" &&
+                        g.stage !== "packing";
+
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          {canStitch && (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-primary text-primary-foreground font-semibold gap-1"
+                              disabled={pending}
+                              title={g.rfidUid ? `Scan Card ${g.rfidUid} to complete stitching` : "Scan product tag"}
+                              onClick={() => {
+                                const targetUid = g.rfidUid || scanInput.trim();
+                                if (!targetUid) return;
+                                void run(
+                                  (c) => c.routineScan(targetUid, "stitching"),
+                                  (outcome) => {
+                                    setRecentScanOutcome(outcome);
+                                    void q.refetch();
+                                    if (outcome.resolution === "accepted") {
+                                      return `✓ Garment ${g.id} Stitching complete! Advanced to Finishing.`;
+                                    }
+                                    return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                  }
+                                );
+                              }}
+                            >
+                              <Radio className="size-3" /> Scan Product Tag
+                            </Button>
+                          )}
+                          {canFinish && (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-primary text-primary-foreground font-semibold gap-1 shadow-xs"
+                              disabled={pending}
+                              title={g.rfidUid ? `Scan Card ${g.rfidUid} to finish and release to QC` : "Scan product tag on hardware"}
+                              onClick={() => {
+                                const targetUid = g.rfidUid || scanInput.trim();
+                                if (!targetUid) return;
+                                void run(
+                                  (c) => c.routineScan(targetUid, "finishing"),
+                                  (outcome) => {
+                                    setRecentScanOutcome(outcome);
+                                    void q.refetch();
+                                    if (outcome.resolution === "accepted") {
+                                      return `✓ Garment ${g.id} Finished! Released to QC.`;
+                                    }
+                                    return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                  }
+                                );
+                              }}
+                            >
+                              <Radio className="size-3" /> Scan Product Tag
+                            </Button>
+                          )}
+                          <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                            <AppLink href={paths.garment(g.id)}>
+                              View <ArrowRight className="size-3 ml-1" />
+                            </AppLink>
+                          </Button>
+                          <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
+                            <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
+                              <ExternalLink className="size-3 mr-1" /> Passport
+                            </AppLink>
+                          </Button>
+                        </div>
+                      );
+                    },
                   },
                 ]}
               />

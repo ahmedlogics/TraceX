@@ -46,7 +46,7 @@ async function runCheck() {
     database: parsed.database ?? undefined,
     user: parsed.user ?? undefined,
     password: parsed.password ?? undefined,
-    connectionTimeoutMillis: 10000,
+    connectionTimeoutMillis: 30000,
     ssl: ca ? { ca, rejectUnauthorized: true } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
   };
   const pool = new pg.Pool(poolConfig);

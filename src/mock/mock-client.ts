@@ -236,7 +236,19 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     listProductSpecs: () => read((s) => E.listProductSpecs(s)),
     saveProductSpec: (spec) => act((s, u) => E.saveProductSpec(s, u, spec)),
-    listOrders: () => read((s) => s.orders),
+    listOrders: () =>
+      read((s) =>
+        s.orders.map((o) => {
+          const orderIssues = s.issues.filter((i) => i.orderId === o.id);
+          const lotIds = orderIssues.map((i) => i.lotId);
+          return {
+            ...o,
+            lotId: (o as any).lotId || lotIds[0],
+            lotIds: (o as any).lotIds || lotIds,
+            lotCodes: (o as any).lotCodes || lotIds,
+          };
+        }),
+      ),
     getOrder: (id) =>
       read((s) => {
         const order = s.orders.find((o) => o.id === id);

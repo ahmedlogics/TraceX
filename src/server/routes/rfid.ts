@@ -390,7 +390,7 @@ function toDbActionCode(stationCode: RfidStationCode, kind: string): string {
     case "fabric_issue":
       return "issue_bundle";
     case "cutting":
-      return kind === "select_cutting_source" ? "select_cutting_source" : "bind_garment_tag";
+      return kind === "bind_garment_tag" ? "bind_garment_tag" : "select_cutting_source";
     case "stitching":
       return "complete_stitching";
     case "finishing":
@@ -614,10 +614,39 @@ rfidRouter.post(
         if (!resolvedProductionOrderId) {
           orderRecord = await prisma.production_orders.findFirst({
             where: { status: { in: ["approved", "in_progress", "draft"] } },
-            orderBy: { created_at: "asc" },
+            orderBy: { created_at: "desc" },
           });
           if (orderRecord) {
             resolvedProductionOrderId = orderRecord.id;
+          }
+        }
+
+        if (!resolvedProductionOrderId) {
+          orderRecord = await prisma.production_orders.findFirst({
+            orderBy: { created_at: "desc" },
+          });
+          if (orderRecord) {
+            resolvedProductionOrderId = orderRecord.id;
+          }
+        }
+
+        // If database literally has zero production orders, auto-provision a default order
+        if (!resolvedProductionOrderId) {
+          const spec = await prisma.product_specifications.findFirst();
+          const adminUser = await prisma.staff_users.findFirst();
+          if (spec && adminUser) {
+            const newOrder = await prisma.production_orders.create({
+              data: {
+                code: `ORD-AUTO-${Date.now().toString(36).toUpperCase()}`,
+                product_spec_id: spec.id,
+                planned_quantity: 10,
+                status: "approved",
+                created_by: adminUser.id,
+                due_date: new Date(Date.now() + 7 * 86400000),
+              },
+            });
+            resolvedProductionOrderId = newOrder.id;
+            orderRecord = newOrder;
           }
         }
 
@@ -673,10 +702,27 @@ rfidRouter.post(
       let resolvedSourceSelectionId = p["sourceSelectionId"] ? String(p["sourceSelectionId"]) : null;
 
       if ((dbActionCode === "select_cutting_source" || dbActionCode === "bind_garment_tag") && !resolvedCuttingJobId) {
-        const job = await prisma.cutting_jobs.findFirst({
+        let job = await prisma.cutting_jobs.findFirst({
           where: resolvedProductionOrderId ? { production_order_id: resolvedProductionOrderId } : {},
           orderBy: { performed_at: "desc" },
         });
+        if (!job) {
+          job = await prisma.cutting_jobs.findFirst({ orderBy: { performed_at: "desc" } });
+        }
+        if (!job) {
+          const defaultOrder = resolvedProductionOrderId
+            ? await prisma.production_orders.findUnique({ where: { id: resolvedProductionOrderId } })
+            : await prisma.production_orders.findFirst();
+          if (defaultOrder) {
+            job = await prisma.cutting_jobs.create({
+              data: {
+                code: `CUT-AUTO-${Date.now().toString(36).toUpperCase()}`,
+                production_order_id: defaultOrder.id,
+                performed_by: user.id,
+              },
+            });
+          }
+        }
         if (job) {
           resolvedCuttingJobId = job.id;
           if (!resolvedCuttingInputId) {

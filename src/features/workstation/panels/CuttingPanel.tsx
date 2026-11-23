@@ -40,9 +40,9 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
   const { run, pending } = useWtAction();
 
   // Primary Queries
-  const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
+  const qOrders = useWtQuery(["orders"], (c) => c.listOrders(), { refetchInterval: 3000 });
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
-  const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 2000 });
   const qRework = useWtQuery(["rework"], (c) => c.listRework());
 
   // Cutting Workflow Step:
@@ -210,45 +210,28 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
           message: `Loaded roll details for ${matchingLot.material} (${matchingLot.balanceQty || matchingLot.receivedQty}m available). Select an order to cut.`,
         });
       } else if (step === "scanning_products" && selectedOrderId && scannedLotId) {
-        const garments = qGarments.data ?? [];
-        const lots = qLots.data ?? [];
-        const existingGarment = garments.find((g) => g.rfidUid === uid);
-        if (existingGarment) {
+        if (outcome.resolution === "rejected") {
           setAlertMessage({
             type: "error",
-            title: "Scan Rejected — Card Already Active",
-            message: `Tag UID '${uid}' is already assigned to garment ${existingGarment.id}. Please use a fresh, unassigned RFID card.`,
+            title: "Scan Rejected",
+            message: outcome.message || `Tag UID '${uid}' was rejected by Scanner 3.`,
           });
           return;
         }
-        const existingLot = lots.find((l) => l.rfidUid === uid);
-        if (existingLot) {
-          setAlertMessage({
-            type: "error",
-            title: "Scan Rejected — Fabric Bundle Card Presented",
-            message: `Tag UID '${uid}' is the fabric bundle card for lot ${existingLot.id}. Present a fresh garment card for product serialization.`,
-          });
-          return;
-        }
-        void run(
-          (c) =>
-            c.recordCuttingOutput({
-              orderId: selectedOrderId,
-              fabricUsed: 2.0,
-              size: selectedSize,
-              tagUid: uid,
-            }),
-          `Enrolled garment at Scanner 3. Linked to Bundle ${scannedLotId} → Order ${selectedOrderId}`,
-        ).then((garmentCode) => {
-          setAlertMessage({
-            type: "success",
-            title: `Garment Cut & Enrolled: ${garmentCode || "Success"}`,
-            message: `Panel set serialized with tag ${uid}. Lineage: Lot ${scannedLotId} ➔ Order ${selectedOrderId} ➔ ${garmentCode}. Advanced to Stitching.`,
-          });
+
+        // Hardware scan outcome accepted by the backend:
+        void qGarments.refetch();
+        void qOrders.refetch();
+
+        const enrolledCode = outcome.subjectCode || "Success";
+        setAlertMessage({
+          type: "success",
+          title: `Garment Cut & Enrolled: ${enrolledCode}`,
+          message: `Panel set serialized with tag ${uid}. Lineage: Lot ${scannedLotId} ➔ Order ${selectedOrderId} ➔ ${enrolledCode}. Advanced to Stitching.`,
         });
       }
     }
-  }, [stationData?.lastScanOutcome, step, selectedOrderId, scannedLotId, selectedSize, qLots.data, qGarments.data, run]);
+  }, [stationData?.lastScanOutcome, step, selectedOrderId, scannedLotId, selectedSize, qLots.data, qGarments.data, run, qGarments, qOrders]);
 
   return (
     <Loadable query={qOrders}>
@@ -265,22 +248,47 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                     );
 
                     // Active Scanned Bundle Lot
-                    const activeLot = lots.find((l) => l.id === scannedLotId);
+                    const activeLot = lots.find(
+                      (l) =>
+                        l.id === scannedLotId ||
+                        (l as any).code === scannedLotId ||
+                        (l as any).lotId === scannedLotId,
+                    );
 
                     // Production orders associated with this fabric bundle
-                    const associatedOrders = orders.filter((o) => {
-                      if (!activeLot) return false;
-                      // Match orders that have material issued or match approved/in-progress
-                      if ((o as any).lotId === activeLot.id) return true;
-                      return o.status === "approved" || o.status === "in-progress" || o.status === "planned";
-                    });
+                    const associatedOrders = useMemo(() => {
+                      if (!activeLot) return [];
+                      const targetLotId = activeLot.id;
+                      const targetLotCode = (activeLot as any).code || activeLot.id;
+                      const targetDbLotId = (activeLot as any).lotId;
+
+                      return orders.filter((o) => {
+                        const lotIds = o.lotIds ?? ((o as any).lotId ? [(o as any).lotId] : []);
+                        const lotCodes = o.lotCodes ?? ((o as any).lotCode ? [(o as any).lotCode] : []);
+
+                        const matchesLotId =
+                          lotIds.includes(targetLotId) ||
+                          (targetDbLotId && lotIds.includes(targetDbLotId));
+                        const matchesLotCode =
+                          lotCodes.includes(targetLotCode) ||
+                          lotCodes.includes(targetLotId);
+                        const matchesDirect =
+                          (o as any).lotId === targetLotId ||
+                          (targetDbLotId && (o as any).lotId === targetDbLotId) ||
+                          (o as any).lotId === targetLotCode;
+
+                        return matchesLotId || matchesLotCode || matchesDirect;
+                      });
+                    }, [orders, activeLot]);
 
                     // Currently selected production order for cutting
                     const selectedOrder = orders.find((o) => o.id === selectedOrderId);
 
                     // Garments cut for current selected order
                     const currentOrderGarments = garments.filter(
-                      (g) => g.orderId === selectedOrderId,
+                      (g) =>
+                        g.orderId === selectedOrderId ||
+                        (selectedOrder && (g.orderId === selectedOrder.id || (selectedOrder as any).code === g.orderId)),
                     );
                     const plannedCount = selectedOrder ? Math.max(1, selectedOrder.plannedQty) : 1;
                     const cutCount = currentOrderGarments.length;
@@ -384,6 +392,8 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                         );
 
                         // Success feedback
+                        void qGarments.refetch();
+                        void qOrders.refetch();
                         setAlertMessage({
                           type: "success",
                           title: `Garment Cut & Enrolled: ${garmentCode || "Success"}`,

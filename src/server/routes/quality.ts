@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { runInTransaction } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import {
   executeIncomingQc,
   prepareQcContext,
@@ -163,13 +163,11 @@ qualityRouter.get("/inspections", async (req: Request, res: Response) => {
     const garmentId = getQueryParam(req.query["garmentId"]);
     const lotId = getQueryParam(req.query["lotId"]);
 
-    const raw = await runInTransaction((tx) =>
-      listInspections(tx, {
-        ...(scope ? { scope } : {}),
-        ...(garmentId ? { garmentId } : {}),
-        ...(lotId ? { lotId } : {}),
-      }),
-    );
+    const raw = await listInspections(prisma as any, {
+      ...(scope ? { scope } : {}),
+      ...(garmentId ? { garmentId } : {}),
+      ...(lotId ? { lotId } : {}),
+    });
     const result = raw.map(mapInspection);
     return sendSuccess(res, result, 200);
   } catch (err) {
@@ -180,7 +178,7 @@ qualityRouter.get("/inspections", async (req: Request, res: Response) => {
 qualityRouter.get("/inspections/:id", async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params["id"]);
-    const raw = await runInTransaction((tx) => getInspectionDetail(tx, id));
+    const raw = await getInspectionDetail(prisma as any, id);
     if (!raw) {
       return sendError(res, ApiError.notFound(`Inspection '${id}' not found.`));
     }
@@ -345,12 +343,10 @@ qualityRouter.get("/rework", async (req: Request, res: Response) => {
       getQueryParam(req.query["departmentCode"]) ||
       (req.actor?.role === "production" ? req.actor.department : undefined);
 
-    const raw = await runInTransaction((tx) =>
-      listReworkCases(tx, {
-        ...(status ? { status } : {}),
-        ...(departmentCode ? { departmentCode } : {}),
-      }),
-    );
+    const raw = await listReworkCases(prisma as any, {
+      ...(status ? { status } : {}),
+      ...(departmentCode ? { departmentCode } : {}),
+    });
     const result = raw.map(mapReworkCase);
     return sendSuccess(res, result, 200);
   } catch (err) {
@@ -361,7 +357,7 @@ qualityRouter.get("/rework", async (req: Request, res: Response) => {
 qualityRouter.get("/rework/:id", async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params["id"]);
-    const raw = await runInTransaction((tx) => getReworkCaseDetail(tx, id));
+    const raw = await getReworkCaseDetail(prisma as any, id);
     if (!raw) {
       return sendError(res, ApiError.notFound(`Rework case '${id}' not found.`));
     }

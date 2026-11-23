@@ -610,21 +610,77 @@ export function createHttpClient(): WearTrailClient {
     },
     async listOrders(): Promise<ProductionOrder[]> {
       const raw = await req<any[]>("/api/production/orders", { method: "GET" });
-      return (raw || []).map((o: any) => ({
-        id: o.code || o.id,
-        product: o.productName || o.product || "Unknown Product",
-        styleCode: o.styleCode || "—",
-        plannedQty: Number(o.plannedQuantity ?? o.plannedQty ?? 0),
-        status: o.status || "draft",
-        dueDate: o.plannedFor || o.dueDate || new Date().toISOString(),
-        plannedBy: o.createdByName || o.plannedBy || "Staff",
-        approvedBy: o.approvedByName || o.approvedBy || undefined,
-        approvedAt: o.approvedAt || undefined,
-      }));
+      return (raw || []).map((o: any) => {
+        const lotIds = Array.isArray(o.lotIds) ? o.lotIds : o.lotId ? [o.lotId] : [];
+        const lotCodes = Array.isArray(o.lotCodes) ? o.lotCodes : o.lotCode ? [o.lotCode] : [];
+        return {
+          id: o.code || o.id,
+          product: o.productName || o.product || "Unknown Product",
+          styleCode: o.styleCode || "—",
+          plannedQty: Number(o.plannedQuantity ?? o.plannedQty ?? 0),
+          status: o.status === "in_progress" ? "in-progress" : (o.status || "draft"),
+          dueDate: o.plannedFor || o.dueDate || new Date().toISOString(),
+          plannedBy: o.createdByName || o.plannedBy || "Staff",
+          approvedBy: o.approvedByName || o.approvedBy || undefined,
+          approvedAt: o.approvedAt || undefined,
+          lotId: lotIds[0] || lotCodes[0] || o.lotId,
+          lotIds,
+          lotCodes,
+        };
+      });
     },
     async getOrder(id: string): Promise<OrderDetail | null> {
       try {
-        return await req<OrderDetail>(`/api/production/orders/${encodeURIComponent(id)}`, { method: "GET" });
+        const raw = await req<any>(`/api/production/orders/${encodeURIComponent(id)}`, { method: "GET" });
+        if (!raw) return null;
+        const issues = (raw.issues || []).map((i: any) => ({
+          id: i.id,
+          lotId: i.lotCode || i.lotId,
+          orderId: raw.code || raw.id,
+          qty: Number(i.quantity ?? i.qty ?? 0),
+          issuedAt: i.performedAt || new Date().toISOString(),
+          issuedBy: i.performedBy || "Staff",
+        }));
+        const lotIds = issues.map((i: any) => i.lotId);
+        return {
+          order: {
+            id: raw.code || raw.id,
+            product: raw.productName || raw.product || "Unknown Product",
+            styleCode: raw.styleCode || "—",
+            plannedQty: Number(raw.plannedQuantity ?? raw.plannedQty ?? 0),
+            status: raw.status === "in_progress" ? "in-progress" : (raw.status || "draft"),
+            dueDate: raw.plannedFor || raw.dueDate || new Date().toISOString(),
+            plannedBy: raw.createdByName || raw.plannedBy || "Staff",
+            approvedBy: raw.approvedByName || raw.approvedBy || undefined,
+            approvedAt: raw.approvedAt || undefined,
+            lotId: lotIds[0],
+            lotIds,
+          },
+          issues,
+          cuttingOutputs: (raw.cuttingJobs || []).map((cj: any) => ({
+            id: cj.code || cj.id,
+            orderId: raw.code || raw.id,
+            lotId: lotIds[0] || "",
+            issueId: issues[0]?.id || "",
+            panelSetLabel: `Panel Set ${cj.code || cj.id}`,
+            fabricUsed: 2.0,
+            garmentId: "",
+            cutAt: cj.performedAt || new Date().toISOString(),
+            cutBy: "Cutting Staff",
+          })),
+          garments: (raw.garments || []).map((g: any) => ({
+            id: g.code || g.id,
+            orderId: raw.code || raw.id,
+            publicId: g.publicId || "",
+            productName: g.productName || raw.productName || "Unknown Garment",
+            size: g.sizeLabel || g.size || "M",
+            cuttingOutputId: g.cuttingJobId || "",
+            stage: g.stage,
+            disposition: g.qualityDisposition,
+            rfidUid: g.activeTagUid || undefined,
+            lotId: lotIds[0] || "",
+          })),
+        };
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null;
         throw err;

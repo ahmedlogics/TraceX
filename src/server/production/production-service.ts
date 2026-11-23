@@ -236,6 +236,14 @@ export async function listOrders(
         workflow_versions: true,
         staff_users_production_orders_created_byTostaff_users: true,
         staff_users_production_orders_approved_byTostaff_users: true,
+        material_stock_movements: {
+          where: { kind: "issued" },
+          include: {
+            material_lots: {
+              select: { id: true, code: true, material_name: true },
+            },
+          },
+        },
       },
       orderBy: { created_at: "desc" },
     });
@@ -259,6 +267,8 @@ export async function listOrders(
         o.staff_users_production_orders_approved_byTostaff_users?.display_name ?? null,
       approvedAt: o.approved_at ? o.approved_at.toISOString() : null,
       revision: o.revision,
+      lotIds: o.material_stock_movements?.map((m) => m.material_lot_id) ?? [],
+      lotCodes: o.material_stock_movements?.map((m) => m.material_lots?.code).filter(Boolean) ?? [],
     }));
   }, tx);
 }
@@ -316,17 +326,22 @@ export async function getOrderDetail(
       active: parsedSpec["active"] !== false,
       description,
       approvedBy: order.product_spec_versions.approved_by,
-      approvedByName: order.product_spec_versions.staff_users.display_name,
-      approvedAt: order.product_spec_versions.approved_at.toISOString(),
+      approvedByName:
+        order.product_spec_versions.staff_users?.display_name ||
+        order.staff_users_production_orders_approved_byTostaff_users?.display_name ||
+        "Manager",
+      approvedAt: order.product_spec_versions.approved_at
+        ? order.product_spec_versions.approved_at.toISOString()
+        : new Date().toISOString(),
     };
 
     const issues = order.material_stock_movements.map((m) => ({
       id: m.id,
       lotId: m.material_lot_id,
-      lotCode: m.material_lots.code,
-      materialName: m.material_lots.material_name,
+      lotCode: m.material_lots?.code || m.material_lot_id,
+      materialName: m.material_lots?.material_name || "Fabric Roll",
       quantity: Number(m.quantity),
-      performedAt: m.performed_at.toISOString(),
+      performedAt: m.performed_at ? m.performed_at.toISOString() : new Date().toISOString(),
     }));
 
     const issuedMetersTotal = issues.reduce((sum, i) => sum + i.quantity, 0);
@@ -334,8 +349,8 @@ export async function getOrderDetail(
     const cuttingJobs = order.cutting_jobs.map((cj) => ({
       id: cj.id,
       code: cj.code,
-      performedAt: cj.performed_at.toISOString(),
-      garmentsCount: cj.garments.length,
+      performedAt: cj.performed_at ? cj.performed_at.toISOString() : new Date().toISOString(),
+      garmentsCount: cj.garments?.length || 0,
     }));
 
     const garmentsList = await db.garments.findMany({
@@ -348,21 +363,26 @@ export async function getOrderDetail(
       orderBy: { created_at: "asc" },
     });
 
-    const garments: GarmentDTO[] = garmentsList.map((g) => ({
-      id: g.id,
-      code: g.code,
-      publicId: g.public_id,
-      cuttingJobId: g.cutting_job_id,
-      productionOrderId: g.production_order_id,
-      productionOrderCode: order.code,
-      productName: order.product_spec_versions.product_name,
-      sizeLabel: g.size_label,
-      stage: g.stage,
-      qualityDisposition: g.quality_disposition,
-      createdAt: g.created_at.toISOString(),
-      revision: g.revision,
-      activeTagUid: g.rfid_tag_bindings?.tag_uid ?? null,
-    }));
+    const garments: GarmentDTO[] = garmentsList.map((g) => {
+      const activeBinding = Array.isArray(g.rfid_tag_bindings)
+        ? g.rfid_tag_bindings[0]
+        : (g.rfid_tag_bindings as any);
+      return {
+        id: g.id,
+        code: g.code,
+        publicId: g.public_id,
+        cuttingJobId: g.cutting_job_id,
+        productionOrderId: g.production_order_id,
+        productionOrderCode: order.code,
+        productName: order.product_spec_versions.product_name,
+        sizeLabel: g.size_label,
+        stage: g.stage,
+        qualityDisposition: g.quality_disposition,
+        createdAt: g.created_at ? g.created_at.toISOString() : new Date().toISOString(),
+        revision: g.revision,
+        activeTagUid: activeBinding?.tag_uid || activeBinding?.tag_identifier || null,
+      };
+    });
 
     return {
       id: order.id,

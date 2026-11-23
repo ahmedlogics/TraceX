@@ -9,6 +9,7 @@
  *   npx tsx scripts/manage-reader-session.ts --list
  */
 import path from "node:path";
+import crypto from "node:crypto";
 import dotenv from "dotenv";
 import { prisma, disconnectPrisma } from "../src/server/db/client";
 import { isOperatorAuthorizedForStation } from "../src/server/rfid/session-resolver";
@@ -148,7 +149,7 @@ export async function openReaderSession(options: {
     staffSession = await prisma.staff_sessions.create({
       data: {
         staff_user_id: user.id,
-        token_digest: new Uint8Array(32),
+        token_digest: new Uint8Array(crypto.randomBytes(32)),
         expires_at: staffSessionExpiresAt,
       },
     });

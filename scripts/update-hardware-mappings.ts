@@ -37,19 +37,71 @@ async function main() {
     const deviceId = devRes.rows[0].id;
     console.log(`Found device ${HARDWARE_DEVICE_CODE} (ID: ${deviceId})`);
 
-    // 2. Update requires_explicit_context for cutting to false
+    // 2. Ensure device mapping version 2 exists and is active
+    const verRes = await client.query(
+      `SELECT version, activated_at, retired_at 
+       FROM supplyease.device_mapping_versions 
+       WHERE device_id = $1 AND version = 2`,
+      [deviceId]
+    );
+
+    if (verRes.rows.length === 0) {
+      const staffRes = await client.query("SELECT id FROM supplyease.staff_users LIMIT 1");
+      const adminId = staffRes.rows[0].id;
+      await client.query(
+        `INSERT INTO supplyease.device_mapping_versions 
+         (device_id, version, created_by, bench_verified_at, activated_at, retired_at)
+         VALUES ($1, 2, $2, NOW(), NOW(), NULL)`,
+        [deviceId, adminId]
+      );
+      console.log("✓ Created and activated device mapping version 2.");
+    } else if (verRes.rows[0].retired_at !== null || verRes.rows[0].activated_at === null) {
+      await client.query(
+        `UPDATE supplyease.device_mapping_versions 
+         SET bench_verified_at = COALESCE(bench_verified_at, NOW()), 
+             activated_at = COALESCE(activated_at, NOW()), 
+             retired_at = NULL 
+         WHERE device_id = $1 AND version = 2`,
+        [deviceId]
+      );
+      console.log("✓ Reactivated device mapping version 2.");
+    } else {
+      console.log("✓ Device mapping version 2 is already active.");
+    }
+
+    // Ensure version 1 is retired so only version 2 is the active mapping
+    await client.query(
+      `UPDATE supplyease.device_mapping_versions 
+       SET retired_at = COALESCE(retired_at, NOW()) 
+       WHERE device_id = $1 AND version = 1 AND retired_at IS NULL`,
+      [deviceId]
+    );
+
+    // 3. Update requires_explicit_context for cutting to false
     await client.query(
       "UPDATE supplyease.rfid_stations SET requires_explicit_context = false WHERE code = 'cutting'"
     );
     console.log("✓ Station 'cutting' requires_explicit_context updated to false.");
 
-    // 3. Delete old mappings for this device and insert clean canonical mappings
+    // 4. Delete old mappings for this device and insert clean canonical mappings for version 2 & version 1
     await client.query(
       "DELETE FROM supplyease.device_reader_mappings WHERE device_id = $1",
       [deviceId]
     );
     console.log("✓ Cleared old mappings for device.");
 
+    // Insert canonical mappings for active version 2
+    for (const m of HARDWARE_READER_MAPPINGS) {
+      await client.query(
+        `INSERT INTO supplyease.device_reader_mappings 
+         (device_id, mapping_version, reader_index, station_code, physical_label)
+         VALUES ($1, 2, $2, $3, $4)`,
+        [deviceId, m.readerIndex, m.stationCode, m.label]
+      );
+      console.log(`✓ [v2 Active] Reader ${m.readerIndex} (GPIO ${m.gpio}) -> ${m.stationCode} (${m.label})`);
+    }
+
+    // Also insert for version 1 for backward compatibility
     for (const m of HARDWARE_READER_MAPPINGS) {
       await client.query(
         `INSERT INTO supplyease.device_reader_mappings 
@@ -57,10 +109,10 @@ async function main() {
          VALUES ($1, 1, $2, $3, $4)`,
         [deviceId, m.readerIndex, m.stationCode, m.label]
       );
-      console.log(`✓ Reader ${m.readerIndex} (GPIO ${m.gpio}) -> ${m.stationCode} (${m.label})`);
     }
+    console.log("✓ [v1 Legacy] Populated 9 mappings for backward compatibility.");
 
-    // 4. Close existing reader sessions to avoid stale station associations
+    // 5. Close existing reader sessions to avoid stale station associations
     const sessRes = await client.query(
       `UPDATE supplyease.reader_sessions 
        SET closed_at = NOW(), close_reason = 'Reconfigured canonical station mappings'
@@ -69,15 +121,15 @@ async function main() {
     );
     console.log(`✓ Closed ${sessRes.rowCount} previous reader sessions.`);
 
-    // 5. Restore origin replication role
+    // 6. Restore origin replication role
     await client.query("SET session_replication_role = 'origin';");
 
-    // 5. Verify final mappings
+    // 7. Verify final mappings
     const finalRes = await client.query(
-      `SELECT reader_index, station_code, physical_label 
+      `SELECT mapping_version, reader_index, station_code, physical_label 
        FROM supplyease.device_reader_mappings 
        WHERE device_id = $1 
-       ORDER BY reader_index ASC`,
+       ORDER BY mapping_version ASC, reader_index ASC`,
       [deviceId]
     );
     console.log("\nVerified final device_reader_mappings for hardware device:");

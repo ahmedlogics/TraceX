@@ -93,14 +93,29 @@ function createHardwareMockDb() {
         activated_at: new Date("2026-11-01"),
         retired_at: null,
       },
+      {
+        device_id: TEST_DEVICE_ID,
+        version: 2,
+        activated_at: new Date("2026-11-23"),
+        retired_at: null,
+      },
     ] as any[],
-    device_reader_mappings: HARDWARE_PHYSICAL_MAPPINGS.map((m) => ({
-      device_id: TEST_DEVICE_ID,
-      mapping_version: 1,
-      reader_index: m.readerIndex,
-      station_code: m.stationCode,
-      physical_label: `GPIO ${m.gpio}`,
-    })) as any[],
+    device_reader_mappings: [
+      ...HARDWARE_PHYSICAL_MAPPINGS.map((m) => ({
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 1,
+        reader_index: m.readerIndex,
+        station_code: m.stationCode,
+        physical_label: `GPIO ${m.gpio}`,
+      })),
+      ...HARDWARE_PHYSICAL_MAPPINGS.map((m) => ({
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 2,
+        reader_index: m.readerIndex,
+        station_code: m.stationCode,
+        physical_label: `GPIO ${m.gpio}`,
+      })),
+    ] as any[],
     reader_sessions: [] as any[],
     staff_users: [
       { id: "u-admin", username: "admin.demo", role: "admin", department: "management", status: "active", suspended_at: null },
@@ -418,6 +433,27 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
       }
     });
 
+    it("resolves Reader 2 to cutting station under active mapping version 2", async () => {
+      const op = mockDb._store.staff_users.find((u: any) => u.username === "cutting.demo");
+      mockDb._store.reader_sessions.push({
+        id: "sess-cutting-v2",
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 2,
+        reader_index: 2,
+        station_code: "cutting",
+        operator_id: op.id,
+        staff_users: op,
+        opened_at: new Date(),
+        expires_at: new Date(Date.now() + 3600000),
+        closed_at: null,
+      });
+
+      const resolved = await resolveReaderSession(TEST_DEVICE_ID, 2, 2, mockDb);
+      expect(resolved.stationCode).toBe("cutting");
+      expect(resolved.session.readerIndex).toBe(2);
+      expect(resolved.session.mappingVersion).toBe(2);
+    });
+
     it("verifies explicit context requirements per station configuration", async () => {
       // Routine production stations do NOT require explicit action context
       expect(await stationRequiresContext("stitching", mockDb)).toBe(false);
@@ -568,7 +604,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-qc-empty",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -960,7 +996,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-stitch-2",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 6,
+        reader_index: 3,
         station_code: "stitching",
         operator_id: op.id,
         staff_users: op,

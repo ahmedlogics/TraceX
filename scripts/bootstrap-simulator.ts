@@ -26,7 +26,7 @@ const adminPool = new pg.Pool({
   database: parsed.database ?? undefined,
   user: parsed.user ?? undefined,
   password: parsed.password ?? undefined,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 30000,
   ssl: ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false },
 });
 const adapter = new PrismaPg(adminPool, { schema: "supplyease" });

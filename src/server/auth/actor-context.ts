@@ -205,6 +205,9 @@ export function requireGrant(grant: StaffCapabilityGrant) {
 export function createPrismaAuthMiddleware(prisma: PrismaClient): RequestHandler {
   return async (req, res, next): Promise<void> => {
     try {
+      if (req.actor && (req as unknown as { staffUser?: unknown }).staffUser) {
+        return next();
+      }
       const token = extractSessionToken(req as unknown as RequestLike);
       if (!token) {
         res.status(401).json({

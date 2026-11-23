@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { runInTransaction } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import {
   getPersistedFulfilmentEligibility,
   createPackage,
@@ -69,91 +69,89 @@ fulfilmentRouter.use(resolveActor);
 
 fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
   try {
-    const data = await runInTransaction(async (tx) => {
-      const packages = await listPackages(tx);
-      const openShipments = await listShipments(tx);
+    const packages = await listPackages(prisma as any);
+    const openShipments = await listShipments(prisma as any);
 
-      const allGarments = await tx.garments.findMany({
-        include: {
-          cutting_jobs: {
-            include: {
-              production_orders: {
-                include: { product_spec_versions: true },
-              },
+    const allGarments = await prisma.garments.findMany({
+      include: {
+        cutting_jobs: {
+          include: {
+            production_orders: {
+              include: { product_spec_versions: true },
             },
-          },
-          package_items: {
-            include: {
-              packages: true,
-            },
-          },
-          garment_holds: {
-            where: { released_at: null },
-          },
-          rfid_tag_bindings: {
-            where: { unbound_at: null },
           },
         },
-        orderBy: { created_at: "desc" },
-      });
+        package_items: {
+          include: {
+            packages: true,
+          },
+        },
+        garment_holds: {
+          where: { released_at: null },
+        },
+        rfid_tag_bindings: {
+          where: { unbound_at: null },
+        },
+      },
+      orderBy: { created_at: "desc" },
+    });
 
-      const mapGarment = (g: any) => {
-        const activeBinding = g.rfid_tag_bindings?.[0];
-        const activeHold = g.garment_holds?.[0];
-        const activePkgItem = g.package_items?.[0];
-
-        return {
-          id: g.id,
-          code: g.code,
-          orderId: g.production_order_id,
-          publicId: g.public_id,
-          productName:
-            g.cutting_jobs?.production_orders?.product_spec_versions?.product_name ?? "Handcrafted Garment",
-          size: g.size_label ?? "M",
-          cuttingOutputId: g.cutting_job_id,
-          stage: g.stage,
-          disposition: g.quality_disposition,
-          hold: activeHold
-            ? {
-                id: activeHold.id,
-                reason: activeHold.hold_reason,
-                openedAt: activeHold.created_at.toISOString(),
-                releasedAt: activeHold.released_at?.toISOString() ?? null,
-              }
-            : null,
-          packageId: activePkgItem?.package_id ?? undefined,
-          shipmentId: g.shipment_id ?? undefined,
-          rfidUid: activeBinding?.tag_uid ?? undefined,
-        };
-      };
-
-      const awaitingPacking: any[] = [];
-      const packedAwaitingReceipt: any[] = [];
-      const inStock: any[] = [];
-      const blocked: any[] = [];
-
-      for (const raw of allGarments) {
-        const g = mapGarment(raw);
-        if (g.hold || g.disposition === "held" || g.disposition === "rejected") {
-          blocked.push(g);
-        } else if (g.stage === "warehouse" || g.stage === "allocated") {
-          inStock.push(g);
-        } else if (g.packageId) {
-          packedAwaitingReceipt.push(g);
-        } else if (g.stage === "finished" && g.disposition === "released") {
-          awaitingPacking.push(g);
-        }
-      }
+    const mapGarment = (g: any) => {
+      const activeBinding = g.rfid_tag_bindings?.[0];
+      const activeHold = g.garment_holds?.[0];
+      const activePkgItem = g.package_items?.[0];
 
       return {
-        awaitingPacking,
-        packedAwaitingReceipt,
-        inStock,
-        blocked,
-        packages,
-        openShipments: openShipments.filter((s: any) => s.status !== "departed"),
+        id: g.id,
+        code: g.code,
+        orderId: g.production_order_id,
+        publicId: g.public_id,
+        productName:
+          g.cutting_jobs?.production_orders?.product_spec_versions?.product_name ?? "Handcrafted Garment",
+        size: g.size_label ?? "M",
+        cuttingOutputId: g.cutting_job_id,
+        stage: g.stage,
+        disposition: g.quality_disposition,
+        hold: activeHold
+          ? {
+              id: activeHold.id,
+              reason: activeHold.hold_reason,
+              openedAt: activeHold.created_at.toISOString(),
+              releasedAt: activeHold.released_at?.toISOString() ?? null,
+            }
+          : null,
+        packageId: activePkgItem?.package_id ?? undefined,
+        shipmentId: g.shipment_id ?? undefined,
+        rfidUid: activeBinding?.tag_uid ?? undefined,
       };
-    });
+    };
+
+    const awaitingPacking: any[] = [];
+    const packedAwaitingReceipt: any[] = [];
+    const inStock: any[] = [];
+    const blocked: any[] = [];
+
+    for (const raw of allGarments) {
+      const g = mapGarment(raw);
+      if (g.hold || g.disposition === "held" || g.disposition === "rejected") {
+        blocked.push(g);
+      } else if (g.stage === "warehouse" || g.stage === "allocated") {
+        inStock.push(g);
+      } else if (g.packageId) {
+        packedAwaitingReceipt.push(g);
+      } else if (g.stage === "finished" && g.disposition === "released") {
+        awaitingPacking.push(g);
+      }
+    }
+
+    const data = {
+      awaitingPacking,
+      packedAwaitingReceipt,
+      inStock,
+      blocked,
+      packages,
+      openShipments: openShipments.filter((s: any) => s.status !== "departed"),
+    };
 
     return sendSuccess(res, data, 200);
   } catch (err) {
@@ -188,11 +186,9 @@ fulfilmentRouter.get("/eligibility/:garmentId", async (req: Request, res: Respon
 fulfilmentRouter.get("/packages", async (req: Request, res: Response) => {
   try {
     const status = getQueryParam(req.query["status"]);
-    const result = await runInTransaction((tx) =>
-      listPackages(tx, {
-        ...(status ? { status } : {}),
-      }),
-    );
+    const result = await listPackages(prisma as any, {
+      ...(status ? { status } : {}),
+    });
     return sendSuccess(res, result, 200);
   } catch (err) {
     return sendError(res, err, 500);
@@ -202,7 +198,7 @@ fulfilmentRouter.get("/packages", async (req: Request, res: Response) => {
 fulfilmentRouter.get("/packages/:id", async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params["id"]);
-    const result = await runInTransaction((tx) => getPackageDetail(tx, id));
+    const result = await getPackageDetail(prisma as any, id);
     if (!result) {
       return sendError(res, ApiError.notFound(`Package '${id}' not found.`));
     }
@@ -307,11 +303,9 @@ fulfilmentRouter.post("/receive-stock", async (req: Request, res: Response) => {
 fulfilmentRouter.get("/shipments", async (req: Request, res: Response) => {
   try {
     const status = getQueryParam(req.query["status"]);
-    const result = await runInTransaction((tx) =>
-      listShipments(tx, {
-        ...(status ? { status } : {}),
-      }),
-    );
+    const result = await listShipments(prisma as any, {
+      ...(status ? { status } : {}),
+    });
     return sendSuccess(res, result, 200);
   } catch (err) {
     return sendError(res, err, 500);
@@ -321,7 +315,7 @@ fulfilmentRouter.get("/shipments", async (req: Request, res: Response) => {
 fulfilmentRouter.get("/shipments/:id", async (req: Request, res: Response) => {
   try {
     const id = getParam(req.params["id"]);
-    const result = await runInTransaction((tx) => getShipmentDetail(tx, id));
+    const result = await getShipmentDetail(prisma as any, id);
     if (!result) {
       return sendError(res, ApiError.notFound(`Shipment '${id}' not found.`));
     }

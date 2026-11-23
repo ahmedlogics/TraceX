@@ -329,6 +329,9 @@ export interface ProductionOrder {
   plannedBy: string;
   approvedBy?: string | undefined;
   approvedAt?: string | undefined;
+  lotId?: string | undefined;
+  lotIds?: string[] | undefined;
+  lotCodes?: string[] | undefined;
 }
 
 /** A labelled panel set cut from actual issued fabric; links lot -> order -> garment. */
