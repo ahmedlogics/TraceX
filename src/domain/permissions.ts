@@ -142,14 +142,10 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       return incomingAllowed.includes(key);
     }
 
-    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Tasks, Workstation, Garments, Quality, and Rework
+    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Quality, and Rework
     const finalQcAllowed: RouteKey[] = [
       "account",
       "home",
-      "tasks",
-      "workstation",
-      "garments",
-      "garment",
       "quality",
       "inspection",
       "rework",
@@ -255,7 +251,9 @@ export const can = {
   },
   assignRework: (u: StaffUser, c: ReworkCase) => is(u, "M") && c.status === "awaiting-assignment",
   completeRework: (u: StaffUser, c: ReworkCase) =>
-    u.role === "P" && c.status === "assigned" && c.assignedDepartment === u.department,
+    (u.role === "P" && c.status === "assigned" && c.assignedDepartment === u.department) ||
+    (u.role === "Q" && (c.status === "assigned" || c.status === "repaired" || c.assignedDepartment === "quality")) ||
+    (u.role === "M"),
   packGarment: (u: StaffUser) => is(u, "L", "packing"),
   receiveStock: (u: StaffUser) => is(u, "L", "warehouse"),
   allocateStock: (u: StaffUser) => is(u, "L", "warehouse"),

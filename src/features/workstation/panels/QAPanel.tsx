@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -22,9 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Field, ScopeNote } from "@/components/wt/forms";
-import { Section } from "@/components/wt/layout";
-import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
+import { Field } from "@/components/wt/forms";
 import type { ChecklistItem, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
@@ -62,26 +60,31 @@ const REFER_DEPARTMENTS: { code: "cutting" | "stitching" | "finishing"; label: s
   { code: "finishing", label: "Finishing Department (Trims / Pressing / Cleaning)" },
 ];
 
-interface InspectionFeedback {
-  type: "passed" | "failed" | "discarded" | "rejected" | "idle";
+interface ConfirmedInspection {
+  type: "passed" | "failed" | "discarded" | "rejected";
   title: string;
   message: string;
   garmentCode?: string | undefined;
   productStyle?: string | undefined;
-  size?: string | undefined;
   loggedDefect?: string | undefined;
   assignedDepartment?: string | undefined;
   rfidUid?: string | undefined;
-  timestamp?: string | undefined;
+  timestamp: string;
 }
 
-export function QAPanel({ stationData }: { stationData: RfidStationData }) {
+export function QAPanel({
+  stationData,
+  onScanComplete,
+}: {
+  stationData: RfidStationData;
+  onScanComplete?: () => void;
+}) {
   const me = useMe();
   const { run, pending } = useWtAction();
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
 
-  // Decision State: "pass" | "fail"
-  const [decision, setDecision] = useState<"pass" | "fail">("pass");
+  // Decision State: "pass" | "fail" | null (strictly null / none selected as default)
+  const [decision, setDecision] = useState<"pass" | "fail" | null>(null);
 
   // Defect Configuration State (when decision === "fail")
   const [selectedDefects, setSelectedDefects] = useState<string[]>([]);
@@ -93,71 +96,65 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
   const [notes, setNotes] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>(defaultChecklist);
 
-  // Scanner 6 Hardware Simulation Input
-  const [scanUid, setScanUid] = useState("04DAEBFC"); // SHIRT-002 seed tag
-  const [feedback, setFeedback] = useState<InspectionFeedback>({
-    type: "idle",
-    title: "Scanner 6 Ready for Inspection",
-    message: "Select Pass or Fail, configure any defect notes, then tap the garment's RFID tag on Scanner 6.",
-  });
+  // Hardware Armed State
+  const [isWaitingForHardwareScan, setIsWaitingForHardwareScan] = useState(false);
+  const [armedContextId, setArmedContextId] = useState<string | null>(null);
 
-  const isInspector = me.role === "Q" || me.department === "quality" || me.role === "A";
+  // Runtime Confirmed Outcome Banner (displays dynamically on dashboard upon hardware scan)
+  const [confirmedOutcome, setConfirmedOutcome] = useState<ConfirmedInspection | null>(null);
 
-  // Mandatory Fail-Form Validation:
-  // Must either select at least one common defect OR type text in the comment box.
-  // Must select refer department unless discard is enabled.
+  // Validation:
+  // For Fail: Must select at least one common defect OR enter custom comment.
+  // Must select refer department unless discard is selected.
   const hasDefectSelection = selectedDefects.length > 0;
   const hasCustomComment = customComment.trim().length > 0;
   const isFailConfigValid =
     (hasDefectSelection || hasCustomComment) && (discardProduct || Boolean(referDept));
-  const isDecisionReady = decision === "pass" ? checklist.every((c) => c.checked) : isFailConfigValid;
+  const isDecisionReady =
+    decision === "pass" ? checklist.every((c) => c.checked) : decision === "fail" && isFailConfigValid;
 
   const resetForm = () => {
+    setDecision(null);
     setSelectedDefects([]);
     setCustomComment("");
     setReferDept("stitching");
     setDiscardProduct(false);
     setNotes("");
     setChecklist(defaultChecklist);
+    setIsWaitingForHardwareScan(false);
+    setArmedContextId(null);
   };
 
-  // Centralized Scanner 6 Handler
-  const handleScanner6Scan = async (rawUid: string) => {
-    const uid = rawUid.trim().toUpperCase();
-    if (!uid) return;
-
-    if (!isDecisionReady) {
-      setFeedback({
-        type: "rejected",
-        title: "Scanner 6 Disarmed",
-        message: "Mandatory inspection fields missing. Select a common defect option or enter custom comments before scanning.",
-        rfidUid: uid,
-      });
-      return;
-    }
-
-    // Compile defect reason
+  // Compile defect reason
+  const computedDefectReason = useMemo(() => {
     const selectedLabels = COMMON_DEFECT_OPTIONS.filter((d) => selectedDefects.includes(d.id)).map(
       (d) => d.label,
     );
-    let finalDefectReason = selectedLabels.join(", ");
+    let reason = selectedLabels.join(", ");
     if (customComment.trim()) {
-      finalDefectReason = finalDefectReason
-        ? `${finalDefectReason} — ${customComment.trim()}`
-        : customComment.trim();
+      reason = reason ? `${reason} — ${customComment.trim()}` : customComment.trim();
     }
     if (discardProduct) {
-      finalDefectReason = `[SCRAP/DISCARD] ${finalDefectReason || "Defect beyond repair"}`;
+      reason = `[SCRAP/DISCARD] ${reason || "Defect beyond repair"}`;
     }
+    return reason;
+  }, [selectedDefects, customComment, discardProduct]);
+
+  // Step 1: Submit Inspection Decision -> Arms Scanner 6 action context in backend
+  const handleSubmitDecision = async () => {
+    if (!decision || !isDecisionReady) return;
 
     try {
-      // 1. Prepare Action Context
+      const selectedLabels = COMMON_DEFECT_OPTIONS.filter((d) => selectedDefects.includes(d.id)).map(
+        (d) => d.label,
+      );
+
       const ctxId = await run((c) =>
         c.prepareActionContext("final_qc", "submit_qc", {
           kind: "submit_qc",
           result: decision,
           scope: "final",
-          defectReason: decision === "fail" ? finalDefectReason : undefined,
+          defectReason: decision === "fail" ? computedDefectReason : undefined,
           assignedDepartment: decision === "fail" && !discardProduct ? referDept : undefined,
           discard: discardProduct,
           checklist:
@@ -169,46 +166,62 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
       );
 
       if (!ctxId) {
-        setFeedback({
+        setConfirmedOutcome({
           type: "rejected",
           title: "Hardware Context Error",
-          message: "Failed to arm Scanner 6 action context. Check reader connectivity.",
-          rfidUid: uid,
+          message: "Failed to arm Scanner 6 action context. Please verify reader connectivity.",
+          timestamp: new Date().toLocaleTimeString(),
         });
         return;
       }
 
-      // 2. Simulate Reader Board Ack
       await run((c) => c.acknowledgeContext(ctxId));
+      setArmedContextId(ctxId);
+      setIsWaitingForHardwareScan(true);
+    } catch (err: any) {
+      setConfirmedOutcome({
+        type: "rejected",
+        title: "Context Preparation Failed",
+        message: err?.message || "Internal error preparing QC action context.",
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    }
+  };
 
-      // 3. Resolve RFID Scan
+  // Step 2: Handle incoming hardware scan from Scanner 6
+  const handleProcessHardwareScan = async (rawUid: string) => {
+    const uid = rawUid.trim().toUpperCase();
+    if (!uid) return;
+
+    try {
       const outcome = await run((c) => c.resolveRfidScan(uid));
 
       if (!outcome) {
-        setFeedback({
+        setConfirmedOutcome({
           type: "rejected",
           title: "Scan Incomplete",
           message: "Scan transaction could not be processed by station engine.",
           rfidUid: uid,
           timestamp: new Date().toLocaleTimeString(),
         });
+        setIsWaitingForHardwareScan(false);
         return;
       }
 
       if (outcome.resolution === "accepted") {
         if (discardProduct) {
-          setFeedback({
+          setConfirmedOutcome({
             type: "discarded",
             title: `Product Scrapped: ${outcome.garmentCode ?? outcome.subjectId}`,
-            message: "Product Scrapped / Discarded → Decommissioned from line",
+            message: "Product Scrapped / Discarded → Decommissioned permanently from line",
             garmentCode: outcome.garmentCode ?? outcome.subjectId,
             productStyle: outcome.productName,
-            loggedDefect: finalDefectReason,
+            loggedDefect: computedDefectReason,
             rfidUid: uid,
             timestamp: new Date().toLocaleTimeString(),
           });
         } else if (decision === "pass") {
-          setFeedback({
+          setConfirmedOutcome({
             type: "passed",
             title: `Inspection Passed: ${outcome.garmentCode ?? outcome.subjectId}`,
             message: "Inspection Passed → Released to Station 7 (Packing)",
@@ -218,248 +231,387 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
             timestamp: new Date().toLocaleTimeString(),
           });
         } else {
-          setFeedback({
+          setConfirmedOutcome({
             type: "failed",
             title: `Defect Registered: ${outcome.garmentCode ?? outcome.subjectId}`,
-            message: `Defect Registered → Sent to ${referDept.charAt(0).toUpperCase() + referDept.slice(1)} Repair Queue`,
+            message: `Defect Registered → Put on Quality Hold and routed to ${referDept.toUpperCase()} Repair`,
             garmentCode: outcome.garmentCode ?? outcome.subjectId,
             productStyle: outcome.productName,
-            loggedDefect: finalDefectReason,
+            loggedDefect: computedDefectReason,
             assignedDepartment: referDept,
             rfidUid: uid,
             timestamp: new Date().toLocaleTimeString(),
           });
         }
+        void qGarments.refetch();
+        onScanComplete?.();
         resetForm();
       } else {
-        setFeedback({
+        setConfirmedOutcome({
           type: "rejected",
-          title: "Scan Operation Rejected",
+          title: "Hardware Scan Rejected",
           message: outcome.rejectReason || `Station rule violated: ${outcome.resolution}`,
           rfidUid: uid,
           timestamp: new Date().toLocaleTimeString(),
         });
+        setIsWaitingForHardwareScan(false);
       }
     } catch (err: any) {
-      setFeedback({
+      setConfirmedOutcome({
         type: "rejected",
         title: "Scan Exception",
         message: err?.message || "Internal error resolving inspection scan.",
         rfidUid: uid,
         timestamp: new Date().toLocaleTimeString(),
       });
+      setIsWaitingForHardwareScan(false);
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header & Station Hardware Status */}
-      <div className="rounded-xl border-2 border-primary/40 bg-card p-5 shadow-sm space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="wt-id rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
-                STATION 6
-              </span>
-              <span className="text-xs font-semibold text-muted-foreground">
-                Final QC &amp; Rework Gate
-              </span>
-            </div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              Station 6 · Final Quality Inspection (Scanner 6)
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Active Inspector:{" "}
-              <span className="font-semibold text-foreground">
-                {me.displayName} ({me.username})
-              </span>{" "}
-              · Certified Quality Inspector · Department:{" "}
-              <span className="font-mono font-medium text-foreground">
-                {me.department}
-              </span>
-            </p>
-          </div>
+  // Poll hardware station data for Station 6 (final_qc)
+  const qStation = useWtQuery(
+    ["rfid-station", "final_qc"],
+    (c) => c.getRfidStationData("final_qc"),
+    {
+      enabled: isWaitingForHardwareScan,
+      refetchInterval: 1000,
+    },
+  );
 
-          <div className="flex flex-col items-start gap-2 md:items-end">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-success-soft border border-success/30 px-2.5 py-1 text-xs font-bold text-success-foreground">
-                Scanner 6: Armed &amp; Active
-              </span>
+  const lastSeenScanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isWaitingForHardwareScan) return;
+    const outcome = qStation.data?.lastScanOutcome;
+    if (!outcome) return;
+    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
+      lastSeenScanRef.current = outcome.at;
+      if (outcome.uid) {
+        void handleProcessHardwareScan(outcome.uid);
+      }
+    }
+  }, [isWaitingForHardwareScan, qStation.data?.lastScanOutcome]);
+
+  // Global USB Keyboard Wedge RFID reader listener for Scanner 6 hardware
+  useEffect(() => {
+    if (!isWaitingForHardwareScan) return;
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      const now = Date.now();
+      if (now - lastKeyTime > 500) {
+        buffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const scanned = buffer.trim().toUpperCase();
+        buffer = "";
+        if (scanned.length >= 4 && /^[0-9A-F]+$/i.test(scanned)) {
+          e.preventDefault();
+          void handleProcessHardwareScan(scanned);
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isWaitingForHardwareScan]);
+
+  return (
+    <div className="space-y-5">
+      {/* Dynamic Runtime Confirmed Inspection Banner */}
+      {confirmedOutcome && (
+        <div
+          className={`rounded-xl border p-4 shadow-xs transition-all animate-in fade-in duration-200 ${
+            confirmedOutcome.type === "passed"
+              ? "border-success/60 bg-success-soft text-foreground"
+              : confirmedOutcome.type === "failed"
+                ? "border-destructive/60 bg-danger-soft text-foreground"
+                : confirmedOutcome.type === "discarded"
+                  ? "border-amber-500/60 bg-amber-500/10 text-foreground"
+                  : "border-destructive/60 bg-danger-soft text-foreground"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                {confirmedOutcome.type === "passed" && <ShieldCheck className="size-5 text-success" />}
+                {confirmedOutcome.type === "failed" && <ShieldAlert className="size-5 text-destructive" />}
+                {confirmedOutcome.type === "discarded" && (
+                  <Trash2 className="size-5 text-amber-600 dark:text-amber-400" />
+                )}
+                {confirmedOutcome.type === "rejected" && <XCircle className="size-5 text-destructive" />}
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold tracking-tight text-foreground">
+                    {confirmedOutcome.title}
+                  </h4>
+                  {confirmedOutcome.rfidUid && (
+                    <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-background border">
+                      RFID: {confirmedOutcome.rfidUid}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-medium">{confirmedOutcome.message}</p>
+
+                {(confirmedOutcome.garmentCode ||
+                  confirmedOutcome.productStyle ||
+                  confirmedOutcome.loggedDefect ||
+                  confirmedOutcome.assignedDepartment) && (
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground pt-1.5 border-t border-border/40">
+                    {confirmedOutcome.garmentCode && (
+                      <span>
+                        Garment: <strong className="text-foreground font-mono">{confirmedOutcome.garmentCode}</strong>
+                      </span>
+                    )}
+                    {confirmedOutcome.productStyle && (
+                      <span>
+                        Product: <strong className="text-foreground">{confirmedOutcome.productStyle}</strong>
+                      </span>
+                    )}
+                    {confirmedOutcome.assignedDepartment && (
+                      <span>
+                        Assigned Dept:{" "}
+                        <strong className="text-destructive uppercase font-bold">
+                          {confirmedOutcome.assignedDepartment}
+                        </strong>
+                      </span>
+                    )}
+                    {confirmedOutcome.loggedDefect && (
+                      <span>
+                        Defect: <strong className="text-destructive">{confirmedOutcome.loggedDefect}</strong>
+                      </span>
+                    )}
+                    <span className="text-muted-foreground">Logged at {confirmedOutcome.timestamp}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Decision-First &amp; Zero-Search · Physical examination prior to RFID scan
-            </p>
+
+            <button
+              type="button"
+              onClick={() => setConfirmedOutcome(null)}
+              className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 cursor-pointer"
+            >
+              ✕ Dismiss
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Live Inspection Feedback Box */}
-      <div
-        className={`rounded-xl border p-4 shadow-sm transition-all ${
-          feedback.type === "passed"
-            ? "border-success/50 bg-success-soft text-foreground"
-            : feedback.type === "failed"
-              ? "border-destructive/50 bg-danger-soft text-foreground"
-              : feedback.type === "discarded"
-                ? "border-amber-500/50 bg-amber-500/10 text-foreground"
-                : feedback.type === "rejected"
-                  ? "border-destructive/50 bg-danger-soft text-foreground"
-                  : "border-border bg-card text-foreground"
-        }`}
-      >
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5">
-            {feedback.type === "passed" && (
-              <ShieldCheck className="size-5 text-success" />
-            )}
-            {feedback.type === "failed" && (
-              <ShieldAlert className="size-5 text-destructive" />
-            )}
-            {feedback.type === "discarded" && (
-              <Trash2 className="size-5 text-amber-600 dark:text-amber-400" />
-            )}
-            {feedback.type === "rejected" && (
-              <XCircle className="size-5 text-destructive" />
-            )}
-            {feedback.type === "idle" && (
-              <ScanLine className="size-5 text-muted-foreground" />
-            )}
+      {/* Main Inspection Workflow: Either waiting for hardware scan, or showing pass/fail decision form */}
+      {isWaitingForHardwareScan ? (
+        /* Hardware Scanner 6 Active Listening Beacon */
+        <div className="rounded-xl border-2 border-primary/60 bg-primary/5 p-8 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="inline-flex items-center justify-center size-16 rounded-full bg-primary/10 text-primary mx-auto ring-8 ring-primary/5">
+            <Radio className="size-8 animate-pulse text-primary" />
           </div>
 
-          <div className="flex-1 space-y-1">
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+              </span>
+              Scanner 6 Hardware Listening
+            </span>
+            <h3 className="text-lg font-bold text-foreground">
+              Scan Garment Tag on Scanner 6 Hardware
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {decision === "pass" ? (
+                <span>
+                  Decision armed: <strong className="text-success font-bold">PASS &amp; RELEASE</strong>.
+                  Present the physical garment tag to Scanner 6 to verify history and advance to packing.
+                </span>
+              ) : discardProduct ? (
+                <span>
+                  Decision armed: <strong className="text-destructive font-bold">SCRAP / DISCARD</strong>.
+                  Present the physical garment tag to Scanner 6 to permanently decommission it.
+                </span>
+              ) : (
+                <span>
+                  Decision armed:{" "}
+                  <strong className="text-destructive font-bold">
+                    FAIL → ROUTE TO {referDept.toUpperCase()}
+                  </strong>
+                  . Present the physical garment tag to Scanner 6 to lock hold and assign to rework.
+                </span>
+              )}
+            </p>
+          </div>
+
+          <div className="pt-3 flex flex-wrap items-center justify-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsWaitingForHardwareScan(false);
+                setArmedContextId(null);
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              Cancel / Modify Decision
+            </Button>
+
+            {/* Discreet simulator button for testing environments without physical USB reader */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleProcessHardwareScan("04DAEBFC")}
+              className="text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
+              title="Simulate tag scan for development test"
+            >
+              (Dev: Simulate Tag 04DAEBFC)
+            </Button>
+          </div>
+        </div>
+      ) : (
+        /* Evaluation Decision Form */
+        <div className="space-y-5">
+          {/* Step 1: Pass / Fail Evaluation Status Toggle (None selected by default) */}
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold tracking-tight text-foreground">
-                {feedback.title}
-              </h4>
-              {feedback.rfidUid && (
-                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted">
-                  UID: {feedback.rfidUid}
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Step 1: Physical Examination Decision
+              </label>
+              {decision === null && (
+                <span className="text-xs text-muted-foreground italic">
+                  Select Pass or Fail to begin
                 </span>
               )}
             </div>
-            <p className="text-xs font-semibold">{feedback.message}</p>
 
-            {(feedback.garmentCode || feedback.productStyle || feedback.loggedDefect || feedback.assignedDepartment) && (
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground pt-1 border-t border-border/40">
-                {feedback.garmentCode && (
-                  <span>
-                    Garment ID:{" "}
-                    <strong className="text-foreground font-mono">
-                      {feedback.garmentCode}
-                    </strong>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setDecision("pass");
+                  setSelectedDefects([]);
+                  setCustomComment("");
+                }}
+                className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-5 text-center transition-all cursor-pointer ${
+                  decision === "pass"
+                    ? "border-success bg-success-soft text-success shadow-xs font-bold ring-2 ring-success/20"
+                    : "border-border bg-card text-muted-foreground hover:border-success/40 hover:bg-success-soft/20"
+                }`}
+              >
+                <CheckCircle2
+                  className={`size-8 ${decision === "pass" ? "text-success" : "text-muted-foreground"}`}
+                />
+                <div>
+                  <span className="text-sm font-bold block text-foreground">Pass &amp; Release</span>
+                  <span className="text-xs text-muted-foreground block mt-0.5">
+                    Garment meets all quality standards
                   </span>
-                )}
-                {feedback.productStyle && (
-                  <span>
-                    Style:{" "}
-                    <strong className="text-foreground">
-                      {feedback.productStyle}
-                    </strong>
-                  </span>
-                )}
-                {feedback.assignedDepartment && (
-                  <span>
-                    Routed Dept:{" "}
-                    <strong className="text-destructive uppercase font-bold">
-                      {feedback.assignedDepartment}
-                    </strong>
-                  </span>
-                )}
-                {feedback.loggedDefect && (
-                  <span>
-                    Defect:{" "}
-                    <strong className="text-destructive">
-                      {feedback.loggedDefect}
-                    </strong>
-                  </span>
-                )}
-                {feedback.timestamp && (
-                  <span className="text-muted-foreground">
-                    Time: {feedback.timestamp}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+                </div>
+              </button>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-        {/* Left Column: Inspection Decision & Defect Form */}
-        <section className="rounded-xl border bg-card p-5 space-y-5 shadow-xs">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-              Step 1: Physical Examination
-            </span>
-            <h3 className="text-base font-bold text-foreground">
-              Inspection Decision (Zero-Search)
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Examine seams, dimensions, fabric surface, buttons, and labels. Choose outcome below.
-            </p>
+              <button
+                type="button"
+                onClick={() => setDecision("fail")}
+                className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-5 text-center transition-all cursor-pointer ${
+                  decision === "fail"
+                    ? "border-destructive bg-danger-soft text-destructive shadow-xs font-bold ring-2 ring-destructive/20"
+                    : "border-border bg-card text-muted-foreground hover:border-destructive/40 hover:bg-danger-soft/20"
+                }`}
+              >
+                <XCircle
+                  className={`size-8 ${decision === "fail" ? "text-destructive" : "text-muted-foreground"}`}
+                />
+                <div>
+                  <span className="text-sm font-bold block text-foreground">Fail &amp; Route</span>
+                  <span className="text-xs text-muted-foreground block mt-0.5">
+                    Defect found: requires repair or discard
+                  </span>
+                </div>
+              </button>
+            </div>
           </div>
 
-          {/* Primary Decision Toggle (Large High-Visibility Buttons) */}
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => {
-                setDecision("pass");
-                resetForm();
-              }}
-              className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
-                decision === "pass"
-                  ? "border-success bg-success-soft text-success shadow-xs font-bold ring-2 ring-success/20"
-                  : "border-border bg-card text-muted-foreground hover:border-success/50"
-              }`}
-            >
-              <CheckCircle2 className={`size-7 ${decision === "pass" ? "text-success" : "text-muted-foreground"}`} />
-              <div>
-                <span className="text-sm font-bold block">Pass &amp; Release</span>
-                <span className="text-[10px] opacity-80 block">Meets all quality standards</span>
+          {/* Conditional Sub-View: When PASS is selected */}
+          {decision === "pass" && (
+            <div className="space-y-4 rounded-xl border border-success/30 bg-success-soft/30 p-5 animate-in fade-in-50 duration-200">
+              <div className="flex items-center justify-between border-b border-success/20 pb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-success flex items-center gap-1.5">
+                  <ShieldCheck className="size-4" />
+                  Pass Criteria &amp; Inspector Sign-Off
+                </span>
+                <span className="text-[11px] text-success font-semibold">Standard Quality Gate</span>
               </div>
-            </button>
 
-            <button
-              type="button"
-              onClick={() => setDecision("fail")}
-              className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-4 text-center transition-all ${
-                decision === "fail"
-                  ? "border-destructive bg-danger-soft text-destructive shadow-xs font-bold ring-2 ring-destructive/20"
-                  : "border-border bg-card text-muted-foreground hover:border-destructive/50"
-              }`}
-            >
-              <XCircle className={`size-7 ${decision === "fail" ? "text-destructive" : "text-muted-foreground"}`} />
-              <div>
-                <span className="text-sm font-bold block">Fail &amp; Route</span>
-                <span className="text-[10px] opacity-80 block">Requires repair or scrapping</span>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {checklist.map((item) => (
+                  <label
+                    key={item.id}
+                    className="flex items-start gap-2.5 text-xs cursor-pointer rounded-md p-2 bg-background/80 border border-success/20 hover:bg-background transition-colors"
+                  >
+                    <Checkbox
+                      checked={item.checked}
+                      onCheckedChange={(checked) =>
+                        setChecklist((prev) =>
+                          prev.map((c) => (c.id === item.id ? { ...c, checked: checked === true } : c)),
+                        )
+                      }
+                      className="mt-0.5"
+                    />
+                    <span className="leading-snug text-foreground/90 font-medium">{item.label}</span>
+                  </label>
+                ))}
               </div>
-            </button>
-          </div>
 
-          {/* Defect Configuration Panel (Visible ONLY when Fail & Route is active) */}
-          {decision === "fail" ? (
-            <div className="space-y-4 rounded-xl border-2 border-destructive/30 bg-muted/10 p-4 animate-in fade-in-50 duration-200">
+              <Field label="Inspector Notes (Optional)" htmlFor="qc-notes">
+                <Input
+                  id="qc-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. Clean seams, measurements verified within tolerance"
+                  className="text-xs bg-background"
+                />
+              </Field>
+
+              <div className="pt-2 flex justify-end">
+                <Button
+                  onClick={() => void handleSubmitDecision()}
+                  disabled={pending || !isDecisionReady}
+                  className="bg-success text-success-foreground hover:bg-success/90 font-bold px-6 gap-2 cursor-pointer shadow-xs"
+                >
+                  <CheckCircle2 className="size-4" />
+                  Submit Pass Decision &amp; Arm Scanner 6
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Conditional Sub-View: When FAIL is selected */}
+          {decision === "fail" && (
+            <div className="space-y-4 rounded-xl border-2 border-destructive/30 bg-muted/10 p-5 animate-in fade-in-50 duration-200">
               <div className="flex items-center justify-between border-b pb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-destructive flex items-center gap-1.5">
                   <ShieldAlert className="size-4" />
-                  Defect Configuration &amp; Routing
+                  Defect Details &amp; Routing
                 </span>
-                <span className="text-[10px] text-muted-foreground font-semibold">
-                  {selectedDefects.length > 0 ? `${selectedDefects.length} defect(s) selected` : "Required"}
+                <span className="text-[11px] text-muted-foreground font-semibold">
+                  {selectedDefects.length > 0
+                    ? `${selectedDefects.length} defect(s) selected`
+                    : "At least one option or description required"}
                 </span>
               </div>
 
-              {/* Common Defect Options (Preset Tags for Rapid Selection) */}
+              {/* Common Defect Options (Optional to select from common problems) */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground block">
-                  Common Defect Options (Quick Check)
+                  Common Defect Options (Optional Quick Select)
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {COMMON_DEFECT_OPTIONS.map((defect) => {
                     const isSelected = selectedDefects.includes(defect.id);
                     return (
@@ -476,7 +628,7 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
                             }
                           }
                         }}
-                        className={`text-left text-xs p-2 rounded-lg border transition-all flex items-center justify-between ${
+                        className={`text-left text-xs p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
                           isSelected
                             ? "border-destructive bg-danger-soft text-destructive font-bold"
                             : "border-border bg-card text-foreground hover:border-primary/40"
@@ -500,8 +652,8 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
                 htmlFor="qc-custom-comment"
                 hint={
                   hasDefectSelection
-                    ? "Optional additional notes explaining specific repair needs."
-                    : "Mandatory if no common defect is selected above: describe fault."
+                    ? "Optional additional notes explaining specific repair instructions."
+                    : "Mandatory if no common defect is selected above: describe the fault."
                 }
               >
                 <Textarea
@@ -514,13 +666,13 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
                 />
               </Field>
 
-              {/* Discard Product Option (Scrap Toggle) */}
+              {/* Discard Product Option */}
               <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 flex items-start gap-2.5">
                 <Checkbox
                   id="discard-toggle"
                   checked={discardProduct}
                   onCheckedChange={(checked) => setDiscardProduct(checked === true)}
-                  className="mt-0.5"
+                  className="mt-0.5 cursor-pointer"
                 />
                 <div className="space-y-0.5">
                   <label
@@ -531,25 +683,22 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
                     Discard Product (Scrap Permanently)
                   </label>
                   <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                    Check if the defect is non-repairable. Bypasses department repair routing and permanently decommissions the garment.
+                    Check if the defect is beyond repair. Bypasses department repair routing and permanently decommissions the garment.
                   </p>
                 </div>
               </div>
 
-              {/* Refer Department Dropdown (Hidden/Disabled when Discard Product is checked) */}
+              {/* Refer Department Dropdown (Hidden/Not needed on Discard Product) */}
               {!discardProduct && (
                 <div className="space-y-1.5">
-                  <label
-                    htmlFor="refer-dept"
-                    className="text-xs font-bold text-foreground block"
-                  >
+                  <label htmlFor="refer-dept" className="text-xs font-bold text-foreground block">
                     Refer Department (Mandatory for Rework Routing)
                   </label>
                   <select
                     id="refer-dept"
                     value={referDept}
                     onChange={(e) => setReferDept(e.target.value as any)}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs font-semibold shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs font-semibold shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
                   >
                     {REFER_DEPARTMENTS.map((dept) => (
                       <option key={dept.code} value={dept.code}>
@@ -558,156 +707,36 @@ export function QAPanel({ stationData }: { stationData: RfidStationData }) {
                     ))}
                   </select>
                   <p className="text-[11px] text-muted-foreground">
-                    Garment will automatically appear on the selected department&apos;s repair screen upon card tap.
+                    Upon hardware tag scan, this garment will immediately appear on the selected department&apos;s repair screen.
                   </p>
                 </div>
               )}
 
-              {/* Mandatory Guard Banner if invalid */}
+              {/* Validation Warning if incomplete */}
               {!isFailConfigValid && (
                 <div className="rounded-md border border-destructive/40 bg-danger-soft p-2.5 text-xs text-destructive font-medium flex items-center gap-2">
                   <AlertCircle className="size-4 shrink-0" />
                   <span>
-                    Select at least one common defect option OR type a custom defect description to arm Scanner 6.
+                    Select at least one common defect option OR type in the custom defect detail box to submit.
                   </span>
                 </div>
               )}
-            </div>
-          ) : (
-            /* Pass Criteria Checklist */
-            <div className="space-y-2 rounded-xl border p-4 bg-muted/10">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-1">
-                Standard Quality Checklist (All Verified on Pass)
-              </span>
-              <div className="space-y-2">
-                {checklist.map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex items-start gap-2.5 text-xs cursor-pointer rounded-md p-1.5 hover:bg-muted/40 transition-colors"
-                  >
-                    <Checkbox
-                      checked={item.checked}
-                      onCheckedChange={(checked) =>
-                        setChecklist((prev) =>
-                          prev.map((c) =>
-                            c.id === item.id ? { ...c, checked: checked === true } : c,
-                          ),
-                        )
-                      }
-                      className="mt-0.5"
-                    />
-                    <span className="leading-snug text-foreground/90">{item.label}</span>
-                  </label>
-                ))}
+
+              <div className="pt-2 flex justify-end">
+                <Button
+                  onClick={() => void handleSubmitDecision()}
+                  disabled={pending || !isDecisionReady}
+                  variant="destructive"
+                  className="font-bold px-6 gap-2 cursor-pointer shadow-xs"
+                >
+                  <ShieldAlert className="size-4" />
+                  Submit Fail Decision &amp; Arm Scanner 6
+                </Button>
               </div>
             </div>
           )}
-
-          {/* Optional Inspector Notes */}
-          <Field label="Inspector Notes (Optional)" htmlFor="qc-notes">
-            <Input
-              id="qc-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Clean collar alignment, tested button snap tension"
-              className="text-xs bg-background"
-            />
-          </Field>
-        </section>
-
-        {/* Right Column: Ready to Scan & Bench Reader Interface */}
-        <section className="space-y-6">
-          {/* Ready to Scan Indicator Card */}
-          <div
-            className={`rounded-xl border-2 p-5 shadow-xs space-y-4 transition-all ${
-              isDecisionReady
-                ? "border-success/60 bg-success-soft text-foreground"
-                : "border-border bg-card text-muted-foreground"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-3 w-3">
-                  {isDecisionReady && (
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                  )}
-                  <span
-                    className={`relative inline-flex rounded-full h-3 w-3 ${
-                      isDecisionReady ? "bg-success" : "bg-muted-foreground/40"
-                    }`}
-                  ></span>
-                </span>
-                <h4 className="text-sm font-bold tracking-tight">
-                  {isDecisionReady ? "Ready — Scan Garment on Scanner 6" : "Scanner 6 Disarmed (Configure Decision First)"}
-                </h4>
-              </div>
-              <span className="font-mono text-xs font-bold uppercase px-2 py-0.5 rounded bg-background">
-                {decision === "pass" ? "PASS MODE" : discardProduct ? "SCRAP MODE" : "FAIL MODE"}
-              </span>
-            </div>
-
-            <p className="text-xs font-medium">
-              {isDecisionReady ? (
-                decision === "pass" ? (
-                  <span>
-                    Decision armed for <strong className="text-success font-bold">PASS &amp; RELEASE</strong>.
-                    Tap shirt RFID card on Scanner 6 to verify manufacturing history and release to Packing.
-                  </span>
-                ) : discardProduct ? (
-                  <span>
-                    Decision armed for <strong className="text-destructive font-bold">SCRAP / DISCARD</strong>.
-                    Tap shirt RFID card to decommission permanently from production line.
-                  </span>
-                ) : (
-                  <span>
-                    Decision armed for <strong className="text-destructive font-bold">FAIL &amp; ROUTE TO {referDept.toUpperCase()}</strong>.
-                    Tap shirt RFID card to lock quality hold and send to repair queue.
-                  </span>
-                )
-              ) : (
-                <span>
-                  Please select at least one defect option or type custom notes to arm Scanner 6.
-                </span>
-              )}
-            </p>
-
-            {/* Fast RFID Tag Input / Antenna Simulator */}
-            <div className="space-y-3 pt-2 border-t border-border/40">
-              <div className="space-y-1.5">
-                <label htmlFor="scan-uid-input" className="text-xs font-bold text-foreground block">
-                  Garment RFID Card (Antenna Reader)
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Input
-                      id="scan-uid-input"
-                      value={scanUid}
-                      onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && isDecisionReady && !pending) {
-                          void handleScanner6Scan(scanUid);
-                        }
-                      }}
-                      placeholder="e.g. 04DAEBFC"
-                      className="font-mono font-bold tracking-wider text-sm bg-background pl-9"
-                    />
-                    <Radio className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                  </div>
-
-                  <Button
-                    onClick={() => void handleScanner6Scan(scanUid)}
-                    disabled={pending || !isDecisionReady || !scanUid.trim()}
-                    className="gap-2 font-bold shrink-0"
-                  >
-                    <ScanLine className="size-4" />
-                    Scan at Scanner 6
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

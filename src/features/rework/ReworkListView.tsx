@@ -55,6 +55,7 @@ export function ReworkListView() {
   const [scanError, setScanError] = useState<string | null>(null);
 
   const isProduction = me.role === "P";
+  const isQc = me.role === "Q" || me.username === "qc.demo" || me.department === "quality";
 
   const stationCode =
     me.department === "stitching"
@@ -63,7 +64,9 @@ export function ReworkListView() {
         ? "finishing"
         : me.department === "cutting"
           ? "cutting"
-          : null;
+          : isQc
+            ? "final_qc"
+            : null;
 
   const qStation = useWtQuery(
     ["rfid-station", stationCode ?? "stitching"],
@@ -110,6 +113,13 @@ export function ReworkListView() {
               const scopedCases = allCases.filter((r) => {
                 if (isProduction) {
                   return r.assignedDepartment === me.department;
+                }
+                if (isQc) {
+                  return (
+                    r.status === "repaired" ||
+                    r.assignedDepartment === "quality" ||
+                    r.assignedDepartment === me.department
+                  );
                 }
                 return true;
               });
@@ -281,8 +291,13 @@ export function ReworkListView() {
                             {
                               header: "Status",
                               cell: (r) => {
-                                const isMyDept = isProduction && r.assignedDepartment === me.department;
-                                const isUnderRepair = r.status === "assigned" || (isMyDept && r.status === "awaiting-assignment");
+                                const isMyDept =
+                                  (isProduction && r.assignedDepartment === me.department) ||
+                                  (isQc && (r.status === "repaired" || r.assignedDepartment === "quality"));
+                                const isUnderRepair =
+                                  r.status === "assigned" ||
+                                  (isMyDept &&
+                                    (r.status === "awaiting-assignment" || r.status === "repaired"));
                                 const currentRowState = rowStates[r.id] ?? "pending";
 
                                 return (
@@ -388,11 +403,13 @@ export function ReworkListView() {
                                 <Radio className="size-3.5 animate-pulse" />
                                 <span>
                                   Hardware Scanner Active (
-                                  {stationCode === "finishing"
-                                    ? "Scanner 5"
-                                    : stationCode === "stitching"
-                                      ? "Scanner 4"
-                                      : "Scanner 3"}
+                                  {stationCode === "final_qc"
+                                    ? "Scanner 6"
+                                    : stationCode === "finishing"
+                                      ? "Scanner 5"
+                                      : stationCode === "stitching"
+                                        ? "Scanner 4"
+                                        : "Scanner 3"}
                                   )
                                 </span>
                               </div>

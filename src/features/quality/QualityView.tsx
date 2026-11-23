@@ -920,10 +920,16 @@ export function QualityView() {
         {/* Workstation RFID Station Panel (Station 6 Final QA only) */}
         {qRfidStation.data && (
           <Section
-            title="Station 6: RFID Final Inspection Reader (Result-First)"
-            description="Examine shirt, select Pass or Fail (with defect code) to arm context, then scan card. Identity resolves automatically."
+            title="Station 6: Final Quality Inspection Console"
+            description="Examine shirt physically, select Pass or Fail, click Submit, then scan tag at Scanner 6 hardware."
           >
-            <QAPanel stationData={qRfidStation.data} />
+            <QAPanel
+              stationData={qRfidStation.data}
+              onScanComplete={() => {
+                void insp.refetch();
+                void garments.refetch();
+              }}
+            />
           </Section>
         )}
 
