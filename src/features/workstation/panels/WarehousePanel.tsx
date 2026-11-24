@@ -1,16 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Boxes,
-  CheckCircle2,
   Eye,
   Layers,
   Package as PkgIcon,
-  Radio,
   RotateCw,
   ShieldAlert,
   ShieldCheck,
   Warehouse,
-  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,24 +17,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/wt/DataTable";
+import { Field, NativeSelect, ScopeNote } from "@/components/wt/forms";
 import { fmt, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
-import type { Garment, ScanOutcome } from "@/domain/types";
+import type { ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
 
-interface WarehousedBoxDetails {
-  boxId: string;
-  rfidUid?: string;
-  binId: string;
-  status: string;
-  garments: { id: string; productName?: string; size?: string; stage: string }[];
-  scannedAt: string;
-}
+const defaultBins = [
+  { id: "BIN-A1", label: "Bin A1 — Standard Hang / Classic Poplin", capacity: 50 },
+  { id: "BIN-A2", label: "Bin A2 — Standard Fold / Classic Poplin", capacity: 50 },
+  { id: "BIN-B1", label: "Bin B1 — Trousers / Bottoms", capacity: 40 },
+  { id: "BIN-B2", label: "Bin B2 — Outerwear / Heavyweight", capacity: 30 },
+  { id: "BIN-BULK-1", label: "Bulk Staging Bin 1", capacity: 100 },
+];
 
 export function WarehousePanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
@@ -47,120 +45,92 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
   // Selected carton for read-only manifest inspection modal
   const [manifestCarton, setManifestCarton] = useState<any | null>(null);
 
-  // Runtime Scanned Box Details & Outcome
+  // Destination Storage Bin state (synced with workstation context)
+  const initialBinId =
+    (stationData.activeContext?.payload as any)?.binId ||
+    (stationData.activeContext?.payload as any)?.warehouseBinId ||
+    "BIN-A1";
+  const [selectedBinId, setSelectedBinId] = useState<string>(initialBinId);
+
+  // Manual entry for barcode/keyboard fallback (submitted with Enter)
+  const [scanUid, setScanUid] = useState("");
   const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
-  const [warehousedBoxDetails, setWarehousedBoxDetails] = useState<WarehousedBoxDetails | null>(null);
 
   const qFulfilment = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
-  const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
 
-  const isAuthorized =
-    me.role === "M" || me.role === "L" || me.role === "A" || me.department === "warehouse";
+  const isAuthorized = me.role === "M" || me.role === "L" || me.role === "A" || me.department === "warehouse";
+  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
 
-  // Centralized hardware scan processor for box tags at Warehouse
-  const handleProcessScan = async (rawUid: string) => {
-    const uid = rawUid.trim().toUpperCase();
-    if (!uid) return;
-
-    void run(
-      async (c) => {
-        const binId = "BIN-A1";
-        const outcome = await c.warehouseIntake(uid, binId);
-        setLocalLastOutcome(outcome);
-
-        if (outcome.resolution === "accepted") {
-          const allPkgs = (await c.getFulfilment()).packages || [];
-          const allGarments = await c.listGarments();
-
-          // Resolve scanned package
-          const pkg = allPkgs.find(
-            (p: any) =>
-              p.id.toUpperCase() === uid ||
-              (p.rfidUid && p.rfidUid.toUpperCase() === uid) ||
-              p.code?.toUpperCase() === uid ||
-              p.id === outcome.subjectId ||
-              p.id === outcome.garmentCode,
-          );
-
-          if (pkg) {
-            const linkedGarments = pkg.garmentIds
-              .map((gid: string) => allGarments.find((g) => g.id === gid))
-              .filter(Boolean) as Garment[];
-
-            setWarehousedBoxDetails({
-              boxId: pkg.id,
-              rfidUid: pkg.rfidUid || outcome.uid || uid,
-              binId: (pkg as any).binCode || (pkg as any).warehouse_stock?.warehouse_bins?.code || binId,
-              status: "warehoused",
-              garments: linkedGarments.map((g) => ({
-                id: g.id,
-                productName: g.productName,
-                size: g.size,
-                stage: "warehouse",
-              })),
-              scannedAt: new Date().toLocaleTimeString(),
-            });
-          }
-          void qFulfilment.refetch();
-          void qGarments.refetch();
-        } else {
-          setWarehousedBoxDetails(null);
-        }
-        return outcome;
-      },
-      (outcome) =>
-        outcome.resolution === "accepted"
-          ? `✓ Box ${outcome.garmentCode ?? outcome.subjectId} received! Garments moved to Warehouse.`
-          : `Intake rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+  // Sync bin selection with station context so hardware RFID scans route to selected bin
+  const handleBinChange = (newBinId: string) => {
+    setSelectedBinId(newBinId);
+    void run((c) =>
+      c.prepareActionContext(
+        "warehouse",
+        "warehouse_receive",
+        { kind: "warehouse_receive", binId: newBinId } as any,
+      ),
     );
   };
 
-  // Auto-detect scans arriving via MQTT/backend hardware reader at Station 8 Warehouse
-  const lastSeenScanRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!isAuthorized) return;
-    const outcome = stationData?.lastScanOutcome;
-    if (!outcome) return;
-    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
-      lastSeenScanRef.current = outcome.at;
-      if (outcome.uid) {
-        void handleProcessScan(outcome.uid);
-      }
-    }
-  }, [isAuthorized, stationData?.lastScanOutcome]);
-
-  // Global USB Keyboard Wedge RFID reader listener for Station 8 Warehouse reader
-  // Enables warehouse scanner to automatically capture box tag UID without any manual typing or selecting
-  useEffect(() => {
-    if (!isAuthorized) return;
-    let buffer = "";
-    let lastKeyTime = Date.now();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
-
-      const now = Date.now();
-      if (now - lastKeyTime > 500) {
-        buffer = "";
-      }
-      lastKeyTime = now;
-
-      if (e.key === "Enter") {
-        const scanned = buffer.trim().toUpperCase();
-        buffer = "";
-        if (scanned.length >= 3) {
-          e.preventDefault();
-          void handleProcessScan(scanned);
+  // Process manual/wedge scan through authoritative backend validation
+  const handleManualScanSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = scanUid.trim();
+    if (!trimmed || pending) return;
+    void run(
+      (c) => c.warehouseIntake(trimmed, selectedBinId),
+      (outcome) => {
+        setLocalLastOutcome(outcome);
+        setScanUid("");
+        void qFulfilment.refetch();
+        if (outcome.resolution === "accepted") {
+          return outcome.productName || "Box Received Successfully — Garments Moved to Warehouse.";
         }
-      } else if (e.key.length === 1) {
-        buffer += e.key;
-      }
-    };
+        return outcome.rejectReason || "Intake rejected.";
+      },
+    );
+  };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isAuthorized]);
+  // Helper to extract carton ID, failure reason, garment count and affected garment
+  const getOutcomeDetails = (outcome: ScanOutcome, packages: any[]) => {
+    const cartonId = outcome.garmentCode ?? outcome.subjectId ?? outcome.uid;
+    const isAccepted = outcome.resolution === "accepted";
+
+    // Lookup package in records for accurate garment count
+    const matchedPkg = packages.find(
+      (p: any) =>
+        p.code === cartonId ||
+        p.id === cartonId ||
+        p.code === outcome.uid ||
+        p.id === outcome.subjectId,
+    );
+
+    // Extract count from matched package or outcome message
+    let garmentCount = matchedPkg?.garmentIds?.length ?? matchedPkg?.garmentDetails?.length;
+    if (garmentCount === undefined && outcome.productName) {
+      const match = outcome.productName.match(/(\d+)\s+Garments/i);
+      if (match) garmentCount = Number(match[1]);
+    }
+
+    // Extract affected garment if embedded in contextId or rejectReason
+    let affectedGarment = outcome.contextId;
+    if (!affectedGarment && outcome.rejectReason) {
+      const match = outcome.rejectReason.match(/Affected garment:?\s*([A-Z0-9_-]+)/i);
+      if (match) affectedGarment = match[1];
+    }
+
+    return {
+      cartonId,
+      isAccepted,
+      garmentCount,
+      affectedGarment,
+      reason: outcome.rejectReason || "Validation failed.",
+      title: isAccepted
+        ? (outcome.productName ?? "Box Received Successfully — Garments Moved to Warehouse.")
+        : "On Hold / Warehouse Intake Blocked",
+    };
+  };
 
   return (
     <Loadable query={qFulfilment}>
@@ -172,121 +142,158 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
 
         return (
           <div className="space-y-6">
-            {/* Station 8 Hardware Scanner Status Banner */}
-            <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs shadow-xs">
-              <div className="flex items-center gap-2.5 text-primary font-semibold">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
-                </span>
-                <span>Scanner 8 Active · Station 8 Master Box Intake Reader</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-[11px]">
-                  Scan carton RFID tag on hardware to intake. Nothing to select on screen.
-                </span>
-                {/* Discreet test button for development testing */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
-                  onClick={() => void handleProcessScan("PKG-001")}
-                  title="Simulate hardware scan for PKG-001"
-                >
-                  (Dev: Test PKG-001)
-                </Button>
-              </div>
-            </div>
-
-            {/* Runtime Scanned Box Details Card (Dynamically displayed when hardware scan is processed) */}
-            {warehousedBoxDetails && (
-              <div className="rounded-xl border-2 border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-5 shadow-xs transition-all animate-in fade-in duration-200 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-emerald-500/20 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="size-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                      <PkgIcon className="size-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base text-foreground font-mono">
-                          Box {warehousedBoxDetails.boxId}
-                        </h3>
-                        <span className="inline-flex items-center gap-1 font-mono text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-background px-2 py-0.5 rounded border border-emerald-500/30">
-                          <Radio className="size-3" /> {warehousedBoxDetails.rfidUid || "NFC/RFID Tag"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Carton scanned at Station 8 · Intaked into finished stock at {warehousedBoxDetails.scannedAt}
-                      </p>
-                    </div>
+            {/* Top Row: Bin Selection & Live Scan Result */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Left Column: Storage Bin Selection & Master Box RFID Scanning */}
+              <Section title="Carton Intake">
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  {/* Real Scanner 8 Status */}
+                  <div className="flex items-center justify-between text-xs pb-1 border-b">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Scanner 8 Active
+                    </span>
+                    <span className="font-mono text-muted-foreground">
+                      Station 8
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 text-white px-2.5 py-1 text-xs font-bold shadow-2xs">
-                      <CheckCircle2 className="size-3.5" /> Warehoused &amp; Stored
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setWarehousedBoxDetails(null)}
-                      className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 cursor-pointer ml-1"
+                  {/* Destination Storage Bin Selection */}
+                  <Field label="Destination Storage Bin" htmlFor="wh-bin">
+                    <NativeSelect
+                      id="wh-bin"
+                      value={selectedBinId}
+                      onChange={(v) => handleBinChange(v)}
+                      options={defaultBins.map((b) => ({
+                        value: b.id,
+                        label: `${b.id} — ${b.label}`,
+                      }))}
+                    />
+                  </Field>
+
+                  {/* Master Box RFID Tag Scan Input */}
+                  <form onSubmit={handleManualScanSubmit} className="space-y-2 pt-2 border-t">
+                    <Field
+                      label="Master Box Tag UID"
+                      htmlFor="master-box-scan-input"
                     >
-                      ✕ Dismiss
-                    </button>
-                  </div>
+                      <Input
+                        id="master-box-scan-input"
+                        value={scanUid}
+                        onChange={(e) => setScanUid(e.target.value)}
+                        placeholder="Scan or enter tag UID..."
+                        className="font-mono text-xs"
+                        disabled={pending}
+                        autoFocus
+                      />
+                    </Field>
+                  </form>
+
+                  {!isAuthorized && (
+                    <ScopeNote>
+                      Only Warehouse staff or Managers can process inbound cartons.
+                    </ScopeNote>
+                  )}
                 </div>
+              </Section>
 
-                {/* Box Child Contents Grid */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                    <span>Linked Products Inside ({warehousedBoxDetails.garments.length} units):</span>
-                    <span className="text-muted-foreground">
-                      Destination Bin: <strong className="text-primary font-mono">{warehousedBoxDetails.binId}</strong>
-                    </span>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                    {warehousedBoxDetails.garments.map((g) => (
+              {/* Right Column: Live Scan Result */}
+              <Section title="Live Scan Result">
+                {lastOutcome ? (
+                  (() => {
+                    const details = getOutcomeDetails(lastOutcome, allPackages);
+                    return (
                       <div
-                        key={g.id}
-                        className="flex items-center justify-between rounded-lg border bg-card p-2.5 text-xs shadow-2xs"
+                        className={`rounded-lg border p-4 shadow-sm transition-all ${
+                          details.isAccepted
+                            ? "border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/20 text-foreground"
+                            : "border-destructive/40 bg-destructive/10 text-destructive"
+                        }`}
                       >
-                        <div className="min-w-0 pr-2">
-                          <span className="font-mono font-bold text-foreground block truncate">{g.id}</span>
-                          <span className="text-muted-foreground text-[11px] block truncate">
-                            {g.productName || "Garment"} {g.size ? `(Size ${g.size})` : ""}
-                          </span>
-                        </div>
-                        <StatusBadge status={g.stage as any} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+                        <div className="flex items-start gap-3">
+                          {details.isAccepted ? (
+                            <ShieldCheck className="size-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                          ) : (
+                            <ShieldAlert className="size-6 text-destructive shrink-0 mt-0.5" />
+                          )}
+                          <div className="space-y-2.5 flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-bold tracking-tight">
+                                {details.title}
+                              </p>
+                              <span
+                                className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
+                                  details.isAccepted
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                    : "bg-destructive/20 text-destructive border-destructive/40"
+                                }`}
+                              >
+                                {details.isAccepted ? "Accepted" : "Blocked"}
+                              </span>
+                            </div>
 
-            {/* Runtime Rejection Notification Banner */}
-            {localLastOutcome && localLastOutcome.resolution !== "accepted" && (
-              <div className="rounded-xl border border-destructive/50 bg-danger-soft p-4 shadow-xs text-foreground flex items-start justify-between gap-3 animate-in fade-in">
-                <div className="flex items-start gap-3">
-                  <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-bold text-destructive">
-                      Box Intake Rejected ({localLastOutcome.uid})
-                    </h4>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-muted-foreground font-medium">Box ID:</span>{" "}
+                                <span className="font-mono font-bold text-foreground">
+                                  {details.cartonId}
+                                </span>
+                              </div>
+
+                              <div>
+                                <span className="text-muted-foreground font-medium">Garments:</span>{" "}
+                                <span className="font-semibold text-foreground">
+                                  {details.garmentCount !== undefined
+                                    ? `${details.garmentCount} garment${details.garmentCount !== 1 ? "s" : ""}`
+                                    : "—"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {!details.isAccepted && (
+                              <div className="text-xs space-y-1 rounded bg-destructive/10 p-2 border border-destructive/20">
+                                <div>
+                                  <span className="font-semibold text-destructive">Reason:</span>{" "}
+                                  <span className="font-medium text-destructive">
+                                    {details.reason}
+                                  </span>
+                                </div>
+                                {details.affectedGarment && (
+                                  <div>
+                                    <span className="font-semibold text-destructive">Affected Garment:</span>{" "}
+                                    <span className="font-mono font-bold text-destructive">
+                                      {details.affectedGarment}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t text-[11px] font-mono text-muted-foreground">
+                              <div>
+                                <span className="font-semibold text-foreground/80">Destination Bin:</span>{" "}
+                                {selectedBinId}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-foreground/80">Timestamp:</span>{" "}
+                                {fmt.dateTime(lastOutcome.at)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+                    <PkgIcon className="size-8 mx-auto mb-2 opacity-40" />
                     <p className="text-xs font-medium">
-                      {localLastOutcome.rejectReason || `Station rule violated: ${localLastOutcome.resolution}`}
+                      Waiting for Master Box RFID scan.
                     </p>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLocalLastOutcome(undefined)}
-                  className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 cursor-pointer"
-                >
-                  ✕ Dismiss
-                </button>
-              </div>
-            )}
+                )}
+              </Section>
+            </div>
 
             {/* Bottom Section: Cartons Overview (Tabs: Sealed Awaiting Intake & Received Cartons) */}
             <Tabs
@@ -296,13 +303,13 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
             >
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-2">
                 <TabsList>
-                  <TabsTrigger value="awaiting" className="gap-2 cursor-pointer">
+                  <TabsTrigger value="awaiting" className="gap-2">
                     <Boxes className="size-4" />
                     Sealed Cartons Awaiting Intake ({sealedAwaitingIntake.length})
                   </TabsTrigger>
-                  <TabsTrigger value="received" className="gap-2 cursor-pointer">
+                  <TabsTrigger value="received" className="gap-2">
                     <Warehouse className="size-4" />
-                    Received Cartons in Storage ({receivedCartons.length})
+                    Received Cartons ({receivedCartons.length})
                   </TabsTrigger>
                 </TabsList>
 
@@ -312,7 +319,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                   onClick={() => {
                     void qFulfilment.refetch();
                   }}
-                  className="gap-1.5 self-end text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                  className="gap-1.5 self-end text-xs text-muted-foreground hover:text-foreground"
                 >
                   <RotateCw className="size-3.5" /> Refresh
                 </Button>
@@ -357,7 +364,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 text-xs gap-1.5 cursor-pointer"
+                            className="h-7 text-xs gap-1.5"
                             onClick={() => setManifestCarton(p)}
                           >
                             <Eye className="size-3.5" /> View Manifest
@@ -371,7 +378,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
 
               {/* TAB 2: Received Cartons with Storage Bin & Received Timestamp */}
               <TabsContent value="received" className="space-y-4 mt-0">
-                <Section title="Received Cartons in Storage">
+                <Section title="Received Cartons">
                   <DataTable
                     rows={receivedCartons}
                     rowKey={(p) => p.id}
@@ -418,7 +425,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 text-xs gap-1.5 cursor-pointer"
+                            className="h-7 text-xs gap-1.5"
                             onClick={() => setManifestCarton(p)}
                           >
                             <Eye className="size-3.5" /> View Manifest
@@ -443,65 +450,78 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                       <PkgIcon className="size-5 text-primary" />
-                      <span>
-                        Carton Manifest:{" "}
-                        <span className="font-mono font-bold">
-                          {(manifestCarton as any).code || manifestCarton.id}
-                        </span>
-                      </span>
+                      Carton Manifest · {(manifestCarton as any).code || manifestCarton.id}
                     </DialogTitle>
                     <DialogDescription>
-                      Inspecting sealed contents and verified garment lifecycle states.
+                      Read-only manifest of member garments packed inside this carton.
                     </DialogDescription>
                   </DialogHeader>
 
-                  <div className="space-y-4 py-2">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-lg border p-3 text-xs bg-muted/20">
+                  <div className="space-y-4 pt-2">
+                    {/* Carton Summary Header */}
+                    <div className="grid grid-cols-3 gap-3 rounded-lg border bg-muted/30 p-3 text-xs">
                       <div>
-                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">
-                          Status
-                        </span>
-                        <StatusBadge status={manifestCarton.status} />
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">
-                          Total Units
-                        </span>
-                        <span className="font-semibold text-foreground">
-                          {manifestCarton.garmentIds?.length || 0} garments
+                        <span className="text-muted-foreground font-medium">Box Tag:</span>{" "}
+                        <span className="font-mono font-bold text-foreground">
+                          {(manifestCarton as any).code || manifestCarton.id}
                         </span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground block text-[10px] uppercase font-semibold">
-                          Current Bin
-                        </span>
+                        <span className="text-muted-foreground font-medium">Storage Bin:</span>{" "}
                         <span className="font-mono font-bold text-primary">
                           {(manifestCarton as any).binCode ||
                             (manifestCarton as any).warehouse_stock?.warehouse_bins?.code ||
-                            "BIN-A1"}
+                            "Awaiting intake"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground font-medium">Garments:</span>{" "}
+                        <span className="font-semibold text-foreground">
+                          {manifestCarton.garmentIds?.length || 0} units
                         </span>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-foreground">
-                        Member Garments Manifest
-                      </h4>
-                      <div className="rounded-lg border max-h-60 overflow-y-auto divide-y">
-                        {(manifestCarton.garmentIds || []).map((id: string, idx: number) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/30"
-                          >
-                            <span className="font-mono font-bold text-foreground">
-                              {id}
-                            </span>
-                            <span className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              warehouse
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                    {/* Member Garments Table */}
+                    <div className="rounded-lg border overflow-hidden">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-muted text-muted-foreground font-semibold border-b">
+                          <tr>
+                            <th className="p-2.5">#</th>
+                            <th className="p-2.5">Garment Code</th>
+                            <th className="p-2.5">Size</th>
+                            <th className="p-2.5">Stage</th>
+                            <th className="p-2.5">QC Disposition</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {(manifestCarton.garmentDetails || manifestCarton.garmentIds || []).map(
+                            (item: any, idx: number) => {
+                              const code = typeof item === "string" ? item : item.code || item.id;
+                              const stage = typeof item === "object" ? item.stage : manifestCarton.status === "warehoused" ? "warehouse" : "finished";
+                              const disp = typeof item === "object" ? item.disposition : "released";
+                              const size = typeof item === "object" && item.size ? item.size : "—";
+
+                              return (
+                                <tr key={code || idx} className="hover:bg-muted/40 transition-colors">
+                                  <td className="p-2.5 font-mono text-muted-foreground">{idx + 1}</td>
+                                  <td className="p-2.5 font-mono font-bold text-foreground">{code}</td>
+                                  <td className="p-2.5 font-medium">{size}</td>
+                                  <td className="p-2.5">
+                                    <StatusBadge status={stage} />
+                                  </td>
+                                  <td className="p-2.5">
+                                    <StatusBadge
+                                      status={disp}
+                                      tone={disp === "held" ? "danger" : "success"}
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            },
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </DialogContent>

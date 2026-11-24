@@ -111,7 +111,6 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   ) {
     return false;
   }
-
   // Warehouse operators only handle warehouse inventory and intake, not full factory garment production lists
   if (
     (user.username === "warehouse.demo" || user.department === "warehouse") &&
@@ -145,7 +144,6 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       return false;
     }
   }
-
   // Strict role + department scoping for Quality Inspector role (Q)
   if (user.role === "Q") {
     const isIncomingQc = user.username?.toLowerCase() === "qc.incoming";

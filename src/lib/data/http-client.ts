@@ -16,6 +16,7 @@ import type {
   ChecklistItem,
   Department,
   Garment,
+  GarmentHold,
   Inspection,
   LifecycleStage,
   MaterialLot,
@@ -215,8 +216,10 @@ function mapDbStageToLifecycleStage(stage: string): LifecycleStage {
     case "finished":
       return "finished";
     case "packed":
-      return "warehouse";
+      return "packing";
     case "warehoused":
+      return "warehouse";
+    case "allocated":
       return "allocated";
     case "dispatched":
       return "dispatched";
@@ -761,18 +764,29 @@ export function createHttpClient(): WearTrailClient {
     },
     async listGarments(): Promise<Garment[]> {
       const raw = await req<any[]>("/api/production/garments", { method: "GET" });
-      return (raw || []).map((g: any) => ({
-        id: g.code || g.id,
-        orderId: g.productionOrderCode || g.productionOrderId || g.orderId || "",
-        publicId: g.publicId || "",
-        productName: g.productName || "Unknown Garment",
-        size: g.sizeLabel || g.size || "M",
-        cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
-        stage: mapDbStageToLifecycleStage(g.stage),
-        disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
-        hold: null,
-        rfidUid: g.activeTagUid || g.rfidUid || undefined,
-      }));
+      return (raw || []).map((g: any) => {
+        const isHeld = g.qualityDisposition === "held" || Boolean(g.holdReason || g.hold);
+        const hold: GarmentHold | null = isHeld
+          ? {
+              reason: g.holdReason || g.hold?.reason || "Active Quality Hold",
+              since: g.createdAt || new Date().toISOString(),
+              inspectionId: g.inspectionId || g.hold?.inspectionId || "INSP-HOLD",
+            }
+          : null;
+
+        return {
+          id: g.code || g.id,
+          orderId: g.productionOrderCode || g.productionOrderId || g.orderId || "",
+          publicId: g.publicId || "",
+          productName: g.productName || "Unknown Garment",
+          size: g.sizeLabel || g.size || "M",
+          cuttingOutputId: g.cuttingJobId || g.cuttingOutputId || "",
+          stage: mapDbStageToLifecycleStage(g.stage),
+          disposition: g.qualityDisposition || g.disposition || "awaiting_inspection",
+          hold,
+          rfidUid: g.activeTagUid || g.rfidUid || undefined,
+        };
+      });
     },
     async getGarment(id: string): Promise<GarmentDetail | null> {
       try {
