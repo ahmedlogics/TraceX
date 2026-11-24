@@ -192,11 +192,7 @@ function IncomingQcQueue() {
 
 export function DashboardView() {
   const me = useMe();
-  const isIncomingQC =
-    me.username?.toLowerCase() === "qc.incoming" ||
-    me.department?.toLowerCase() === "receiving" ||
-    me.department?.toLowerCase() === "raw-store" ||
-    (me.department as string)?.toLowerCase() === "raw_store";
+  const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
 
   if (isIncomingQC) {
     return <QualityView />;

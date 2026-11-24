@@ -148,11 +148,7 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
 
   // Strict role + department scoping for Quality Inspector role (Q)
   if (user.role === "Q") {
-    const isIncomingQc =
-      user.username?.toLowerCase() === "qc.incoming" ||
-      user.department?.toLowerCase() === "receiving" ||
-      user.department?.toLowerCase() === "raw-store" ||
-      (user.department as string)?.toLowerCase() === "raw_store";
+    const isIncomingQc = user.username?.toLowerCase() === "qc.incoming";
 
     if (isIncomingQc) {
       // Incoming Material QC Inspector: strictly Home, Tasks, Material Lots

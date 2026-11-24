@@ -571,11 +571,7 @@ export function QualityView() {
     c.getRfidStationData("final_qc"),
   );
 
-  const isIncomingQC =
-    me.username?.toLowerCase() === "qc.incoming" ||
-    me.department?.toLowerCase() === "receiving" ||
-    me.department?.toLowerCase() === "raw-store" ||
-    (me.department as string)?.toLowerCase() === "raw_store";
+  const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
 
   const [incomingMode, setIncomingMode] = useState<"queue" | "quarantine">("queue");
 
