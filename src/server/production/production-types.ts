@@ -38,6 +38,16 @@ export interface ProductionOrderDTO {
   revision: number;
   lotIds?: string[] | undefined;
   lotCodes?: string[] | undefined;
+  issues?:
+    | {
+        id: string;
+        lotId?: string | undefined;
+        lotCode?: string | undefined;
+        materialName?: string | undefined;
+        quantity: number;
+        performedAt: string;
+      }[]
+    | undefined;
 }
 
 export interface ProductionOrderDetailDTO extends ProductionOrderDTO {

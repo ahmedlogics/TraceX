@@ -272,6 +272,15 @@ export async function listOrders(
       revision: o.revision,
       lotIds: o.material_stock_movements?.map((m) => m.material_lot_id) ?? [],
       lotCodes: o.material_stock_movements?.map((m) => m.material_lots?.code).filter(Boolean) ?? [],
+      issues:
+        o.material_stock_movements?.map((m) => ({
+          id: m.id,
+          lotId: m.material_lot_id,
+          lotCode: m.material_lots?.code ?? m.material_lot_id,
+          materialName: m.material_lots?.material_name ?? "Fabric Roll",
+          quantity: Number(m.quantity),
+          performedAt: m.performed_at.toISOString(),
+        })) ?? [],
     }));
   }, tx);
 }

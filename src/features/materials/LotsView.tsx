@@ -89,9 +89,8 @@ export function LotsView() {
         description={
           me.username === "rawstore.demo" || me.department === "raw-store"
             ? undefined
-            : "Physical raw fabric deliveries from suppliers. Newly received rolls arrive in quarantine (0 m stock balance) until cleared by qc.incoming. Only cleared rolls can be issued to production orders at Station 2."
+            : "Physical raw fabric deliveries from suppliers. Newly received rolls arrive in quarantine (0 m stock balance) until cleared by Incoming QC. Only cleared rolls can be issued to production orders at Station 2."
         }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Material lots" }]}
         actions={can.receiveLot(me) ? <ReceiveLotDialog /> : undefined}
       />
 

@@ -26,7 +26,7 @@ import { Field, FormDialog, NativeSelect } from "@/components/wt/forms";
 import { fmt, IdLink, KeyValue, PageHeader, Section } from "@/components/wt/layout";
 import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type {
   ChecklistItem,
   Inspection,
@@ -524,11 +524,13 @@ function IncomingLotsTable({
                   if (isAwaitingReceiving) {
                     return (
                       <div className="flex items-center gap-1.5">
-                        <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
-                          <AppLink href={paths.workstation}>
-                            Station 1 <ArrowRight className="size-3" />
-                          </AppLink>
-                        </Button>
+                        {canAccessRoute(me, "workstation") && (
+                          <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                            <AppLink href={paths.workstation}>
+                              Station 1 <ArrowRight className="size-3" />
+                            </AppLink>
+                          </Button>
+                        )}
                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
                           <AppLink href={paths.lot(l.id)}>View</AppLink>
                         </Button>
@@ -569,11 +571,7 @@ export function QualityView() {
     c.getRfidStationData("final_qc"),
   );
 
-  const isIncomingQC =
-    me.username?.toLowerCase() === "qc.incoming" ||
-    me.department?.toLowerCase() === "receiving" ||
-    me.department?.toLowerCase() === "raw-store" ||
-    (me.department as string)?.toLowerCase() === "raw_store";
+  const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
 
   const [incomingMode, setIncomingMode] = useState<"queue" | "quarantine">("queue");
 
@@ -620,10 +618,7 @@ export function QualityView() {
   if (isIncomingQC) {
     return (
       <>
-        <PageHeader
-          title="Incoming Material Quality Assurance (qc.incoming)"
-          crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality (Incoming QC)" }]}
-        />
+        <PageHeader title="Incoming Material Quality Assurance" />
 
         <div className="space-y-6">
           {/* Key Metric Counters */}
@@ -737,7 +732,7 @@ export function QualityView() {
 
               {/* Mode 1: Incoming Fabric Inspection Queue */}
               <TabsContent value="queue" className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
                     <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -773,18 +768,6 @@ export function QualityView() {
 
               {/* Mode 2: Lot Rejection & Quarantine Handling */}
               <TabsContent value="quarantine" className="mt-4 space-y-4">
-                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm flex items-start gap-3">
-                  <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-destructive">
-                      Active Raw Material Quarantine Zone
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Managing failed fabric rolls and logging mill defect reasons. Unapproved rolls are locked with usable balance = 0 m. Downstream production guards strictly prevent Raw Store from issuing these rolls and prevent Cutting from starting orders on this material.
-                    </p>
-                  </div>
-                </div>
-
                 <Loadable query={lots}>
                   {(allLots) => {
                     const quarantinedLots = allLots.filter(
@@ -902,7 +885,6 @@ export function QualityView() {
             ? "Managerial quality oversight. Only certified inspectors record operational decisions."
             : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
         }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality" }]}
       />
 
       <div className="space-y-6">

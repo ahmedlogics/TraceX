@@ -107,11 +107,6 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
               ? "Final garment inspection before packing"
               : "Reinspection of repaired garment"
         }`}
-        crumbs={[
-          { label: "Staff", href: paths.home },
-          { label: "Quality", href: paths.quality },
-          { label: i.id },
-        ]}
         meta={
           <>
             <StatusBadge status={i.status} label="Result" />

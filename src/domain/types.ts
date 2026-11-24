@@ -319,6 +319,15 @@ export interface MaterialIssue {
 
 export type OrderStatus = "draft" | "planned" | "approved" | "in-progress" | "completed";
 
+export interface OrderIssueSummary {
+  id: string;
+  lotId?: string | undefined;
+  lotCode?: string | undefined;
+  materialName?: string | undefined;
+  quantity: number;
+  performedAt: string;
+}
+
 export interface ProductionOrder {
   id: string;
   product: string;
@@ -332,6 +341,7 @@ export interface ProductionOrder {
   lotId?: string | undefined;
   lotIds?: string[] | undefined;
   lotCodes?: string[] | undefined;
+  issues?: OrderIssueSummary[] | undefined;
 }
 
 /** A labelled panel set cut from actual issued fabric; links lot -> order -> garment. */
