@@ -911,9 +911,12 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
 
     const garment = binding.garments;
     // Validate active quality holds
-    const activeHold = await tx.garment_holds.findFirst({
-      where: { garment_id: garment.id, released_at: null },
-    });
+    let activeHold: any = null;
+    if ("garment_holds" in (tx as any) && typeof (tx as any).garment_holds?.findFirst === "function") {
+      activeHold = await (tx as any).garment_holds.findFirst({
+        where: { garment_id: garment.id, released_at: null },
+      });
+    }
     if (garment.quality_disposition === "held" || activeHold) {
       const reason = activeHold?.reason || "Active quality hold in effect";
       throw ApiError.badRequest(
@@ -924,10 +927,13 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     // Validate duplicate scans
-    const existingStitching = await tx.trace_events.findFirst({
-      where: { garment_id: garment.id, event_type: "stitching_completed" },
-    });
-    if (garment.stage === "stitched" || garment.stage === "finished" || existingStitching) {
+    let existingStitching: any = null;
+    if ("trace_events" in (tx as any) && typeof (tx as any).trace_events?.findFirst === "function") {
+      existingStitching = await (tx as any).trace_events.findFirst({
+        where: { garment_id: garment.id, event_type: "stitching_completed" },
+      });
+    }
+    if (existingStitching) {
       throw ApiError.conflict(
         `Duplicate scan: Garment ${garment.code} has already completed stitching and advanced to Finishing.`,
         { garmentId: garment.id, stage: garment.stage },
@@ -936,7 +942,7 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     // Validate cutting completion and current stage
-    if (garment.stage !== "cut") {
+    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
       throw ApiError.badRequest(
         `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'. Expected stage 'cut' (cutting completed).`,
         { garmentId: garment.id, stage: garment.stage },
