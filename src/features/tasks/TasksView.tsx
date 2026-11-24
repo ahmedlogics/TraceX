@@ -209,12 +209,16 @@ export function TasksSection() {
                 {(orders) => (
                   <Loadable query={qGarments}>
                     {(garments) => {
-                      const openCount = tasks.filter((t) => t.status === "open").length;
-                      const claimedCount = tasks.filter((t) => t.status === "claimed").length;
+                      const deptScopedTasks =
+                        deptFilter === "all"
+                          ? tasks
+                          : tasks.filter((t) => t.department === deptFilter);
+                      const openCount = deptScopedTasks.filter((t) => t.status === "open").length;
+                      const claimedCount = deptScopedTasks.filter((t) => t.status === "claimed").length;
                       const myDeptCount = tasks.filter(
                         (t) => t.department === me.department && t.status !== "done",
                       ).length;
-                      const doneCount = tasks.filter((t) => t.status === "done").length;
+                      const doneCount = deptScopedTasks.filter((t) => t.status === "done").length;
 
                       const rows = tasks.filter((t) => {
                         const matchesStatus =

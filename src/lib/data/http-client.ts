@@ -649,6 +649,16 @@ export function createHttpClient(): WearTrailClient {
           lotId: lotIds[0] || lotCodes[0] || o.lotId,
           lotIds,
           lotCodes,
+          issues: Array.isArray(o.issues)
+            ? o.issues.map((i: any) => ({
+                id: i.id,
+                lotId: i.lotId,
+                lotCode: i.lotCode,
+                materialName: i.materialName,
+                quantity: Number(i.quantity ?? 0),
+                performedAt: i.performedAt || new Date().toISOString(),
+              }))
+            : [],
         };
       });
     },

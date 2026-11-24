@@ -246,6 +246,14 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
             lotId: (o as any).lotId || lotIds[0],
             lotIds: (o as any).lotIds || lotIds,
             lotCodes: (o as any).lotCodes || lotIds,
+            issues: orderIssues.map((i) => ({
+              id: i.id,
+              lotId: i.lotId,
+              lotCode: i.lotId,
+              materialName: s.lots.find((l) => l.id === i.lotId)?.material || "Fabric Roll",
+              quantity: i.qty,
+              performedAt: i.issuedAt,
+            })),
           };
         }),
       ),

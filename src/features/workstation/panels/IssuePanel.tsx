@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   Clock,
-  Layers,
   Lock,
   Package,
   Radio,
@@ -22,7 +21,6 @@ import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/wt/DataTable";
 import { Field, ScopeNote } from "@/components/wt/forms";
 import { fmt, KeyValue, Section } from "@/components/wt/layout";
@@ -44,9 +42,9 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
   const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
 
-  const [activeTab, setActiveTab] = useState<"issuance" | "monitor">("issuance");
   const [selectedOrderId, setSelectedOrderId] = useState<string>("");
   const [scanUid, setScanUid] = useState<string>("");
+  const [queueTab, setQueueTab] = useState<"pending" | "issued">("pending");
 
   const isStoreStaff =
     me.role === "M" || me.department === "raw-store" || me.username === "rawstore.demo";
@@ -60,17 +58,29 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
       {(orders) => (
         <Loadable query={qLots}>
           {(lots) => {
-            const approvedOrders = orders.filter(
+            // Pending orders: approved/planned orders awaiting fabric allocation
+            const pendingOrders = orders.filter(
               (o) =>
-                o.status === "approved" || o.status === "planned" || o.status === "in-progress",
+                (o.status === "approved" || o.status === "planned") &&
+                (!o.lotCodes || o.lotCodes.length === 0) &&
+                (!o.issues || o.issues.length === 0),
             );
+
+            // Issued orders: already have fabric issued
+            const issuedOrders = orders.filter(
+              (o) =>
+                (o.lotCodes && o.lotCodes.length > 0) ||
+                (o.issues && o.issues.length > 0) ||
+                (o.status === "in-progress" && (o.lotIds?.length ?? 0) > 0),
+            );
+
+            const displayedOrders = queueTab === "pending" ? pendingOrders : issuedOrders;
 
             // Active target order is either explicitly selected, or context order, or first pending order
             const targetOrderId =
               selectedOrderId ||
               (activeCtx?.payload && (activeCtx.payload as any).orderId) ||
-              approvedOrders.find((o) => o.status === "approved" || o.status === "planned")?.id ||
-              approvedOrders[0]?.id ||
+              pendingOrders[0]?.id ||
               "";
 
             const targetOrder = orders.find((o) => o.id === targetOrderId);
@@ -78,7 +88,7 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
 
             const acceptedLots = lots.filter((l) => l.status === "accepted" && l.balanceQty > 0);
             const totalAcceptedMeters = acceptedLots.reduce((sum, l) => sum + (Number(l.balanceQty) || 0), 0);
-            const awaitingInspectionLots = lots.filter((l) => l.status === "awaiting-inspection");
+            const unapprovedLots = lots.filter((l) => l.status !== "accepted" || l.balanceQty <= 0);
 
             // Handle target order selection and arm context
             const handleSelectOrder = (order: ProductionOrder) => {
@@ -193,38 +203,24 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
 
             return (
               <div className="space-y-6">
-                {/* Mode Selector Tabs */}
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
-                    <TabsList className="flex h-auto flex-wrap">
-                      <TabsTrigger value="issuance" className="gap-2 text-xs">
-                        <Radio className="size-3.5 text-primary" />
-                        <span>Raw Store Issuance Dashboard</span>
-                        <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold">
-                          {approvedOrders.filter((o) => o.status === "approved" || o.status === "planned").length} Pending
-                        </span>
-                      </TabsTrigger>
-                      <TabsTrigger value="monitor" className="gap-2 text-xs">
-                        <Layers className="size-3.5 text-primary" />
-                        <span>Material Stock &amp; Rejection Monitor</span>
-                        <span className="rounded-full bg-muted text-muted-foreground px-1.5 py-0.5 text-[10px] font-semibold">
-                          {lots.length} Lots
-                        </span>
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-muted-foreground">Active Workstation:</span>
-                      <span className="rounded bg-primary/10 px-2 py-0.5 font-semibold text-primary">
-                        Station 2 (Scanner 2)
-                      </span>
-                    </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <Radio className="size-3.5 text-primary" />
+                    <span>Raw Store Issuance Workstation</span>
+                    <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold">
+                      {pendingOrders.length} Pending
+                    </span>
                   </div>
 
-                  {/* ------------------------------------------------------------- */}
-                  {/* MODE 1: RAW STORE ISSUANCE DASHBOARD                           */}
-                  {/* ------------------------------------------------------------- */}
-                  <TabsContent value="issuance" className="mt-4 space-y-6">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Active Workstation:</span>
+                    <span className="rounded bg-primary/10 px-2 py-0.5 font-semibold text-primary">
+                      Station 2 (Scanner 2)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-6">
                     {/* Header & Station Hardware Status Banner */}
                     <div className="rounded-xl border-2 border-primary/40 bg-card p-5 shadow-sm space-y-4">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -269,7 +265,7 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                       {/* Live Target Order Context Bar */}
                       {targetOrder ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold">
                               <Scissors className="size-3.5" />
                             </div>
@@ -280,17 +276,24 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                                 — {targetOrder.product} ({targetOrder.plannedQty} pcs)
                               </p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">
-                                Required Yardage:{" "}
-                                <strong className="text-foreground">{targetRequiredFabric} m</strong> ·
+                                Required Fabric:{" "}
+                                <strong className="text-foreground">{targetRequiredFabric} m</strong> ·{" "}
+                                Due Date: <span className="font-medium text-foreground">{targetOrder.dueDate}</span> ·{" "}
                                 Status:{" "}
                                 <span className="uppercase font-semibold">{targetOrder.status}</span>
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
-                              Scanner 2 Ready for Bundle Tag
-                            </span>
+                            {(targetOrder.lotCodes && targetOrder.lotCodes.length > 0) || (targetOrder.issues && targetOrder.issues.length > 0) ? (
+                              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                ✓ Fabric Already Issued ({targetOrder.lotCodes?.[0] || "Lot"})
+                              </span>
+                            ) : (
+                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
+                                Scanner 2 Ready for Bundle Tag
+                              </span>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -370,37 +373,84 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                       )}
                     </div>
 
-                    {/* Active Production Orders Queue (Pending Fabric) */}
+                    {/* Active Production Orders Queue */}
                     <Section
-                      title="Active Production Orders Queue (Pending Fabric)"
-                      description="Manager-approved production runs awaiting fabric issue. Click an order to set it as active target for Scanner 2."
+                      title="Production Orders Queue"
+                      description="Select an actionable approved order to arm Scanner 2. Completed issues are preserved separately."
                       actions={
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setQueueTab("pending")}
+                              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                                queueTab === "pending"
+                                  ? "bg-card text-foreground shadow-xs font-semibold"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Pending Fabric ({pendingOrders.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setQueueTab("issued")}
+                              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                                queueTab === "issued"
+                                  ? "bg-card text-foreground shadow-xs font-semibold"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Already Issued ({issuedOrders.length})
+                            </button>
+                          </div>
                           <PlanOrderDialog
-                            triggerLabel="+ New Production Order"
+                            triggerLabel="+ New Order"
                             onSuccess={handleOrderCreated}
                           />
-                          <span className="text-xs text-muted-foreground">
-                            {approvedOrders.length} active orders
-                          </span>
+                          <Button asChild size="sm" variant="ghost" className="h-7 text-xs gap-1">
+                            <AppLink href={paths.orders}>
+                              Manage in Orders <ArrowRight className="size-3" />
+                            </AppLink>
+                          </Button>
                         </div>
                       }
                     >
-                      {approvedOrders.length === 0 ? (
-                        <EmptyState title="Zero active production orders in queue">
+                      {displayedOrders.length === 0 ? (
+                        <EmptyState
+                          title={
+                            queueTab === "pending"
+                              ? "All approved orders have been issued fabric"
+                              : "No orders with issued fabric yet"
+                          }
+                        >
                           <div className="space-y-3 text-center">
                             <p className="text-sm text-muted-foreground">
-                              Create a new production order to begin fabric issuing.
+                              {queueTab === "pending"
+                                ? "No production orders are currently awaiting fabric allocation. Approved orders will appear here automatically."
+                                : "When bundles are scanned and issued at Scanner 2, completed orders will appear here."}
                             </p>
-                            <PlanOrderDialog
-                              triggerLabel="+ Create First Production Order"
-                              onSuccess={handleOrderCreated}
-                            />
+                            <div className="flex items-center justify-center gap-2">
+                              {queueTab === "pending" && issuedOrders.length > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={() => setQueueTab("issued")}
+                                >
+                                  View Already Issued Orders ({issuedOrders.length})
+                                </Button>
+                              )}
+                              <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                                <AppLink href={paths.orders}>
+                                  View All Orders in Planning
+                                </AppLink>
+                              </Button>
+                            </div>
                           </div>
                         </EmptyState>
                       ) : (
                         <DataTable
-                          rows={approvedOrders}
+                          rows={displayedOrders}
                           rowKey={(o) => o.id}
                           columns={[
                             {
@@ -444,24 +494,39 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                               cell: (o) => <StatusBadge status={o.status} />,
                             },
                             {
-                              header: "Linked Bundle",
+                              header: "Fabric Allocation",
                               cell: (o) => {
-                                const isLinked = o.status === "in-progress" || o.status === "completed";
-                                return isLinked ? (
-                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 border border-emerald-500/20">
-                                    <Check className="size-3" /> Linked &amp; Issued
+                                const hasIssued =
+                                  (o.lotCodes && o.lotCodes.length > 0) ||
+                                  (o.issues && o.issues.length > 0) ||
+                                  (o.status === "in-progress" && (o.lotIds?.length ?? 0) > 0);
+                                return hasIssued ? (
+                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    <Check className="size-3" /> Issued ({o.lotCodes?.[0] || o.lotId || "Done"})
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                    Unlinked (Awaiting Scan)
+                                  <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    Awaiting Allocation
                                   </span>
                                 );
                               },
                             },
                             {
-                              header: "Scanner 2 Target",
+                              header: "Workstation Action",
                               cell: (o) => {
                                 const isTarget = o.id === targetOrderId;
+                                const isIssued =
+                                  (o.lotCodes && o.lotCodes.length > 0) ||
+                                  (o.issues && o.issues.length > 0);
+
+                                if (isIssued && queueTab === "issued") {
+                                  return (
+                                    <span className="text-[11px] text-muted-foreground italic">
+                                      Allocation complete
+                                    </span>
+                                  );
+                                }
+
                                 return (
                                   <Button
                                     size="sm"
@@ -603,11 +668,9 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                             <span>{acceptedLots.length} passed rolls</span>
                           </div>
 
-                          <div className="divide-y rounded-lg border bg-card max-h-[320px] overflow-y-auto">
-                            {lots.map((l) => {
-                              const isPassed = l.status === "accepted";
-                              const hasStock = l.balanceQty > 0;
-                              return (
+                          {acceptedLots.length > 0 ? (
+                            <div className="divide-y rounded-lg border bg-card max-h-[320px] overflow-y-auto">
+                              {acceptedLots.map((l) => (
                                 <div
                                   key={l.id}
                                   className="flex items-center justify-between p-3 text-xs hover:bg-muted/30 transition-colors"
@@ -618,27 +681,21 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                                       <span className="font-mono text-[11px] rounded bg-muted px-1.5 py-0.5">
                                         {l.rfidUid ?? "Unbound"}
                                       </span>
-                                      {isPassed ? (
-                                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
-                                          <Check className="size-2.5" /> QC Passed
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
-                                          <Clock className="size-2.5" /> Awaiting QC
-                                        </span>
-                                      )}
+                                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
+                                        <Check className="size-2.5" /> QC Passed
+                                      </span>
                                     </div>
                                     <p className="text-muted-foreground line-clamp-1">{l.material}</p>
                                     <p className="text-[11px] text-foreground">
                                       Remaining:{" "}
-                                      <strong className={hasStock ? "text-emerald-600 font-bold" : "text-destructive font-bold"}>
+                                      <strong className="text-emerald-600 font-bold">
                                         {l.balanceQty} {l.unit ?? "m"}
                                       </strong>{" "}
                                       / {l.receivedQty} {l.unit ?? "m"}
                                     </p>
                                   </div>
 
-                                  {isPassed && hasStock && l.rfidUid ? (
+                                  {l.rfidUid ? (
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -652,145 +709,38 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                                     </Button>
                                   ) : (
                                     <span className="text-[10px] text-muted-foreground italic">
-                                      {!isPassed ? "QC Pending" : "Depleted"}
+                                      Unassigned
                                     </span>
                                   )}
                                 </div>
-                              );
-                            })}
-                          </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-dashed p-4 text-center space-y-1 bg-muted/20">
+                              <p className="text-xs font-semibold text-foreground">0 QC-Cleared Fabric Rolls Available</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                No rolls currently have cleared stock balance. {unapprovedLots.length} roll(s) in quarantine awaiting Incoming QC evaluation.
+                              </p>
+                            </div>
+                          )}
+
+                          {unapprovedLots.length > 0 && (
+                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs space-y-1">
+                              <div className="flex items-center justify-between font-semibold text-amber-800 dark:text-amber-300">
+                                <span>Quarantine / Awaiting QC ({unapprovedLots.length} rolls)</span>
+                                <AppLink href={paths.lots} className="text-[11px] underline text-amber-600 dark:text-amber-400">
+                                  View in Lots
+                                </AppLink>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                Rolls {unapprovedLots.map((l) => l.id).join(", ")} are in quarantine awaiting Incoming QC inspection before balance becomes issuable.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </Section>
                     </div>
-                  </TabsContent>
-
-                  {/* ------------------------------------------------------------- */}
-                  {/* MODE 2: MATERIAL STOCK & REJECTION MONITOR                     */}
-                  {/* ------------------------------------------------------------- */}
-                  <TabsContent value="monitor" className="mt-4 space-y-6">
-                    {/* Key Warehouse Balance Metrics */}
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div className="rounded-xl border bg-card p-4 shadow-sm">
-                        <span className="text-xs font-medium text-muted-foreground">Total Fabric Rolls</span>
-                        <p className="mt-2 text-2xl font-bold">{lots.length}</p>
-                      </div>
-                      <div className="rounded-xl border bg-card p-4 shadow-sm">
-                        <span className="text-xs font-medium text-muted-foreground">Usable Stock Balance</span>
-                        <p className="mt-2 text-2xl font-bold text-emerald-600">{totalAcceptedMeters.toFixed(1)} m</p>
-                      </div>
-                      <div className="rounded-xl border bg-card p-4 shadow-sm">
-                        <span className="text-xs font-medium text-muted-foreground">QC Pending Lots</span>
-                        <p className="mt-2 text-2xl font-bold text-amber-600">{awaitingInspectionLots.length}</p>
-                      </div>
-                      <div className="rounded-xl border bg-card p-4 shadow-sm">
-                        <span className="text-xs font-medium text-muted-foreground">Quarantined / Rejected</span>
-                        <p className="mt-2 text-2xl font-bold text-destructive">
-                          {lots.filter((l) => l.status === "rejected" || (l.heldQty ?? 0) > 0).length}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* All Material Lots Table */}
-                    <Section
-                      title="Material Stock Register & Clearance Dispositions"
-                      description="Active fabric lot balances, QC clearance statuses, and warehouse stock availability."
-                    >
-                      <DataTable
-                        rows={lots}
-                        rowKey={(l) => l.id}
-                        columns={[
-                          {
-                            header: "Lot ID",
-                            cell: (l) => <span className="wt-id font-bold">{l.id}</span>,
-                          },
-                          {
-                            header: "Fabric Specification",
-                            cell: (l) => (
-                              <div>
-                                <p className="font-medium text-xs">{l.material}</p>
-                                <p className="text-[11px] text-muted-foreground">Ref: {l.supplierRef}</p>
-                              </div>
-                            ),
-                          },
-                          {
-                            header: "Bound RFID Tag",
-                            cell: (l) => (
-                              <span className="font-mono text-xs rounded bg-muted px-1.5 py-0.5">
-                                {l.rfidUid ?? "Unbound"}
-                              </span>
-                            ),
-                          },
-                          {
-                            header: "QC Disposition",
-                            cell: (l) => {
-                              if (l.status === "accepted") {
-                                return (
-                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600">
-                                    <Check className="size-3" /> Accepted (Cleared)
-                                  </span>
-                                );
-                              }
-                              if (l.status === "rejected") {
-                                return (
-                                  <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
-                                    <XCircle className="size-3" /> Rejected / Quarantine
-                                  </span>
-                                );
-                              }
-                              return (
-                                <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600">
-                                  <Clock className="size-3" /> Awaiting Incoming QC
-                                </span>
-                              );
-                            },
-                          },
-                          {
-                            header: "Current Balance",
-                            cell: (l) => (
-                              <span className="font-bold text-xs">
-                                {l.balanceQty} / {l.receivedQty} {l.unit ?? "m"}
-                              </span>
-                            ),
-                          },
-                        ]}
-                      />
-                    </Section>
-
-                    {/* Scanner 2 Validation & Rejection Rules Reference */}
-                    <div className="rounded-xl border border-primary/20 bg-card p-5 space-y-4 shadow-sm">
-                      <div className="flex items-center gap-2 text-foreground font-bold">
-                        <ShieldCheck className="size-4 text-primary" />
-                        <h3>Station 2 Backend Automated Validation Rules</h3>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                        <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-                          <p className="font-semibold text-foreground">1. Random / Unbound Card Guard</p>
-                          <p className="text-muted-foreground">
-                            Scanned card must have active binding to a fabric lot. Unassigned or garment tags reject instantly: <em>&ldquo;Rejected: UID not recognised or has no bundle history.&rdquo;</em>
-                          </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-                          <p className="font-semibold text-foreground">2. QC.incoming Clearance Prerequisite</p>
-                          <p className="text-muted-foreground">
-                            Lot must be approved by Incoming QC. Awaiting-inspection or quarantined lots reject immediately: <em>&ldquo;Rejected: Lot has not passed Incoming QC inspection.&rdquo;</em>
-                          </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-                          <p className="font-semibold text-foreground">3. Duplicate Order Issue Guard</p>
-                          <p className="text-muted-foreground">
-                            The same bundle cannot be scanned twice for the same order: <em>&ldquo;Rejected: Bundle already issued to this order.&rdquo;</em>
-                          </p>
-                        </div>
-                        <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-                          <p className="font-semibold text-foreground">4. Quantity Sufficiency &amp; Depletion Guard</p>
-                          <p className="text-muted-foreground">
-                            Order quantity must not exceed remaining roll balance. Zero balance rolls block with: <em>&ldquo;Rejected: Bundle fully consumed (Balance: 0m).&rdquo;</em>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                  </div>
               </div>
             );
           }}
