@@ -77,10 +77,10 @@ export function StationShell() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Workstation"
-        actions={
-          activeStations.length > 1 ? (
+      {activeStations.length > 1 && (
+        <PageHeader
+          title="Workstation"
+          actions={
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Station:
@@ -97,9 +97,9 @@ export function StationShell() {
                 ))}
               </select>
             </div>
-          ) : undefined
-        }
-      />
+          }
+        />
+      )}
 
       <Loadable query={qStation}>
         {(stData) => {
