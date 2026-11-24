@@ -3,7 +3,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
-  Cpu,
   Info,
   OctagonAlert,
   Radio,
@@ -229,21 +228,6 @@ function RawStoreDashboard() {
             );
             const quarantineLots = lots.filter((l) => l.status === "awaiting-inspection");
 
-            // Extract recent material issues sorted by date desc
-            const recentIssues = orders
-              .flatMap((o) =>
-                (o.issues || []).map((i) => ({
-                  ...i,
-                  orderCode: o.id,
-                  orderProduct: o.product,
-                })),
-              )
-              .sort(
-                (a, b) =>
-                  new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime(),
-              )
-              .slice(0, 5);
-
             return (
               <div className="space-y-6">
                 {/* 4 Summary Cards Across the Top */}
@@ -312,7 +296,6 @@ function RawStoreDashboard() {
                 {/* Section: Pending Fabric Issue Queue */}
                 <Section
                   title="Pending Fabric Issue Queue"
-                  description="Approved production orders awaiting physical fabric bundle allocation at Station 2."
                   actions={
                     <Button asChild size="sm" className="h-8 text-xs gap-1.5">
                       <AppLink href={paths.workstation}>
@@ -378,131 +361,6 @@ function RawStoreDashboard() {
                     </div>
                   )}
                 </Section>
-
-                {/* 2-Column Responsive Grid: Fabric Stock & Recent Issues */}
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {/* Column 1: Fabric Stock & Availability */}
-                  <Section
-                    title="Fabric Stock & Availability"
-                    description="Current warehouse fabric inventory and QC clearance dispositions."
-                    actions={
-                      <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                        <AppLink href={paths.lots}>
-                          All Lots &rarr;
-                        </AppLink>
-                      </Button>
-                    }
-                  >
-                    <div className="space-y-3">
-                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
-                        {lots.slice(0, 5).map((lot) => {
-                          const isPassed = lot.status === "accepted";
-                          const hasStock = Number(lot.balanceQty) > 0;
-                          return (
-                            <div
-                              key={lot.id}
-                              className="flex items-center justify-between p-3 text-xs hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold wt-id">{lot.id}</span>
-                                  <span className="font-mono text-[11px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                                    {lot.rfidUid ? `Tag: ${lot.rfidUid}` : "Unassigned"}
-                                  </span>
-                                  {isPassed ? (
-                                    <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                      <CheckCircle2 className="size-2.5" /> QC Passed
-                                    </span>
-                                  ) : lot.status === "rejected" ? (
-                                    <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive">
-                                      Rejected
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                                      Awaiting QC
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-muted-foreground line-clamp-1">{lot.material}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-bold text-foreground">
-                                  <span className={hasStock ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                                    {lot.balanceQty} {lot.unit ?? "m"}
-                                  </span>{" "}
-                                  <span className="text-muted-foreground font-normal">/ {lot.receivedQty} {lot.unit ?? "m"}</span>
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {hasStock ? "Ready to Issue" : isPassed ? "Depleted" : "In Quarantine"}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {quarantineLots.length > 0 && availableStockM === 0 && (
-                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
-                          <p className="font-semibold flex items-center gap-1.5">
-                            <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                            Quarantine Notice ({quarantineLots.length} rolls awaiting evaluation)
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Fabric rolls are currently in quarantine awaiting Incoming QC evaluation. Once signed off at the Quality Gate, usable stock will automatically become available for issuance.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </Section>
-
-                  {/* Column 2: Recent Material Issues */}
-                  <Section
-                    title="Recent Material Issues"
-                    description="Audit trail of fabric rolls allocated and issued to production cutting."
-                  >
-                    {recentIssues.length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                          <Scissors className="size-4" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          No material issues recorded yet
-                        </p>
-                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                          When physical fabric bundles are scanned and linked at Station 2, issuance records will appear here.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
-                        {recentIssues.map((issue) => (
-                          <div
-                            key={issue.id}
-                            className="flex items-center justify-between p-3.5 text-xs hover:bg-muted/30 transition-colors"
-                          >
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold wt-id text-foreground">{issue.orderCode}</span>
-                                <span className="text-muted-foreground">·</span>
-                                <span className="font-medium text-foreground">{issue.orderProduct}</span>
-                              </div>
-                              <p className="text-muted-foreground">
-                                Lot: <span className="font-mono font-semibold text-foreground">{issue.lotCode}</span> ({issue.materialName})
-                              </p>
-                            </div>
-                            <div className="text-right space-y-0.5">
-                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                {issue.quantity} m issued
-                              </span>
-                              <p className="text-[10px] text-muted-foreground font-mono">
-                                {issue.performedAt ? new Date(issue.performedAt).toLocaleDateString() : "Recent"}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </Section>
-                </div>
               </div>
             );
           }}
@@ -531,18 +389,11 @@ export function DashboardView() {
         title={`Welcome back, ${me.displayName.split(" ")[0]}`}
         description={`${roleLabels[me.role]} · Department of ${departmentLabels[me.department]}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {(can.createLot(me) || can.receiveLot(me)) && (
+          (can.createLot(me) || can.receiveLot(me)) ? (
+            <div className="flex flex-wrap items-center gap-2">
               <ReceiveLotDialog triggerLabel="+ New Fabric Lot" />
-            )}
-            {canAccessRoute(me, "workstation") && (
-              <Button asChild size="sm" variant={(can.createLot(me) || can.receiveLot(me)) ? "outline" : "default"} className="gap-1.5">
-                <AppLink href={paths.workstation}>
-                  <Cpu className="size-4" /> Open workstation
-                </AppLink>
-              </Button>
-            )}
-          </div>
+            </div>
+          ) : undefined
         }
       />
 

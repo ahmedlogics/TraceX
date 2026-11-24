@@ -153,7 +153,6 @@ export function OrdersView() {
     <>
       <PageHeader
         title="Production Orders & Planning"
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Production orders" }]}
         actions={can.planOrder(me) ? <PlanOrderDialog /> : undefined}
       />
 

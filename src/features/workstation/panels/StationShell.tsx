@@ -77,7 +77,7 @@ export function StationShell() {
 
   return (
     <div className="space-y-6">
-      {activeStations.length > 1 && (
+      {activeStations.length > 1 && effectiveStation !== "fabric_issue" && (
         <PageHeader
           title="Workstation"
           actions={
@@ -230,7 +230,31 @@ export function StationShell() {
 
             {/* Feature-owned Panel Switch */}
             {effectiveStation === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
-            {effectiveStation === "fabric_issue" && <IssuePanel stationData={stData} />}
+            {effectiveStation === "fabric_issue" && (
+              <IssuePanel
+                stationData={stData}
+                headerActions={
+                  activeStations.length > 1 ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Station:
+                      </span>
+                      <select
+                        value={effectiveStation}
+                        onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
+                        className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        {activeStations.map((code) => (
+                          <option key={code} value={code}>
+                            {rfidStationLabels[code]} ({code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : undefined
+                }
+              />
+            )}
             {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
             {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
             {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
