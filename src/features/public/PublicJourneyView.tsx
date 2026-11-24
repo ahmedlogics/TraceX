@@ -588,11 +588,10 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
               <div
                 key={img.url + idx}
                 aria-hidden={!isActive}
-                className={`absolute inset-0 transition-all duration-700 ease-in-out flex items-center justify-center ${
-                  isActive
-                    ? "opacity-100 z-10 scale-100"
-                    : "opacity-0 z-0 scale-95 pointer-events-none"
-                }`}
+                className={`absolute inset-0 transition-all duration-700 ease-in-out flex items-center justify-center ${isActive
+                  ? "opacity-100 z-10 scale-100"
+                  : "opacity-0 z-0 scale-95 pointer-events-none"
+                  }`}
               >
                 {hasError ? (
                   <div className="flex flex-col items-center justify-center p-4 text-center space-y-1.5">
@@ -613,9 +612,8 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                         setImageErrorMap((prev) => ({ ...prev, [idx]: true }));
                       }
                     }}
-                    className={`h-full w-full object-cover object-center transition-transform duration-700 ease-out ${
-                      isActive ? "scale-100 group-hover:scale-[1.02]" : "scale-95"
-                    }`}
+                    className={`h-full w-full object-cover object-center transition-transform duration-700 ease-out ${isActive ? "scale-100 group-hover:scale-[1.02]" : "scale-95"
+                      }`}
                   />
                 )}
               </div>
@@ -669,11 +667,10 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                       setActiveSlide(idx);
                     }}
                     aria-label={`Go to slide ${idx + 1}`}
-                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                      idx === activeSlide
-                        ? "w-5 bg-gradient-to-r from-amber-400 via-pink-400 to-purple-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"
-                        : "w-1.5 bg-purple-700/60 hover:bg-purple-400"
-                    }`}
+                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${idx === activeSlide
+                      ? "w-5 bg-gradient-to-r from-amber-400 via-pink-400 to-purple-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"
+                      : "w-1.5 bg-purple-700/60 hover:bg-purple-400"
+                      }`}
                   />
                 ))}
               </div>
@@ -855,7 +852,7 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
           <div className="relative h-2 w-full overflow-hidden rounded-full bg-[#130B1C] border border-purple-500/20">
             <div
               className="h-full rounded-full bg-gradient-to-r from-amber-400 via-[#E879F9] to-emerald-400 transition-all duration-700 ease-out shadow-[0_0_8px_rgba(251,191,36,0.4)]"
-              style={{ width: `${ progressPercent }% ` }}
+              style={{ width: `${progressPercent}% ` }}
             />
           </div>
         </div>
@@ -875,11 +872,10 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                 {!isLast && (
                   <div
                     aria-hidden="true"
-                    className={`absolute left-4 top-8 bottom-0 -translate-x-1/2 -mb-3 transition-colors ${
-                      isCompleted
-                        ? "w-0.5 bg-gradient-to-b from-purple-400 via-[#E879F9] to-purple-600 shadow-[0_0_8px_rgba(232,121,249,0.5)]"
-                        : "w-0 border-l-2 border-dashed border-purple-800/40"
-                    }`}
+                    className={`absolute left-4 top-8 bottom-0 -translate-x-1/2 -mb-3 transition-colors ${isCompleted
+                      ? "w-0.5 bg-gradient-to-b from-purple-400 via-[#E879F9] to-purple-600 shadow-[0_0_8px_rgba(232,121,249,0.5)]"
+                      : "w-0 border-l-2 border-dashed border-purple-800/40"
+                      }`}
                   />
                 )}
 
@@ -904,11 +900,10 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
 
                 {/* Milestone Information Card */}
                 <div
-                  className={`flex-1 rounded-xl border p-3 sm:p-3.5 transition-all ${
-                    isCompleted
-                      ? "border-purple-500/25 bg-purple-950/25 hover:border-purple-500/40 hover:bg-purple-950/35 cursor-pointer"
-                      : "border-purple-800/20 bg-purple-950/10 opacity-60"
-                  }`}
+                  className={`flex-1 rounded-xl border p-3 sm:p-3.5 transition-all ${isCompleted
+                    ? "border-purple-500/25 bg-purple-950/25 hover:border-purple-500/40 hover:bg-purple-950/35 cursor-pointer"
+                    : "border-purple-800/20 bg-purple-950/10 opacity-60"
+                    }`}
                   onClick={() => isCompleted && toggleStage(stage.id)}
                   role={isCompleted ? "button" : undefined}
                   tabIndex={isCompleted ? 0 : undefined}
@@ -924,9 +919,8 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
                     <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          className={`font-semibold text-sm tracking-wide ${
-                            isCompleted ? "text-white" : "text-purple-300/70"
-                          }`}
+                          className={`font-semibold text-sm tracking-wide ${isCompleted ? "text-white" : "text-purple-300/70"
+                            }`}
                         >
                           {stage.name}
                         </span>
