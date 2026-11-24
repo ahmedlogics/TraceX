@@ -21,6 +21,13 @@ export const publicProductRecords: PublicProductRecord[] = [
     sampleCommitmentRef: "demo-commitment-0000",
   },
   {
+    publicId: "wt-shirt-2026-001",
+    garmentId: "SHIRT-001",
+    productName: "Classic Oxford Poplin Shirt",
+    productDescription: "Handcrafted white cotton poplin shirt, sustainably woven and tracked end-to-end.",
+    sampleCommitmentRef: "demo-commitment-0000",
+  },
+  {
     publicId: "shirt-001-demo",
     garmentId: "SHIRT-001",
     productName: "Classic poplin shirt",
@@ -42,5 +49,12 @@ export const publicProductRecords: PublicProductRecord[] = [
     productName: "Cotton trouser",
     productDescription: "Cotton trouser, size M.",
     sampleCommitmentRef: "demo-commitment-0003",
+  },
+  {
+    publicId: "shirt-003-demo",
+    garmentId: "SHIRT-003",
+    productName: "Oxford Classic Linen Shirt",
+    productDescription: "Linen casual shirt, size M.",
+    sampleCommitmentRef: "demo-commitment-0003-fail",
   },
 ];

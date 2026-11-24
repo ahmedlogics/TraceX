@@ -74,7 +74,7 @@ export function buildCanonicalPublicPayload(
   const stitching = events.find((e) => e.label.toLowerCase().includes("stitching"));
   if (
     stitching ||
-    ["stitching", "finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
+    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
       g.stage,
     )
   ) {
@@ -87,17 +87,22 @@ export function buildCanonicalPublicPayload(
   }
 
   // 5. Assembly / Finishing (Production)
+  // Only included if finished event exists or garment has moved past finishing stage.
+  // Stage "finishing" means garment is actively in finishing, not yet assembled.
   const assembled = events.find(
     (e) => e.label === "Finishing completed" || e.label.toLowerCase().includes("finishing"),
   );
   if (
     assembled ||
-    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(g.stage)
+    ["final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(g.stage)
   ) {
+    const stitchDate = milestones.find((m) => m.key === "stitching-completed")?.date;
+    const rawDate = day(assembled?.at ?? stitchDate ?? cut?.at ?? new Date().toISOString());
+    const finalDate = stitchDate && rawDate < stitchDate ? stitchDate : rawDate;
     milestones.push({
       key: "garment-assembled",
       label: "Garment assembled",
-      date: day(assembled?.at ?? cut?.at ?? new Date().toISOString()),
+      date: finalDate,
       department: "Production",
     });
   }
@@ -237,7 +242,7 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
       date: day(issue.at),
       department: "Raw Store",
       description:
-        "Inspected fabric rolls issued from storage and allocated to the automated cutting line.",
+        "Inspected fabric rolls cleared from storage and allocated to the cutting line for precision pattern layout.",
     });
   }
 
@@ -248,7 +253,8 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
       label: "Cut from fabric lot",
       date: day(cut.at),
       department: "Production",
-      description: "Garment panels precisely cut and assigned an individual tracking credential.",
+      description:
+        "Individual garment panels precisely cut from fabric lot and paired with an individual tracking credential.",
     });
   }
 
@@ -256,7 +262,7 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
   const stitching = events.find((e) => e.label.toLowerCase().includes("stitching"));
   if (
     stitching ||
-    ["stitching", "finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
+    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(
       g.stage,
     )
   ) {
@@ -265,24 +271,31 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
       label: "Seam stitching completed",
       date: day(stitching?.at ?? cut?.at ?? new Date().toISOString()),
       department: "Production",
-      description: "Precision seam stitching and tailoring assembly completed at the sewing line.",
+      description:
+        "Structural seams joined, sleeve panels set, and precision tailoring completed at the designated sewing line.",
     });
   }
 
   // 5. Assembly / Finishing (Production)
+  // Only included if finished event exists or garment has moved past finishing stage.
+  // Stage "finishing" means garment is actively in finishing, not yet assembled.
   const assembled = events.find(
     (e) => e.label === "Finishing completed" || e.label.toLowerCase().includes("finishing"),
   );
   if (
     assembled ||
-    ["finishing", "final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(g.stage)
+    ["final-qc", "packing", "warehouse", "allocated", "dispatched"].includes(g.stage)
   ) {
+    const stitchDate = milestones.find((m) => m.key === "stitching-completed")?.date;
+    const rawDate = day(assembled?.at ?? stitchDate ?? cut?.at ?? new Date().toISOString());
+    const finalDate = stitchDate && rawDate < stitchDate ? stitchDate : rawDate;
     milestones.push({
       key: "garment-assembled",
       label: "Garment assembled",
-      date: day(assembled?.at ?? cut?.at ?? new Date().toISOString()),
+      date: finalDate,
       department: "Production",
-      description: "Finishing, hardware attachment, and final steam pressing completed.",
+      description:
+        "Hardware attached, seam edges trimmed and neatened, and artisan steam pressing completed for final shape.",
     });
   }
 
@@ -300,7 +313,8 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
         label: "Passed quality control",
         date: day(when),
         department: "Quality Control",
-        description: "The garment passed comprehensive quality and workmanship evaluation.",
+        description:
+          "Garment passed multi-point quality inspection, verifying seam integrity, dimensional tolerances, and finish.",
       });
     }
 
@@ -315,7 +329,8 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
         label: "Packaged into master carton",
         date: day(packingEvent?.at ?? pkg?.createdAt ?? when ?? new Date().toISOString()),
         department: "Logistics",
-        description: "Quality-approved garment tagged and packed into master shipping carton.",
+        description:
+          "Quality-approved garment tagged with brand label, folded in protective wrap, and packed into master shipping carton.",
         details: pkg ? { cartonId: pkg.id } : undefined,
       });
     }
@@ -330,7 +345,8 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
         label: "Received at distribution warehouse",
         date: day(whEvent?.at ?? pkg?.createdAt ?? when ?? new Date().toISOString()),
         department: "Logistics",
-        description: "Master carton scanned and inventoried in verified distribution warehouse.",
+        description:
+          "Master shipping carton scanned, verified on intake manifest, and safely cataloged in central warehouse inventory.",
       });
     }
 
@@ -347,7 +363,8 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
           label: "Dispatched to authorized retail network",
           date: day(dispatchDate),
           department: "Logistics",
-          description: "Verified shipment left the facility for an authorized retail partner.",
+          description:
+            "Sealed commercial consignment departed our facility on scheduled transit to an authorized retail partner.",
         });
       }
     }
@@ -445,9 +462,19 @@ export function projectJourney(s: DemoState, publicId: string): PublicJourney | 
 }
 
 function evidenceFor(s: DemoState, garmentId: string): PublicEvidenceState {
+  const g = s.garments.find((x) => x.id === garmentId);
+  if (!g) return "unavailable";
+
   const c = s.ledger.find((l) => l.subjectType === "garment" && l.subjectId === garmentId);
-  if (!c || c.status === "failed") return "unavailable";
-  return c.status === "confirmed" ? "sample-confirmed" : "pending";
+  if (c?.status === "confirmed") return "sample-confirmed";
+  if (c?.status === "failed") return "failed";
+
+  // Garment is actively in production; ledger commitment is scheduled upon retail dispatch
+  if (g.stage !== "dispatched" || c?.status === "pending" || c?.status === "submitted" || !c) {
+    return "pending";
+  }
+
+  return "unavailable";
 }
 
 export function projectProof(s: DemoState, publicId: string): PublicProof | null {

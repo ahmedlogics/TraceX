@@ -36,7 +36,7 @@ export type PublicStatus =
   | "Not released"
   | "Recalled";
 
-export type PublicEvidenceState = "sample-confirmed" | "pending" | "unavailable";
+export type PublicEvidenceState = "sample-confirmed" | "pending" | "unavailable" | "failed";
 
 export interface PublicNotice {
   kind: "hold" | "recall";
