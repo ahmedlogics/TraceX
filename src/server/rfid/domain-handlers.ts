@@ -681,12 +681,12 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
         });
 
         let cuttingJobId =
-          context.actionContext?.payload?.cuttingJobId ||
+          (context.actionContext?.payload as any)?.["cuttingJobId"] ||
           (context.actionContext as any)?.cutting_job_id ||
           existingInput?.cutting_job_id ||
           null;
         let cuttingInputId =
-          context.actionContext?.payload?.cuttingInputId ||
+          (context.actionContext?.payload as any)?.["cuttingInputId"] ||
           (context.actionContext as any)?.cutting_input_id ||
           existingInput?.id ||
           null;
@@ -910,7 +910,7 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     const garment = binding.garments;
-    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
+    if (garment.stage !== "cut" && garment.stage !== "stitched") {
       throw ApiError.badRequest(
         `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'.`,
         { garmentId: garment.id, stage: garment.stage },
@@ -1022,8 +1022,6 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
     if (
       garment.stage !== "stitched" &&
       garment.stage !== "finished" &&
-      garment.stage !== "finishing" &&
-      garment.stage !== "stitching" &&
       garment.stage !== "cut"
     ) {
       throw ApiError.badRequest(

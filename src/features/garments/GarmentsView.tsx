@@ -500,7 +500,7 @@ export function GarmentsView() {
                     cell: (g) => {
                       const canStitch =
                         (activeStationCode === "stitching" || isStitching) &&
-                        (g.stage === "cut" || g.stage === "stitching");
+                        (g.stage === "cutting" || g.stage === "stitching");
                       const canFinish =
                         (activeStationCode === "finishing" || isFinishing) &&
                         g.stage !== "warehouse" &&

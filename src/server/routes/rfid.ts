@@ -632,17 +632,19 @@ rfidRouter.post(
 
         // If database literally has zero production orders, auto-provision a default order
         if (!resolvedProductionOrderId) {
-          const spec = await prisma.product_specifications.findFirst();
+          const spec = await prisma.product_spec_versions.findFirst();
+          const workflow = await prisma.workflow_versions.findFirst();
           const adminUser = await prisma.staff_users.findFirst();
-          if (spec && adminUser) {
+          if (spec && workflow && adminUser) {
             const newOrder = await prisma.production_orders.create({
               data: {
                 code: `ORD-AUTO-${Date.now().toString(36).toUpperCase()}`,
-                product_spec_id: spec.id,
+                workflow_version_id: workflow.id,
+                product_spec_version_id: spec.id,
                 planned_quantity: 10,
                 status: "approved",
                 created_by: adminUser.id,
-                due_date: new Date(Date.now() + 7 * 86400000),
+                planned_for: new Date(Date.now() + 7 * 86400000),
               },
             });
             resolvedProductionOrderId = newOrder.id;

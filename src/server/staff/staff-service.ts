@@ -218,7 +218,7 @@ export async function getStaffDashboard(
   const rejectedLots = allMaterialLots.filter((l) => l.status === "rejected");
   const availableStockM = acceptedLots
     .filter((l) => l.unit === "m" || !l.unit)
-    .reduce((sum, l) => sum + Number(l.balanceQty ?? (l as any).availableAcceptedQuantity ?? 0), 0);
+    .reduce((sum, l) => sum + Number((l as any).balanceQty ?? l.availableAcceptedQuantity ?? 0), 0);
 
   // Filter tasks scoped to user — incoming QC only counts actionable tasks where lot is ready for QC
   const scopedOpenTasks = domainTasks.filter((t) => {

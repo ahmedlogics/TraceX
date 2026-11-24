@@ -68,11 +68,11 @@ function PlanShipmentDialog() {
 
 interface DispatchedBoxDetails {
   boxId: string;
-  rfidUid?: string;
+  rfidUid?: string | undefined;
   status: string;
-  garments: { id: string; productName?: string; size?: string; stage: string }[];
-  destination?: string;
-  shipmentId?: string;
+  garments: { id: string; productName?: string | undefined; size?: string | undefined; stage: string }[];
+  destination?: string | undefined;
+  shipmentId?: string | undefined;
   scannedAt: string;
 }
 

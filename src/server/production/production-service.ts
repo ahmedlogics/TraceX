@@ -1118,7 +1118,7 @@ export async function routineProductionScan(
     let nextExpectedStation = "";
 
     if (input.stationCode === "stitching") {
-      if (currentStage !== "cut" && currentStage !== "stitched" && currentStage !== "stitching") {
+      if (currentStage !== "cut" && currentStage !== "stitched") {
         throw ApiError.badRequest(
           `Garment '${garment.code}' is at stage '${currentStage}'. Expected stage 'cut' for stitching station.`,
           { currentStage, station: "stitching" },

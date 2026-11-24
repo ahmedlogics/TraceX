@@ -361,7 +361,10 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
     packGarment: (gid, pkgId) => act((s, u) => E.packGarment(s, u, gid, pkgId)),
     createPackage: (rfidUid, customId) => act((s, u) => E.createPackage(s, u, rfidUid, customId)),
     sealPackage: (packageId) => act((s, u) => E.sealPackage(s, u, packageId)),
-    receiveStock: (gid) => act((s, u) => E.receiveStock(s, u, gid)),
+    receiveStock: (gid) =>
+      act((s, u) => {
+        E.receiveStock(s, u, gid);
+      }),
     allocateStock: (gid, sid) => act((s, u) => E.allocateStock(s, u, gid, sid)),
     listShipments: () => read((s) => s.shipments),
     getShipment: (id) =>

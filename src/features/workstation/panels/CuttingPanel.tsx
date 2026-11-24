@@ -210,11 +210,11 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
           message: `Loaded roll details for ${matchingLot.material} (${matchingLot.balanceQty || matchingLot.receivedQty}m available). Select an order to cut.`,
         });
       } else if (step === "scanning_products" && selectedOrderId && scannedLotId) {
-        if (outcome.resolution === "rejected") {
+        if (outcome.resolution !== "accepted") {
           setAlertMessage({
             type: "error",
             title: "Scan Rejected",
-            message: outcome.message || `Tag UID '${uid}' was rejected by Scanner 3.`,
+            message: outcome.message || outcome.rejectReason || `Tag UID '${uid}' was rejected by Scanner 3.`,
           });
           return;
         }
@@ -223,7 +223,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
         void qGarments.refetch();
         void qOrders.refetch();
 
-        const enrolledCode = outcome.subjectCode || "Success";
+        const enrolledCode = outcome.garmentCode || outcome.subjectId || "Success";
         setAlertMessage({
           type: "success",
           title: `Garment Cut & Enrolled: ${enrolledCode}`,

@@ -1519,7 +1519,7 @@ export function routineScan(
   }
 
   if (stationCode === "stitching") {
-    if (g.stage !== "stitching" && g.stage !== "cut") {
+    if (g.stage !== "stitching" && g.stage !== "cutting") {
       return rejectScan(
         s,
         normUid,
@@ -2905,7 +2905,7 @@ export function receiveStock(
   // 2. Fallback: single garment
   const g = getGarment(s, cleanInput);
   ensure(
-    (g.stage === "packing" || g.stage === "packed") && g.packageId,
+    g.stage === "packing" && Boolean(g.packageId),
     "conflict",
     `${g.id} is not packed and waiting for the warehouse.`,
   );
