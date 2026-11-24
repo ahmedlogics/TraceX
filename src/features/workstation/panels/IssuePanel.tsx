@@ -458,10 +458,7 @@ export function IssuePanel({
                     </Section>
 
                     {/* Scanner 2 Interactive Card Tap & Fast RFID Interface */}
-                    <Section
-                      title="Station 2 Scanner Simulation & Tap"
-                      description="Present physical fabric bundle RFID tag to Scanner 2 to automatically validate and link it to the selected order."
-                    >
+                    <Section title="Station 2 Scanner Simulation & Tap">
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <Field
