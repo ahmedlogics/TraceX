@@ -42,7 +42,6 @@ export function PlanOrderDialog({
       trigger={triggerLabel ?? defaultTrigger}
       triggerVariant="default"
       title="Create Production Order"
-      description="Orders are digital instructions authorizing garment manufacture. Orders have NO RFID cards; individual garment cards are bound at Cutting. Approved orders can immediately be issued fabric at Station 2."
       submitLabel="Create & Authorize Order"
       onSubmit={async () => {
         const id = await run(
