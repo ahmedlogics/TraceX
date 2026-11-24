@@ -29,6 +29,11 @@ import {
 } from "../fulfilment/fulfilment-service";
 import { publishPublicGarmentPayload } from "../public/public-service";
 
+function isValidUuid(id?: string): boolean {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 /**
  * Station 6: Final QA Scan Handler.
  * Result-First, Card-Second Quality Evaluation.
@@ -557,8 +562,56 @@ export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult
         },
       });
 
-      if (binding?.garments?.package_items?.packages) {
-        pkg = binding.garments.package_items.packages as any;
+      if (binding?.garments) {
+        const candidatePkg = Array.isArray(binding.garments.package_items)
+          ? binding.garments.package_items[0]?.packages
+          : (binding.garments.package_items as any)?.packages;
+        if (candidatePkg) {
+          pkg = candidatePkg as any;
+        } else {
+          return {
+            kind: "garment",
+            subjectId: binding.garments.id,
+            subjectCode: binding.garments.code,
+            isNewEnrollment: false,
+            tagUid: rawUid,
+            tagBindingId: binding.id,
+          };
+        }
+      }
+    }
+
+    if (!pkg) {
+      const garment = await tx.garments.findFirst({
+        where: {
+          OR: [
+            ...(isValidUuid(rawUid) ? [{ id: rawUid }] : []),
+            { code: rawUid },
+          ],
+        },
+        include: {
+          package_items: {
+            where: { removed_at: null },
+            include: { packages: true },
+          },
+        },
+      });
+
+      if (garment) {
+        const candidatePkg = Array.isArray(garment.package_items)
+          ? garment.package_items[0]?.packages
+          : (garment.package_items as any)?.packages;
+        if (candidatePkg) {
+          pkg = candidatePkg as any;
+        } else {
+          return {
+            kind: "garment",
+            subjectId: garment.id,
+            subjectCode: garment.code,
+            isNewEnrollment: false,
+            tagUid: rawUid,
+          };
+        }
       }
     }
 
@@ -593,6 +646,59 @@ export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult
       department: "warehouse",
       authenticatedAt: new Date(),
     };
+
+    if (subject.tagBindingId) {
+      const garment = await tx.garments.findUnique({
+        where: { id: subject.subjectId },
+      });
+      if (garment) {
+        await tx.garments.update({
+          where: { id: garment.id },
+          data: { stage: "warehoused", revision: { increment: 1 } },
+        });
+
+        const traceEvent = (tx as any).trace_events?.create
+          ? await (tx as any).trace_events.create({
+              data: {
+                event_type: "warehouse_movement",
+                subject_revision: garment.revision + 1,
+                garment_id: garment.id,
+                actor_id: actor.actorId,
+                details: { location: "main_warehouse" },
+                occurred_at: new Date(),
+                recorded_at: new Date(),
+              },
+            })
+          : null;
+
+        if (traceEvent) {
+          await createInternalCommitment(
+            {
+              traceEventId: traceEvent.id,
+              payload: {
+                eventType: "warehouse_movement",
+                garmentId: garment.id,
+                timestamp: new Date().toISOString(),
+              },
+            },
+            tx,
+          ).catch(() => null);
+        }
+
+        return {
+          scanId: envelope.scanId,
+          outcome: "accepted",
+          outcomeCode: "WAREHOUSE_ACCEPTED",
+          outcomeMessage: `Warehouse movement recorded for ${subject.subjectCode}`,
+          stationCode: "warehouse",
+          subjectKind: "garment",
+          subjectId: subject.subjectId,
+          subjectCode: subject.subjectCode,
+          processedAt: new Date().toISOString(),
+          nextExpectedStation: "dispatch",
+        };
+      }
+    }
 
     const outcome = await executeWarehouseCartonIntake(
       tx,

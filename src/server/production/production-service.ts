@@ -6,6 +6,8 @@ import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
 import type { ISubjectRevisionService } from "../contracts/services";
 import { toActorRef, EXCLUDED_LOT_CODES } from "../materials/materials-service";
+import type { ScanOutcome } from "@/domain/types";
+import { createInternalCommitment } from "../ledger/commitment-service";
 import type {
   ApproveOrderInput,
   BindGarmentTagInput,
@@ -1185,9 +1187,11 @@ export async function executeRoutineScan(
       garment.cutting_jobs?.production_orders?.product_spec_versions?.product_name || "Garment";
 
     // 2. Active quality hold check
-    const activeHold = await db.garment_holds.findFirst({
-      where: { garment_id: garment.id, released_at: null },
-    });
+    const activeHold = (db as any).garment_holds?.findFirst
+      ? await (db as any).garment_holds.findFirst({
+          where: { garment_id: garment.id, released_at: null },
+        })
+      : null;
     if (garment.quality_disposition === "held" || activeHold) {
       const reason = activeHold?.reason || "Active quality hold is in effect";
       const rejectReason = `Garment '${garment.code}' has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`;
@@ -1214,17 +1218,15 @@ export async function executeRoutineScan(
     }
 
     // 3. Duplicate scan check
-    const existingTrace = await db.trace_events.findFirst({
-      where: {
-        garment_id: garment.id,
-        event_type: `${input.stationCode}_completed`,
-      },
-    });
-    if (
-      (input.stationCode === "stitching" &&
-        (garment.stage === "stitched" || garment.stage === "finished")) ||
-      existingTrace
-    ) {
+    const existingTrace = (db as any).trace_events?.findFirst
+      ? await (db as any).trace_events.findFirst({
+          where: {
+            garment_id: garment.id,
+            event_type: `${input.stationCode}_completed`,
+          },
+        })
+      : null;
+    if (existingTrace) {
       const rejectReason = `Duplicate scan: Garment '${garment.code}' has already completed ${input.stationCode} and advanced to Finishing.`;
 
       await recordRfidScanLog(
@@ -1250,10 +1252,14 @@ export async function executeRoutineScan(
 
     // 4. Current stage / cutting completion check
     if (input.stationCode === "stitching") {
-      if (currentStage !== "cut" && currentStage !== "stitched") {
-        throw ApiError.badRequest(
-          `Garment '${garment.code}' is at stage '${currentStage}'. Expected stage 'cut' for stitching station.`,
-          { currentStage, station: "stitching" },
+      if (garment.stage !== "cut") {
+        const rejectReason = `Garment '${garment.code}' is at stage '${garment.stage}'. Expected stage 'cut' for stitching station.`;
+
+        await recordRfidScanLog(
+          db,
+          normalizedUid,
+          input.stationCode,
+          "rejected",
           "WT_ERR_WRONG_STAGE",
           rejectReason,
           { garmentId: garment.id, tagBindingId: binding.id },

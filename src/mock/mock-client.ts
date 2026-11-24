@@ -252,7 +252,7 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
               lotCode: i.lotId,
               materialName: s.lots.find((l) => l.id === i.lotId)?.material || "Fabric Roll",
               quantity: i.qty,
-              performedAt: i.issuedAt,
+              performedAt: (i as any).issuedAt || i.at,
             })),
           };
         }),

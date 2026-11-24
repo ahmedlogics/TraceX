@@ -20,4 +20,9 @@ export const evidenceLabel: Record<
     tone: "neutral",
     text: "This record is verified off-chain with deterministic SHA-256 hashing. No external blockchain transaction has been registered for this item.",
   },
+  failed: {
+    label: "Verification Failed",
+    tone: "danger",
+    text: "Cryptographic commitment verification failed or mismatch detected against the public ledger.",
+  },
 };

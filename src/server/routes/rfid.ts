@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { prisma } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import { validateBody } from "../middleware/validation";
 import { sendSuccess, ApiError } from "../middleware/responses";
 import { VersionedScanEnvelopeSchema } from "../rfid/schemas";
@@ -987,7 +987,11 @@ rfidRouter.post(
   prismaAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { uid, stationCode } = req.body as { uid?: string; stationCode?: "stitching" | "finishing" | "dispatch" };
+      const { uid, stationCode, binId } = req.body as {
+        uid?: string;
+        stationCode?: "stitching" | "finishing" | "warehouse" | "dispatch";
+        binId?: string;
+      };
       if (!uid || !stationCode) throw ApiError.badRequest("uid and stationCode are required.");
 
       const staff = getStaffUser(req);
@@ -1002,6 +1006,10 @@ rfidRouter.post(
         );
         sendSuccess(res, outcome, 200);
         return;
+      }
+
+      if (stationCode === "dispatch") {
+        throw ApiError.badRequest("Dispatch scans must be executed at station 'dispatch'.");
       }
 
       const outcome = await executeRoutineScan(
