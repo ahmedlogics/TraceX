@@ -194,6 +194,7 @@ export interface SubmitQcPayload {
   scope?: "incoming" | "final" | "reinspection" | undefined;
   checklist: ChecklistItem[];
   notes: string;
+  discard?: boolean | undefined;
 }
 
 export interface PackGarmentPayload {
@@ -252,7 +253,7 @@ export interface ScanOutcome {
 export interface RfidTagBinding {
   id: string;
   uid: RfidUid;
-  subjectType: "lot" | "garment";
+  subjectType: "lot" | "garment" | "package" | "box";
   subjectId: string;
   boundAt: string;
   boundBy: string;
@@ -318,6 +319,15 @@ export interface MaterialIssue {
 
 export type OrderStatus = "draft" | "planned" | "approved" | "in-progress" | "completed";
 
+export interface OrderIssueSummary {
+  id: string;
+  lotId?: string | undefined;
+  lotCode?: string | undefined;
+  materialName?: string | undefined;
+  quantity: number;
+  performedAt: string;
+}
+
 export interface ProductionOrder {
   id: string;
   product: string;
@@ -328,6 +338,10 @@ export interface ProductionOrder {
   plannedBy: string;
   approvedBy?: string | undefined;
   approvedAt?: string | undefined;
+  lotId?: string | undefined;
+  lotIds?: string[] | undefined;
+  lotCodes?: string[] | undefined;
+  issues?: OrderIssueSummary[] | undefined;
 }
 
 /** A labelled panel set cut from actual issued fabric; links lot -> order -> garment. */
@@ -346,7 +360,9 @@ export interface CuttingOutput {
 export type LifecycleStage =
   | "cutting"
   | "stitching"
+  | "stitched"
   | "finishing"
+  | "finished"
   | "final-qc"
   | "rework"
   | "packing"
@@ -464,6 +480,7 @@ export interface Task {
   department: Department;
   subjectType: "lot" | "order" | "garment" | "shipment" | "inspection" | "rework";
   subjectId: string;
+  subjectCode?: string | null | undefined;
   checkpoint?: SensorId | undefined;
   status: TaskStatus;
   assigneeId?: string | undefined;
@@ -472,7 +489,7 @@ export interface Task {
   completedAt?: string | undefined;
 }
 
-export type PackageStatus = "open" | "sealed";
+export type PackageStatus = "open" | "sealed" | "dispatched";
 
 export interface Package {
   id: string;
@@ -482,9 +499,10 @@ export interface Package {
   createdAt: string;
   sealedAt?: string | undefined;
   binId?: string | undefined;
+  rfidUid?: string | undefined;
 }
 
-export type ShipmentStatus = "draft" | "planned" | "departed";
+export type ShipmentStatus = "draft" | "planned" | "loading" | "departed";
 
 export interface Shipment {
   id: string;

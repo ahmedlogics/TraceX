@@ -17,18 +17,25 @@
 
 #include "config.h"
 
+#ifndef CONTEXT_TIMEOUT_MS
+#define CONTEXT_TIMEOUT_MS  5000
+#endif
+
 // ===========================================================================
 // PIN DEFINITIONS (Exact hardware layout: 9 physical reader stations)
+// Chronological pipeline order matching factory workstation flow:
+// 0: fabric_receiving -> 1: fabric_issue -> 2: cutting -> 3: stitching ->
+// 4: finishing -> 5: final_qc -> 6: packing -> 7: warehouse -> 8: dispatch
 // ===========================================================================
-#define SS_PIN1  27  // Reader 0: fabric_receiving
-#define SS_PIN2  12  // Reader 1: fabric_issue
-#define SS_PIN3  15  // Reader 2: final_qc
-#define SS_PIN4  2   // Reader 3: cutting
-#define SS_PIN5  4   // Reader 4: warehouse
-#define SS_PIN6  16  // Reader 5: finishing
-#define SS_PIN7  5   // Reader 6: stitching
-#define SS_PIN8  17  // Reader 7: packing
-#define SS_PIN9  21  // Reader 8: dispatch
+#define SS_PIN1  27  // Reader 0: Station 1 - fabric_receiving
+#define SS_PIN2  12  // Reader 1: Station 2 - fabric_issue
+#define SS_PIN3  15  // Reader 2: Station 3 - cutting
+#define SS_PIN4  2   // Reader 3: Station 4 - stitching
+#define SS_PIN5  4   // Reader 4: Station 5 - finishing
+#define SS_PIN6  16  // Reader 5: Station 6 - final_qc
+#define SS_PIN7  5   // Reader 6: Station 7 - packing
+#define SS_PIN8  17  // Reader 7: Station 8 - warehouse
+#define SS_PIN9  21  // Reader 8: Station 9 - dispatch
 #define SS_SPARE 22  // Spare / unallocated
 
 #define RST_PIN1 26
@@ -46,12 +53,12 @@ const int SS_PINS[NUM_READERS] = {
 const char* const STATION_NAMES[NUM_READERS] = {
   "fabric_receiving",
   "fabric_issue",
-  "final_qc",
   "cutting",
-  "warehouse",
-  "finishing",
   "stitching",
+  "finishing",
+  "final_qc",
   "packing",
+  "warehouse",
   "dispatch"
 };
 
@@ -204,11 +211,13 @@ class WearTrailHardware {
       Serial.println(" Firmware Version: v1.0.0 (WearTrail RFC Contract)");
       Serial.println("==================================================");
 
-      // Generate stable boot ID: "boot-" + last 6 hex chars of MAC
+      // Initialize WiFi station mode to obtain genuine MAC and unique boot ID
+      WiFi.mode(WIFI_STA);
       uint8_t mac[6];
       WiFi.macAddress(mac);
-      char buf[32];
-      snprintf(buf, sizeof(buf), "boot-%02x%02x%02x", mac[3], mac[4], mac[5]);
+      char buf[40];
+      uint16_t randSuffix = (uint16_t)(esp_random() & 0xFFFF);
+      snprintf(buf, sizeof(buf), "boot-%02x%02x%02x-%04x", mac[3], mac[4], mac[5], randSuffix);
       bootId = String(buf);
       Serial.print("[BOOT] Boot Identifier : "); Serial.println(bootId);
       Serial.print("[BOOT] Configured Device: "); Serial.println(DEVICE_ID);
@@ -327,7 +336,7 @@ class WearTrailHardware {
       lastContextPollMs = millis();
 
       HTTPClient http;
-      http.setTimeout(2500);
+      http.setTimeout(CONTEXT_TIMEOUT_MS);
       String url = baseUrl() + "/context/active?deviceId=" + DEVICE_ID;
       http.begin(url);
       http.addHeader("X-Device-Secret", DEVICE_SECRET);
@@ -382,7 +391,7 @@ class WearTrailHardware {
 
     void acknowledgeContext(const String& contextId, int readerIndex) {
       HTTPClient http;
-      http.setTimeout(2500);
+      http.setTimeout(CONTEXT_TIMEOUT_MS);
       String url = baseUrl() + "/device/contexts/" + contextId + "/ack";
       http.begin(url);
       http.addHeader("Content-Type", "application/json");

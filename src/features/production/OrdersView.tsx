@@ -14,7 +14,14 @@ import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useDirectory, UserName } from "@/features/shared/directory";
 import { useMe } from "@/features/shared/useMe";
 
-function PlanOrderDialog() {
+export function PlanOrderDialog({
+  triggerLabel,
+  onSuccess,
+}: {
+  triggerLabel?: React.ReactNode;
+  onSuccess?: (orderId: string) => void;
+} = {}) {
+  const me = useMe();
   const { run } = useWtAction();
   const qSpecs = useWtQuery(["product-specs"], (c) => c.listProductSpecs());
   const [selectedSpecId, setSelectedSpecId] = useState("");
@@ -22,19 +29,36 @@ function PlanOrderDialog() {
   const [styleCode, setStyle] = useState("WT-SH-320");
   const [qty, setQty] = useState("4");
   const [dueDate, setDue] = useState("2026-12-15");
+  const [autoApprove, setAutoApprove] = useState(true);
+
+  const defaultTrigger = (
+    <span className="inline-flex items-center gap-1.5 font-semibold">
+      <FilePlus2 className="size-4" /> Create Production Order
+    </span>
+  );
 
   return (
     <FormDialog
-      trigger="Plan production order"
-      title="Plan a Production Order"
-      description="Orders are digital instructions authorizing garment manufacture. Orders have NO RFID cards; individual garment cards are bound at Cutting."
-      submitLabel="Create production order"
-      onSubmit={async () =>
-        !!(await run(
+      trigger={triggerLabel ?? defaultTrigger}
+      triggerVariant="default"
+      title="Create Production Order"
+      description="Orders are digital instructions authorizing garment manufacture. Orders have NO RFID cards; individual garment cards are bound at Cutting. Approved orders can immediately be issued fabric at Station 2."
+      submitLabel="Create & Authorize Order"
+      onSubmit={async () => {
+        const id = await run(
           (c) => c.planOrder({ product, styleCode, qty: Number(qty), dueDate }),
-          (id) => `${id} planned successfully.`,
-        ))
-      }
+          (orderId) => `${orderId} created successfully.`,
+        );
+        if (id) {
+          const resolvedId = typeof id === "string" ? id : (id as any).orderId || String(id);
+          if (autoApprove && can.approveOrder(me)) {
+            await run((c) => c.approveOrder(resolvedId), `${resolvedId} approved and ready for fabric issue.`);
+          }
+          onSuccess?.(resolvedId);
+          return true;
+        }
+        return false;
+      }}
     >
       <Loadable query={qSpecs}>
         {(specs) => (
@@ -96,8 +120,20 @@ function PlanOrderDialog() {
               );
             })()}
 
+            {can.approveOrder(me) && (
+              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer rounded-md border border-primary/20 bg-primary/5 p-2.5">
+                <input
+                  type="checkbox"
+                  checked={autoApprove}
+                  onChange={(e) => setAutoApprove(e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary size-4"
+                />
+                <span>Approve immediately for production (ready for Station 2 fabric issue)</span>
+              </label>
+            )}
+
             <p className="text-xs text-muted-foreground pt-1">
-              Note: Factory managers approve planned orders before fabric can be issued at Station 2.
+              Note: Orders are digital instructions. Fabric bundle tags are linked at Station 2; garment RFID tags are bound at Station 3 (Cutting).
             </p>
           </div>
         )}
@@ -245,6 +281,18 @@ export function OrdersView() {
                     header: "Actions",
                     cell: (o) => (
                       <div className="flex items-center gap-1.5">
+                        {can.issueMaterial(me) && o.status === "approved" && (!o.lotCodes || o.lotCodes.length === 0) && (
+                          <Button asChild size="sm" className="h-7 text-xs bg-primary">
+                            <AppLink href={paths.workstation}>
+                              Issue Fabric <ArrowRight className="size-3 ml-1" />
+                            </AppLink>
+                          </Button>
+                        )}
+                        {((o.lotCodes && o.lotCodes.length > 0) || (o.lotIds && o.lotIds.length > 0) || (o.issues && o.issues.length > 0)) && (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <CheckCircle2 className="size-2.5" /> Fabric Issued
+                          </span>
+                        )}
                         {can.approveOrder(me) && (o.status === "planned" || o.status === "draft") && (
                           <Button
                             size="sm"

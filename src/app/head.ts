@@ -1,6 +1,6 @@
 /** Per-route head metadata helper. */
 export function pageHead(title: string, description: string) {
-  const full = `${title} · WearTrail`;
+  const full = `${title} · TraceX`;
   return {
     meta: [
       { title: full },

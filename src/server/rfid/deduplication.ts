@@ -45,38 +45,64 @@ export async function checkExistingScan(
   requestFingerprint: Buffer,
   db: PrismaClient | PrismaTransactionClient,
 ): Promise<ExistingScanEvaluation> {
-  const existing = await db.rfid_scans.findFirst({
-    where: {
-      device_id: envelope.deviceId,
-      OR: [
-        { scan_id: envelope.scanId },
-        {
-          boot_id: envelope.bootId,
-          sequence: BigInt(envelope.sequence),
+  // 1. Exact scan_id check on this device (device_id, scan_id is globally unique)
+  const exactScan = typeof db.rfid_scans.findUnique === "function"
+    ? await db.rfid_scans.findUnique({
+        where: {
+          device_id_scan_id: {
+            device_id: envelope.deviceId,
+            scan_id: envelope.scanId,
+          },
         },
-      ],
-    },
-  });
+      })
+    : await db.rfid_scans.findFirst({
+        where: {
+          device_id: envelope.deviceId,
+          scan_id: envelope.scanId,
+        },
+      });
 
-  if (!existing) {
-    return { isDuplicate: false, isConflict: false };
-  }
+  if (exactScan) {
+    if (exactScan.outcome === "rejected") {
+      // Allow retry / reprocessing if the previous attempt was rejected due to transient failure
+      return { isDuplicate: false, isConflict: false, existingScan: exactScan };
+    }
 
-  const isMatch = Buffer.compare(existing.request_sha256, requestFingerprint) === 0;
-
-  if (isMatch) {
+    const isMatch = Buffer.compare(exactScan.request_sha256, requestFingerprint) === 0;
     return {
       isDuplicate: true,
-      isConflict: false,
-      existingScan: existing,
+      isConflict: !isMatch,
+      existingScan: exactScan,
     };
   }
 
-  return {
-    isDuplicate: true,
-    isConflict: true,
-    existingScan: existing,
-  };
+  // 2. Boot ID + sequence check within 60s window
+  const dedupWindow = new Date(Date.now() - 60 * 1000);
+  if (envelope.bootId && envelope.bootId !== "boot-000000") {
+    const existingBySeq = await db.rfid_scans.findFirst({
+      where: {
+        device_id: envelope.deviceId,
+        boot_id: envelope.bootId,
+        sequence: BigInt(envelope.sequence),
+        received_at: { gte: dedupWindow },
+      },
+      orderBy: { received_at: "desc" },
+    });
+
+    if (existingBySeq) {
+      if (existingBySeq.outcome === "rejected") {
+        return { isDuplicate: false, isConflict: false, existingScan: existingBySeq };
+      }
+      const isMatch = Buffer.compare(existingBySeq.request_sha256, requestFingerprint) === 0;
+      return {
+        isDuplicate: true,
+        isConflict: !isMatch,
+        existingScan: existingBySeq,
+      };
+    }
+  }
+
+  return { isDuplicate: false, isConflict: false };
 }
 
 /**

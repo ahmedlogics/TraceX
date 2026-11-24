@@ -72,6 +72,32 @@ describe("Member 3: Quality Control & Incoming QC", () => {
     expect(lot.balanceQty).toBe(accepted);
   });
 
+  it("incoming QC accepts and reconciles decimal quantities correctly (e.g. 24.9m with 24m accepted and 0.9m held)", () => {
+    const s = createSeed();
+    const qualityUser = as(s, "quality.demo");
+
+    const lot = s.lots.find((l) => l.id === "FAB-002")!;
+    lot.receivedQty = 24.9;
+    const insp = s.inspections.find((i) => i.subjectId === "FAB-002" && i.status === "open")!;
+
+    E.submitIncomingQc(s, qualityUser, {
+      lotId: lot.id,
+      inspectionId: insp.id,
+      acceptedQty: 24,
+      heldQty: 0.9,
+      rejectedQty: 0,
+      checklist: insp.checklist.map((c) => ({ ...c, checked: true })),
+      notes: "Decimal lot breakdown approved",
+      result: "pass",
+    });
+
+    expect(lot.status).toBe("accepted");
+    expect(lot.acceptedQty).toBe(24);
+    expect(lot.heldQty).toBe(0.9);
+    expect(lot.rejectedQty).toBe(0);
+    expect(lot.balanceQty).toBe(24);
+  });
+
   it("Final QA: rejects bundle card or unexpected-stage garment", () => {
     const s = createSeed();
     const inspector = as(s, "quality.demo");
@@ -525,5 +551,67 @@ describe("Member 3: Fulfilment, Warehousing & Outbound Departure Gate", () => {
 
     // Sibling remained unaffected throughout entire process
     expect(sibling.stage).toBe(initialSiblingStage);
+  });
+
+  it("Station 9: Aggregate Carton Dispatch Scan & Automated Gate Pipeline", () => {
+    const s = createSeed();
+    const dispStaff = as(s, "dispatch.demo");
+
+    // 1. Check 1: Unrecognised Box Tag
+    const unrecognisedRes = E.dispatchBoxScan(s, dispStaff, "UNKNOWN-TAG-999");
+    expect(unrecognisedRes.resolution).toBe("rejected_unknown_card");
+    expect(unrecognisedRes.rejectReason).toMatch(/Unrecognised Box Tag/i);
+
+    // 2. Check 2: Cannot dispatch empty box
+    const emptyPkgId = E.createPackage(s, as(s, "packing.demo"));
+    const emptyRes = E.dispatchBoxScan(s, dispStaff, emptyPkgId);
+    expect(emptyRes.resolution).toBe("rejected_business_rule");
+    expect(emptyRes.rejectReason).toMatch(/Cannot dispatch empty box/i);
+
+    // 3. Prepare sealed box with 2 garments
+    const pkg = s.packages.find((p) => p.id === "PKG-001")!;
+    expect(pkg.garmentIds.length).toBeGreaterThan(0);
+    const linkedShirt = s.garments.find((g) => g.id === pkg.garmentIds[0])!;
+
+    // 4. Check 4: Active Quality Hold Blocker
+    linkedShirt.hold = {
+      since: "2026-11-22T08:00:00Z",
+      reason: "Stain mark on cuff",
+      inspectionId: "INSP-TEST-HOLD",
+    };
+    const holdRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
+    expect(holdRes.resolution).toBe("rejected_business_rule");
+    expect(holdRes.rejectReason).toMatch(/Blocked.*active Quality Hold/i);
+    expect(pkg.status).toBe("sealed");
+
+    // 5. Clear hold -> Instant Atomic Status Advancement
+    linkedShirt.hold = null;
+    const acceptRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
+    expect(acceptRes.resolution).toBe("accepted");
+    expect(pkg.status).toBe("dispatched");
+    expect(linkedShirt.stage).toBe("dispatched");
+
+    // Verify downstream integration:
+    // a. Garment has shipment ID linked
+    expect(linkedShirt.shipmentId).toBeDefined();
+    // b. Target shipment has verified the garment
+    const targetShipment = s.shipments.find((sh) => sh.id === linkedShirt.shipmentId)!;
+    expect(targetShipment.verifiedGarmentIds).toContain(linkedShirt.id);
+    // c. Supply chain ledger recorded cryptographic commitments
+    const garmentCommitment = s.ledger.find(
+      (l) => l.subjectType === "garment" && l.subjectId === linkedShirt.id && l.milestone.includes("Station 9"),
+    );
+    expect(garmentCommitment).toBeDefined();
+    expect(garmentCommitment?.status).toBe("confirmed");
+    const shipmentCommitment = s.ledger.find(
+      (l) => l.subjectType === "shipment" && l.subjectId === targetShipment.id,
+    );
+    expect(shipmentCommitment).toBeDefined();
+    expect(shipmentCommitment?.status).toBe("confirmed");
+
+    // 6. Check 3: Duplicate Dispatch Guard
+    const dupRes = E.dispatchBoxScan(s, dispStaff, pkg.id);
+    expect(dupRes.resolution).toBe("rejected_business_rule");
+    expect(dupRes.rejectReason).toMatch(/Box Already Dispatched/i);
   });
 });

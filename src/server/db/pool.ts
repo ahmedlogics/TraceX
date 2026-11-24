@@ -27,6 +27,7 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
 
   if (!globalThis.__wt_pg_pool) {
     const maxVal = process.env["DB_POOL_MAX"];
+    const timeoutVal = process.env["DB_POOL_TIMEOUT_MS"];
     const caPath = path.resolve(process.cwd(), "certs", "supabase-ca.crt");
     const ca = fs.existsSync(caPath) ? fs.readFileSync(caPath, "utf8") : undefined;
 
@@ -38,9 +39,10 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
       database: parsed.database ?? undefined,
       user: parsed.user ?? undefined,
       password: parsed.password ?? undefined,
-      max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 10),
+      max: options?.maxConnections ?? (maxVal ? Number.parseInt(maxVal, 10) : 20),
       idleTimeoutMillis: options?.idleTimeoutMillis ?? 30000,
-      connectionTimeoutMillis: options?.connectionTimeoutMillis ?? 30000,
+      connectionTimeoutMillis:
+        options?.connectionTimeoutMillis ?? (timeoutVal ? Number.parseInt(timeoutVal, 10) : 60000),
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,
       ssl: ca ? { ca, rejectUnauthorized: true } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),

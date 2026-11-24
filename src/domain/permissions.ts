@@ -38,7 +38,8 @@ export type RouteKey =
   | "audit"
   | "reports"
   | "adminUsers"
-  | "settings";
+  | "settings"
+  | "nfcHub";
 
 const ALL: Role[] = ["A", "M", "O", "P", "Q", "L"];
 
@@ -49,8 +50,8 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   workstation: ["M", "O", "P", "Q", "L"],
   materialLots: ["M", "O", "Q"],
   materialLot: ["M", "O", "Q"],
-  productionOrders: ["M", "P", "Q"],
-  productionOrder: ["M", "P", "Q"],
+  productionOrders: ["M", "A", "P", "O", "Q"],
+  productionOrder: ["M", "A", "P", "O", "Q"],
   garments: ["M", "P", "Q", "L"],
   garment: ["M", "P", "Q", "L"],
   quality: ["M", "Q"],
@@ -65,14 +66,47 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   reports: ["A", "M"],
   adminUsers: ["A"],
   settings: ["A", "M"],
+  nfcHub: ["M"],
 };
 
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   if (!user || user.status !== "active") return false;
 
+  // NFC Tag Passport screen is strictly reserved for manager.demo
+  if (key === "nfcHub") {
+    return user.username === "manager.demo" || user.role === "M";
+  }
+
+  // Stitching and Finishing operators: strictly Home, Garments, and Rework screens
+  if (
+    user.username === "stitching.demo" ||
+    user.department?.toLowerCase() === "stitching" ||
+    user.username === "finishing.demo" ||
+    user.department?.toLowerCase() === "finishing"
+  ) {
+    const shopAllowed: RouteKey[] = [
+      "account",
+      "home",
+      "tasks",
+      "garments",
+      "garment",
+      "rework",
+      "reworkCase",
+    ];
+    return shopAllowed.includes(key);
+  }
+
   // Receiving operators only handle materials/receiving, not production orders
   if (
     (user.username === "receiving.demo" || user.department === "receiving") &&
+    (key === "productionOrders" || key === "productionOrder")
+  ) {
+    return false;
+  }
+
+  // Cutting operators operate on their workstation table by scanning bundle cards, not production orders screen
+  if (
+    (user.username === "cutting.demo" || user.department === "cutting") &&
     (key === "productionOrders" || key === "productionOrder")
   ) {
     return false;
@@ -86,36 +120,53 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return false;
   }
 
+  // Dispatch operators only handle outbound shipments and dock gate dispatch (strictly remove garments and fulfilment)
+  if (
+    user.username === "dispatch.demo" ||
+    (user.role === "L" && user.department === "dispatch")
+  ) {
+    if (key === "garments" || key === "garment" || key === "fulfilment") {
+      return false;
+    }
+  }
+
+  // Packing operators only handle workstation box cartoning (strictly remove garments, fulfilment, and shipments)
+  if (
+    user.username === "packing.demo" ||
+    (user.role === "L" && user.department === "packing")
+  ) {
+    if (
+      key === "garments" ||
+      key === "garment" ||
+      key === "fulfilment" ||
+      key === "shipments" ||
+      key === "shipment"
+    ) {
+      return false;
+    }
+  }
+
   // Strict role + department scoping for Quality Inspector role (Q)
   if (user.role === "Q") {
-    const isIncomingQc =
-      user.username?.toLowerCase() === "qc.incoming" ||
-      user.department?.toLowerCase() === "receiving" ||
-      user.department?.toLowerCase() === "raw-store" ||
-      (user.department as string)?.toLowerCase() === "raw_store";
+    const isIncomingQc = user.username?.toLowerCase() === "qc.incoming";
 
     if (isIncomingQc) {
-      // Incoming Material QC Inspector: strictly Home, Tasks, Material Lots, and Quality (incoming sign-offs)
+      // Incoming Material QC Inspector: strictly Home, Tasks, Material Lots
       const incomingAllowed: RouteKey[] = [
         "account",
         "home",
         "tasks",
         "materialLots",
         "materialLot",
-        "quality",
         "inspection",
       ];
       return incomingAllowed.includes(key);
     }
 
-    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Tasks, Workstation, Garments, Quality, and Rework
+    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Quality, and Rework
     const finalQcAllowed: RouteKey[] = [
       "account",
       "home",
-      "tasks",
-      "workstation",
-      "garments",
-      "garment",
       "quality",
       "inspection",
       "rework",
@@ -138,9 +189,23 @@ export const can = {
       u.role === "A" ||
       (u.role === "O" && (u.department === "receiving" || u.username === "receiving.demo"))),
   receiveLot: (u: StaffUser) => is(u, "O", "receiving"),
-  issueMaterial: (u: StaffUser) => is(u, "O", "raw-store"),
-  planOrder: (u: StaffUser) => is(u, "M"),
-  approveOrder: (u: StaffUser) => is(u, "M"),
+  issueMaterial: (u: StaffUser) =>
+    u.status === "active" &&
+    (u.role === "M" ||
+      u.role === "A" ||
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
+  planOrder: (u: StaffUser) =>
+    u.status === "active" &&
+    (u.role === "M" ||
+      u.role === "A" ||
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
+  approveOrder: (u: StaffUser) =>
+    u.status === "active" &&
+    (u.role === "M" ||
+      u.role === "A" ||
+      (u.role === "O" && (u.department === "raw-store" || u.username === "rawstore.demo"))),
+  accessNfcHub: (u: StaffUser) =>
+    u.status === "active" && (u.username === "manager.demo" || u.role === "M"),
   claimTask: (u: StaffUser, t: Task) =>
     u.role !== "M" && u.department === t.department && t.status === "open",
   assignTask: (u: StaffUser) => is(u, "M"),
@@ -207,7 +272,9 @@ export const can = {
   },
   assignRework: (u: StaffUser, c: ReworkCase) => is(u, "M") && c.status === "awaiting-assignment",
   completeRework: (u: StaffUser, c: ReworkCase) =>
-    u.role === "P" && c.status === "assigned" && c.assignedDepartment === u.department,
+    (u.role === "P" && c.status === "assigned" && c.assignedDepartment === u.department) ||
+    (u.role === "Q" && (c.status === "assigned" || c.status === "repaired" || c.assignedDepartment === "quality")) ||
+    (u.role === "M"),
   packGarment: (u: StaffUser) => is(u, "L", "packing"),
   receiveStock: (u: StaffUser) => is(u, "L", "warehouse"),
   allocateStock: (u: StaffUser) => is(u, "L", "warehouse"),

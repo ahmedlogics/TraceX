@@ -17,7 +17,7 @@
 // 3) Hardware Device Identity & Pre-Shared Secret
 #define DEVICE_ID           "26ee6645-9da8-49b3-8e88-feb5707adce6"
 #define DEVICE_SECRET       "REPLACE_WITH_DEVICE_SECRET"
-#define MAPPING_VERSION     1
+#define MAPPING_VERSION     2
 
 // 4) Operational Tuning
 #define HTTP_TIMEOUT_MS     5000

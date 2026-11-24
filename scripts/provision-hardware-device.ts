@@ -23,15 +23,15 @@ export const HARDWARE_DEVICE_NAME = "TexTracer ESP32 9-Reader Hardware";
 
 /**
  * Verified Physical Wiring Mapping (0-based firmware readerIndex -> SS GPIO -> stationCode):
- * 0: GPIO 27 -> fabric_receiving
- * 1: GPIO 12 -> fabric_issue
- * 2: GPIO 15 -> final_qc
- * 3: GPIO 2  -> cutting
- * 4: GPIO 4  -> warehouse
- * 5: GPIO 16 -> finishing
- * 6: GPIO 5  -> stitching
- * 7: GPIO 17 -> packing
- * 8: GPIO 21 -> dispatch
+ * 0: GPIO 27 -> Station 1: fabric_receiving
+ * 1: GPIO 12 -> Station 2: fabric_issue
+ * 2: GPIO 15 -> Station 3: cutting
+ * 3: GPIO 2  -> Station 4: stitching
+ * 4: GPIO 4  -> Station 5: finishing
+ * 5: GPIO 16 -> Station 6: final_qc
+ * 6: GPIO 5  -> Station 7: packing
+ * 7: GPIO 17 -> Station 8: warehouse
+ * 8: GPIO 21 -> Station 9: dispatch
  */
 export const HARDWARE_READER_MAPPINGS: Array<{
   readerIndex: number;
@@ -41,12 +41,12 @@ export const HARDWARE_READER_MAPPINGS: Array<{
 }> = [
   { readerIndex: 0, gpio: 27, stationCode: "fabric_receiving", label: "Antenna 0 (GPIO 27 - Receiving)" },
   { readerIndex: 1, gpio: 12, stationCode: "fabric_issue",     label: "Antenna 1 (GPIO 12 - Fabric Issue)" },
-  { readerIndex: 2, gpio: 15, stationCode: "final_qc",         label: "Antenna 2 (GPIO 15 - Final QA Gate)" },
-  { readerIndex: 3, gpio: 2,  stationCode: "cutting",          label: "Antenna 3 (GPIO 2 - Cutting Table)" },
-  { readerIndex: 4, gpio: 4,  stationCode: "warehouse",        label: "Antenna 4 (GPIO 4 - Warehouse Inbound)" },
-  { readerIndex: 5, gpio: 16, stationCode: "finishing",        label: "Antenna 5 (GPIO 16 - Finishing & Tagging)" },
-  { readerIndex: 6, gpio: 5,  stationCode: "stitching",        label: "Antenna 6 (GPIO 5 - Stitching Line)" },
-  { readerIndex: 7, gpio: 17, stationCode: "packing",          label: "Antenna 7 (GPIO 17 - Packaging)" },
+  { readerIndex: 2, gpio: 15, stationCode: "cutting",          label: "Antenna 2 (GPIO 15 - Cutting Table)" },
+  { readerIndex: 3, gpio: 2,  stationCode: "stitching",        label: "Antenna 3 (GPIO 2 - Stitching Line)" },
+  { readerIndex: 4, gpio: 4,  stationCode: "finishing",        label: "Antenna 4 (GPIO 4 - Finishing & Tagging)" },
+  { readerIndex: 5, gpio: 16, stationCode: "final_qc",         label: "Antenna 5 (GPIO 16 - Final QA Gate)" },
+  { readerIndex: 6, gpio: 5,  stationCode: "packing",          label: "Antenna 6 (GPIO 5 - Packaging)" },
+  { readerIndex: 7, gpio: 17, stationCode: "warehouse",        label: "Antenna 7 (GPIO 17 - Warehouse Inbound)" },
   { readerIndex: 8, gpio: 21, stationCode: "dispatch",         label: "Antenna 8 (GPIO 21 - Dispatch Dock)" },
 ];
 

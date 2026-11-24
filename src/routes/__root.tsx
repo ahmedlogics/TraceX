@@ -80,13 +80,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "WearTrail" },
+      { title: "TraceX" },
       {
         name: "description",
         content:
-          "WearTrail traces individual garments through factory operations and gives shoppers a public product journey.",
+          "TraceX traces individual garments through factory operations and gives shoppers a public product journey.",
       },
-      { property: "og:title", content: "WearTrail" },
+      { property: "og:title", content: "TraceX" },
       { property: "og:description", content: "Follow the journey behind what you wear." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

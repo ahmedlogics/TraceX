@@ -257,10 +257,19 @@ function createIsolatedMockDb() {
       },
     },
     rfid_scans: {
+      findUnique: async ({ where }: any) => {
+        if (where.device_id_scan_id) {
+          const k = where.device_id_scan_id;
+          return store.rfid_scans.find((s) => s.device_id === k.device_id && s.scan_id === k.scan_id) ?? null;
+        }
+        return null;
+      },
       findFirst: async ({ where }: any) => {
         return (
           store.rfid_scans.find((s) => {
-            if (s.device_id !== where.device_id) return false;
+            if (where.device_id && s.device_id !== where.device_id) return false;
+            if (where.scan_id && s.scan_id === where.scan_id) return true;
+            if (where.boot_id && BigInt(s.sequence) === BigInt(where.sequence)) return true;
             const matchScanId = where.OR?.some((cond: any) => cond.scan_id === s.scan_id);
             const matchSeq = where.OR?.some(
               (cond: any) => cond.boot_id === s.boot_id && BigInt(cond.sequence) === BigInt(s.sequence),
@@ -271,6 +280,17 @@ function createIsolatedMockDb() {
       },
       create: async ({ data }: any) => {
         const record = { id: crypto.randomUUID(), received_at: new Date(), ...data };
+        store.rfid_scans.push(record);
+        return record;
+      },
+      upsert: async ({ where, update, create }: any) => {
+        const k = where.device_id_scan_id;
+        const existing = store.rfid_scans.find((s) => s.device_id === k.device_id && s.scan_id === k.scan_id);
+        if (existing) {
+          Object.assign(existing, update);
+          return existing;
+        }
+        const record = { id: crypto.randomUUID(), received_at: new Date(), ...create };
         store.rfid_scans.push(record);
         return record;
       },

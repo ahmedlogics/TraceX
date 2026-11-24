@@ -201,14 +201,16 @@ export interface WearTrailClient {
   cancelContext(contextId: string): Promise<void>;
   /** Resolve a tag UID scan: returns the outcome (accepted or rejected with reason). */
   resolveRfidScan(uid: string): Promise<ScanOutcome>;
-  /** Routine scan at Stitching, Finishing, or Warehouse: identifies garment/carton and advances stage. */
+  /** Routine scan at Stitching, Finishing, Warehouse, or Dispatch: identifies subject and advances stage. */
   routineScan(
     uid: string,
-    stationCode: "stitching" | "finishing" | "warehouse",
+    stationCode: "stitching" | "finishing" | "warehouse" | "dispatch",
     binId?: string,
   ): Promise<ScanOutcome>;
   /** Warehouse Carton Intake: scans Master Box RFID Tag and receives carton and all linked garments into storage bin. */
   warehouseIntake(tagUid: string, binId?: string): Promise<ScanOutcome>;
+  /** Station 9 Dispatch: aggregate carton dispatch scan by box tag or container ID. */
+  dispatchBoxScan(boxTagOrId: string, shipmentId?: string): Promise<ScanOutcome>;
   /** Staff-only: simulate a scan event (mock only). */
   simulateRfidScan(uid: string): Promise<ScanOutcome>;
 
@@ -238,9 +240,10 @@ export interface WearTrailClient {
   approveOrder(orderId: string): Promise<void>;
   recordCuttingOutput(input: {
     orderId: string;
-    issueId: string;
+    issueId?: string | undefined;
     fabricUsed: number;
     size: string;
+    tagUid?: string | undefined;
   }): Promise<string>;
 
   // Garments — GET /garments(/:id)
@@ -279,8 +282,8 @@ export interface WearTrailClient {
 
   // Fulfilment & shipments
   getFulfilment(): Promise<FulfilmentData>;
-  packGarment(garmentId: string): Promise<string>;
-  createPackage(): Promise<string>;
+  packGarment(garmentId: string, packageId?: string): Promise<string>;
+  createPackage(rfidUid?: string, customId?: string): Promise<string>;
   sealPackage(packageId: string): Promise<void>;
   receiveStock(garmentId: string): Promise<void>;
   allocateStock(garmentId: string, shipmentId: string): Promise<void>;

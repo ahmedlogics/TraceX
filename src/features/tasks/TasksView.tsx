@@ -9,7 +9,7 @@ import { fmt, PageHeader } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { departmentLabels } from "@/domain/labels";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type { Department, Garment, MaterialLot, ProductionOrder, Task } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useDirectory, UserName } from "@/features/shared/directory";
@@ -26,8 +26,22 @@ function getTaskPrerequisite(
     return { ready: true, label: "Completed" };
   }
   switch (task.kind) {
-    case "incoming-qc":
+    case "incoming-qc": {
+      const lot = lots.find(
+        (l) =>
+          l.id === task.subjectId ||
+          (l as any).lotId === task.subjectId ||
+          (l as any).code === task.subjectId,
+      );
+      if (lot && (!lot.rfidUid || lot.rfidUid === "unassigned")) {
+        return {
+          ready: false,
+          label: "Blocked: Awaiting Receiving",
+          detail: "Station 1 bundle card registration pending",
+        };
+      }
       return { ready: true, label: "Ready for Inspection", detail: "Fabric bundle in quarantine" };
+    }
     case "issue-material": {
       const order = orders.find((o) => o.id === task.subjectId);
       if (order && order.status !== "approved" && order.status !== "in-progress") {
@@ -140,12 +154,15 @@ export function TasksSection() {
   const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
   const { run, pending } = useWtAction();
-  const [status, setStatus] = useState("active");
-  const [deptFilter, setDeptFilter] = useState("all");
-  const [search, setSearch] = useState("");
-
   const isManager = me.role === "M" || me.role === "A";
   const isIncomingQC = me.username === "qc.incoming";
+  const isQualityRole = me.role === "Q";
+
+  const [status, setStatus] = useState("active");
+  const [deptFilter, setDeptFilter] = useState(
+    isManager ? "all" : (isIncomingQC || isQualityRole) ? "quality" : me.department,
+  );
+  const [search, setSearch] = useState("");
 
   const deptOptions = isManager
     ? [
@@ -160,14 +177,17 @@ export function TasksSection() {
         { value: "warehouse", label: "Warehouse" },
         { value: "dispatch", label: "Dispatch" },
       ]
-    : isIncomingQC
+    : isIncomingQC || isQualityRole
     ? [
-        { value: "all", label: "All Incoming Areas" },
+        { value: "quality", label: "Quality Inspection Queue" },
+        { value: "all", label: "All Tasks" },
         { value: "receiving", label: "Receiving" },
         { value: "raw-store", label: "Raw Store" },
-        { value: "quality", label: "Quality" },
       ]
-    : [{ value: me.department, label: departmentLabels[me.department] || me.department }];
+    : [
+        { value: me.department, label: `My Department (${departmentLabels[me.department] || me.department})` },
+        { value: "all", label: "All Factory Tasks" },
+      ];
 
   return (
     <>
@@ -189,12 +209,16 @@ export function TasksSection() {
                 {(orders) => (
                   <Loadable query={qGarments}>
                     {(garments) => {
-                      const openCount = tasks.filter((t) => t.status === "open").length;
-                      const claimedCount = tasks.filter((t) => t.status === "claimed").length;
+                      const deptScopedTasks =
+                        deptFilter === "all"
+                          ? tasks
+                          : tasks.filter((t) => t.department === deptFilter);
+                      const openCount = deptScopedTasks.filter((t) => t.status === "open").length;
+                      const claimedCount = deptScopedTasks.filter((t) => t.status === "claimed").length;
                       const myDeptCount = tasks.filter(
                         (t) => t.department === me.department && t.status !== "done",
                       ).length;
-                      const doneCount = tasks.filter((t) => t.status === "done").length;
+                      const doneCount = deptScopedTasks.filter((t) => t.status === "done").length;
 
                       const rows = tasks.filter((t) => {
                         const matchesStatus =
@@ -209,8 +233,40 @@ export function TasksSection() {
                         return matchesStatus && matchesDept && matchesSearch;
                       });
 
-                    return (
-                      <div className="space-y-6">
+                      const resolveSubjectDisplay = (t: Task) => {
+                        if (t.subjectCode && !t.subjectCode.includes("-uuid-") && t.subjectCode.length < 32) {
+                          return t.subjectCode;
+                        }
+                        if (t.subjectType === "order") {
+                          const match = orders.find(
+                            (o) => o.id === t.subjectId || (o as any).orderId === t.subjectId || (o as any).code === t.subjectId,
+                          );
+                          if (match) return match.id;
+                        }
+                        if (t.subjectType === "lot") {
+                          const match = lots.find(
+                            (l) => l.id === t.subjectId || (l as any).lotId === t.subjectId || (l as any).code === t.subjectId,
+                          );
+                          if (match) return (match as any).code || match.id;
+                        }
+                        if (t.subjectType === "garment") {
+                          const match = garments.find(
+                            (g) => g.id === t.subjectId || (g as any).garmentId === t.subjectId || (g as any).code === t.subjectId,
+                          );
+                          if (match) return match.id;
+                        }
+                        // Fallback: check across all collections in case subjectType is missing or generic
+                        const anyLot = lots.find((l) => l.id === t.subjectId || (l as any).lotId === t.subjectId);
+                        if (anyLot) return (anyLot as any).code || anyLot.id;
+                        const anyOrder = orders.find((o) => o.id === t.subjectId || (o as any).orderId === t.subjectId);
+                        if (anyOrder) return anyOrder.id;
+
+                        if (t.subjectCode) return t.subjectCode;
+                        return t.subjectId.length > 16 ? `#${t.subjectId.slice(0, 8)}` : t.subjectId;
+                      };
+
+                      return (
+                        <div className="space-y-6">
                         {/* Metric Overview Cards */}
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                           <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-warning/40 hover:shadow-sm transition-all duration-200">
@@ -259,7 +315,7 @@ export function TasksSection() {
                               placeholder="Search tasks, title, or subject ID"
                               label="Search tasks"
                             />
-                            <div className="w-full sm:w-44">
+                            <div className="w-full sm:w-56">
                               <NativeSelect
                                 ariaLabel="Filter by status"
                                 value={status}
@@ -273,7 +329,7 @@ export function TasksSection() {
                                 ]}
                               />
                             </div>
-                            <div className="w-full sm:w-48">
+                            <div className="w-full sm:w-64">
                               <NativeSelect
                                 ariaLabel="Filter by department"
                                 value={deptFilter}
@@ -290,40 +346,56 @@ export function TasksSection() {
                           columns={[
                             {
                               header: "Task",
-                              cell: (t) => (
-                                <div>
-                                  <p className="font-semibold text-foreground text-xs sm:text-sm">{t.title}</p>
-                                  <p className="wt-id text-[11px] text-muted-foreground mt-0.5">
-                                    {t.id} · Created {fmt.dateTime(t.createdAt)}
-                                  </p>
-                                </div>
-                              ),
+                              cell: (t) => {
+                                const cleanTitle = t.title
+                                  ? t.title.replace(/^([a-z])/, (m) => m.toUpperCase()).replace(/-/g, " ")
+                                  : t.kind.replace(/-/g, " ");
+                                return (
+                                  <div>
+                                    <p className="font-semibold text-foreground text-xs sm:text-sm capitalize">{cleanTitle}</p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                                      Created {fmt.date(t.createdAt)}
+                                    </p>
+                                  </div>
+                                );
+                              },
                             },
                             {
                               header: "Subject",
-                              cell: (t) => <SubjectLink user={me} type={t.subjectType} id={t.subjectId} />,
-                            },
-                            {
-                              header: "Department",
                               cell: (t) => (
-                                <span className="inline-flex rounded bg-muted px-2 py-0.5 text-xs font-medium">
-                                  {departmentLabels[t.department]}
-                                </span>
+                                <SubjectLink
+                                  user={me}
+                                  type={t.subjectType}
+                                  id={t.subjectId}
+                                  label={resolveSubjectDisplay(t)}
+                                />
                               ),
                             },
+                            ...(deptFilter === "all"
+                              ? [
+                                  {
+                                    header: "Department",
+                                    cell: (t: Task) => (
+                                      <span className="inline-flex rounded bg-muted px-2 py-0.5 text-xs font-medium">
+                                        {departmentLabels[t.department]}
+                                      </span>
+                                    ),
+                                  },
+                                ]
+                              : []),
                             {
-                              header: "Station / Checkpoint",
+                              header: "Station",
                               cell: (t) =>
                                 t.checkpoint ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="wt-id font-bold text-xs">{t.checkpoint}</span>
-                                  </div>
+                                  <span className="wt-id rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                                    {t.checkpoint}
+                                  </span>
                                 ) : (
-                                  <span className="text-muted-foreground text-xs">Software Form</span>
+                                  <span className="text-muted-foreground/40 text-xs">—</span>
                                 ),
                             },
                             {
-                              header: "Prerequisites & Readiness",
+                              header: "Readiness",
                               cell: (t) => {
                                 const prereq = getTaskPrerequisite(t, lots, orders, garments);
                                 return (
@@ -333,12 +405,14 @@ export function TasksSection() {
                                         <CheckCircle2 className="size-3" /> {prereq.label}
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-semibold text-destructive border border-destructive/30">
-                                        <AlertCircle className="size-3" /> {prereq.label}
-                                      </span>
-                                    )}
-                                    {prereq.detail && (
-                                      <p className="text-[11px] text-muted-foreground mt-0.5">{prereq.detail}</p>
+                                      <div>
+                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-2.5 py-0.5 text-xs font-semibold text-destructive border border-destructive/30">
+                                          <AlertCircle className="size-3" /> {prereq.label}
+                                        </span>
+                                        {prereq.detail && (
+                                          <p className="text-[11px] text-destructive/80 mt-0.5">{prereq.detail}</p>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
                                 );
@@ -349,60 +423,77 @@ export function TasksSection() {
                             {
                               header: "Actions",
                               cell: (t) => {
+                                const prereq = getTaskPrerequisite(t, lots, orders, garments);
                                 const stCode = taskStationCode(t.checkpoint);
                                 let domainHref = "";
                                 if (t.subjectType === "order") domainHref = paths.order(t.subjectId);
                                 else if (t.subjectType === "lot") domainHref = paths.lot(t.subjectId);
                                 else if (t.subjectType === "garment") domainHref = paths.garment(t.subjectId);
 
-                                  return (
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      {can.claimTask(me, t) && (
-                                        <Button
-                                          size="sm"
-                                          disabled={pending}
-                                          onClick={() => void run((c) => c.claimTask(t.id), `${t.id} claimed.`)}
-                                        >
-                                          Claim
-                                        </Button>
-                                      )}
-                                      {can.assignTask(me) && t.status !== "done" && <AssignDialog task={t} />}
-                                      {domainHref && (
-                                        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                                          <AppLink href={domainHref}>
-                                            View <ArrowRight className="size-3 ml-0.5" />
-                                          </AppLink>
-                                        </Button>
-                                      )}
-                                      {t.kind === "incoming-qc" && (
-                                        <Button asChild size="sm" className="h-7 text-xs">
-                                          <AppLink href={paths.quality}>
+                                return (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {can.assignTask(me) && t.status !== "done" && <AssignDialog task={t} />}
+
+                                    {t.kind === "issue-material" && can.issueMaterial(me) && t.status !== "done" && (
+                                      <Button asChild size="sm" className="h-7 text-xs bg-primary">
+                                        <AppLink href={paths.workstation}>
+                                          Issue Fabric <ArrowRight className="size-3 ml-0.5" />
+                                        </AppLink>
+                                      </Button>
+                                    )}
+
+                                    {t.kind === "incoming-qc" && (me.role === "Q" || isManager) && t.status !== "done" && (
+                                      prereq.ready ? (
+                                        <Button asChild size="sm" className="h-7 text-xs bg-primary">
+                                          <AppLink href={paths.home}>
                                             Evaluate <ArrowRight className="size-3 ml-0.5" />
                                           </AppLink>
                                         </Button>
-                                      )}
-                                      {t.kind === "issue-material" && t.status !== "done" && (
-                                        <Button asChild size="sm" className="h-7 text-xs">
+                                      ) : canAccessRoute(me, "workstation") ? (
+                                        <Button
+                                          asChild
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                                        >
                                           <AppLink href={paths.workstation}>
-                                            Issue Fabric <ArrowRight className="size-3 ml-0.5" />
+                                            Station 1 <ArrowRight className="size-3 ml-0.5" />
                                           </AppLink>
                                         </Button>
-                                      )}
-                                      {stCode && !isIncomingQC && t.status !== "done" && (
-                                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                                          <AppLink href={paths.workstation}>
-                                            Station <ArrowRight className="size-3 ml-0.5" />
-                                          </AppLink>
-                                        </Button>
-                                      )}
-                                    </div>
-                                  );
-                                },
+                                      ) : null
+                                    )}
+
+                                    {t.kind === "receive-lot" && (me.department === "receiving" || isManager) && t.status !== "done" && (
+                                      <Button asChild size="sm" className="h-7 text-xs">
+                                        <AppLink href={paths.lots}>
+                                          Receive Fabric <ArrowRight className="size-3 ml-0.5" />
+                                        </AppLink>
+                                      </Button>
+                                    )}
+
+                                    {stCode && (me.role === "P" || isManager) && t.status !== "done" && (
+                                      <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                                        <AppLink href={paths.workstation}>
+                                          Station {t.checkpoint} <ArrowRight className="size-3 ml-0.5" />
+                                        </AppLink>
+                                      </Button>
+                                    )}
+
+                                    {domainHref && t.kind !== "issue-material" && (t.kind !== "incoming-qc" || (me.role !== "Q" && !isManager)) && (
+                                      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                                        <AppLink href={domainHref}>
+                                          View <ArrowRight className="size-3 ml-0.5" />
+                                        </AppLink>
+                                      </Button>
+                                    )}
+                                  </div>
+                                );
                               },
-                            ]}
-                          />
-                        </div>
-                      );
+                            },
+                          ]}
+                        />
+                      </div>
+                    );
                     }}
                   </Loadable>
                 )}

@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { getPrismaClient, runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
@@ -146,7 +146,7 @@ export class ScanRoutingService implements IScanRoutingService {
             closed_at: null,
             expires_at: { gt: new Date() },
             created_at: { lte: scanTime },
-            status: { in: ["armed", "awaiting_ack"] },
+            status: "armed",
           },
           orderBy: { created_at: "desc" },
         });
@@ -162,6 +162,235 @@ export class ScanRoutingService implements IScanRoutingService {
         }
       }
     }
+
+    if (
+      !contextIdToValidate &&
+      (stationCode === "fabric_issue" || stationCode === "cutting") &&
+      typeof (db as any).rfid_action_contexts?.findFirst === "function"
+    ) {
+      // First check if an armed or awaiting_ack context already exists for this reader session
+      const existingSessionContext = await (db as any).rfid_action_contexts.findFirst({
+        where: {
+          reader_session_id: session.id,
+          closed_at: null,
+          expires_at: { gt: new Date() },
+          status: "armed",
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (existingSessionContext) {
+        contextIdToValidate = existingSessionContext.id;
+      }
+    }
+
+    // For cutting station: ensure context action matches the subject scanned
+    if (stationCode === "cutting" && contextIdToValidate) {
+      const ctxRecord = await (db as any).rfid_action_contexts.findUnique({
+        where: { id: contextIdToValidate },
+      });
+      if (ctxRecord?.action_code === "select_cutting_source") {
+        const tagUid = normalizeTagUid(envelope.tagUid);
+        const lotBinding = await (db as any).rfid_tag_bindings.findFirst({
+          where: { tag_identifier: tagUid, unbound_at: null, material_lot_id: { not: null } },
+        });
+        if (!lotBinding) {
+          // A garment card scan at cutting station must NOT attach to select_cutting_source context
+          contextIdToValidate = null;
+        }
+      }
+    }
+
+    if (
+      !contextIdToValidate &&
+      stationCode === "fabric_issue" &&
+      typeof (db as any).rfid_action_contexts?.create === "function"
+    ) {
+      // Auto-provision an armed issue_bundle context for Station 2 if none was manually armed
+      const order =
+        typeof (db as any).production_orders?.findFirst === "function"
+          ? await (db as any).production_orders.findFirst({
+              where: { status: { in: ["approved", "in_progress", "draft"] } },
+              orderBy: { created_at: "desc" },
+            })
+          : null;
+
+      if (order) {
+        const requiredQty = order.planned_quantity ? Number(order.planned_quantity) * 2.0 : 8.0;
+        const targetExpiry = new Date(Date.now() + 5 * 60 * 1000);
+        const sessionExpiry = new Date(session.expiresAt);
+        const expiresAt =
+          sessionExpiry < targetExpiry ? new Date(sessionExpiry.getTime() - 1000) : targetExpiry;
+
+        const autoCtx = await (db as any).rfid_action_contexts.create({
+          data: {
+            reader_session_id: session.id,
+            action_code: "issue_bundle",
+            status: "awaiting_ack",
+            quantity: new Prisma.Decimal(requiredQty),
+            expires_at: expiresAt,
+            production_order_id: order.id,
+            answers: { orderId: order.id, orderCode: order.code, qty: requiredQty },
+          },
+        });
+
+        await (db as any).rfid_action_contexts.update({
+          where: { id: autoCtx.id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+
+        contextIdToValidate = autoCtx.id;
+      }
+    }
+
+    if (
+      !contextIdToValidate &&
+      stationCode === "cutting" &&
+      typeof (db as any).rfid_action_contexts?.findFirst === "function"
+    ) {
+      // 1. Check if an armed context already exists for this reader session
+      const existingSessionContext = await (db as any).rfid_action_contexts.findFirst({
+        where: {
+          reader_session_id: session.id,
+          closed_at: null,
+          expires_at: { gt: new Date() },
+          status: "armed",
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (existingSessionContext) {
+        contextIdToValidate = existingSessionContext.id;
+      }
+    }
+
+    // For cutting station: ensure context action matches the subject scanned
+    if (stationCode === "cutting" && contextIdToValidate) {
+      const ctxRecord = await (db as any).rfid_action_contexts.findUnique({
+        where: { id: contextIdToValidate },
+      });
+      if (ctxRecord?.action_code === "select_cutting_source") {
+        const tagUid = normalizeTagUid(envelope.tagUid);
+        const lotBinding = await (db as any).rfid_tag_bindings.findFirst({
+          where: { tag_identifier: tagUid, unbound_at: null, material_lot_id: { not: null } },
+        });
+        if (!lotBinding) {
+          // A garment card scan at cutting station must NOT attach to select_cutting_source context
+          contextIdToValidate = null;
+        }
+      }
+    }
+
+    if (
+      !contextIdToValidate &&
+      stationCode === "cutting" &&
+      typeof (db as any).rfid_action_contexts?.create === "function"
+    ) {
+      const tagUid = normalizeTagUid(envelope.tagUid);
+      const lotBinding = await (db as any).rfid_tag_bindings?.findFirst?.({
+        where: {
+          tag_identifier: tagUid,
+          unbound_at: null,
+          material_lot_id: { not: null },
+        },
+      });
+
+      if (lotBinding) {
+        // 2. Auto-provision select_cutting_source context for Station 3 (Cutting Table)
+        const lotInput =
+          typeof (db as any).cutting_inputs?.findFirst === "function"
+            ? await (db as any).cutting_inputs.findFirst({
+                where: { material_lot_id: lotBinding.material_lot_id },
+                orderBy: { id: "desc" },
+              })
+            : null;
+
+        let job = null;
+        if (lotInput && typeof (db as any).cutting_jobs?.findUnique === "function") {
+          job = await (db as any).cutting_jobs.findUnique({
+            where: { id: lotInput.cutting_job_id },
+          });
+        }
+
+        if (!job && typeof (db as any).cutting_jobs?.findFirst === "function") {
+          const issuedMovement = await (db as any).material_stock_movements?.findFirst?.({
+            where: { material_lot_id: lotBinding.material_lot_id, kind: "issued" },
+            orderBy: { performed_at: "desc" },
+          });
+          if (issuedMovement?.production_order_id) {
+            job = await (db as any).cutting_jobs.findFirst({
+              where: { production_order_id: issuedMovement.production_order_id },
+              orderBy: { performed_at: "desc" },
+            });
+          }
+        }
+
+        if (!job && typeof (db as any).cutting_jobs?.findFirst === "function") {
+          job = await (db as any).cutting_jobs.findFirst({
+            orderBy: { performed_at: "desc" },
+          });
+        }
+
+        if (!job && typeof (db as any).cutting_jobs?.create === "function") {
+          const order = await (db as any).production_orders?.findFirst({
+            orderBy: { created_at: "desc" },
+          });
+          if (order) {
+            job = await (db as any).cutting_jobs.create({
+              data: {
+                code: `CUT-AUTO-${Date.now().toString(36).toUpperCase()}`,
+                production_order_id: order.id,
+                performed_by: session.operatorId || actor?.actorId || "00000000-0000-0000-0000-000000000000",
+              },
+            });
+          }
+        }
+
+      if (job) {
+        await (db as any).rfid_action_contexts.updateMany({
+          where: {
+            reader_session_id: session.id,
+            closed_at: null,
+          },
+          data: {
+            status: "expired",
+            closed_at: new Date(),
+            close_reason: "Superseded by auto-provisioned context",
+          },
+        });
+
+        const targetExpiry = new Date(Date.now() + 5 * 60 * 1000);
+        const sessionExpiry = new Date(session.expiresAt);
+        const expiresAt =
+          sessionExpiry < targetExpiry ? new Date(sessionExpiry.getTime() - 1000) : targetExpiry;
+
+        const autoCtx = await (db as any).rfid_action_contexts.create({
+          data: {
+            reader_session_id: session.id,
+            action_code: "select_cutting_source",
+            status: "awaiting_ack",
+            cutting_job_id: job.id,
+            cutting_input_id: lotInput?.id || null,
+            expires_at: expiresAt,
+            answers: { station: "cutting", auto: true },
+          },
+        });
+
+        await (db as any).rfid_action_contexts.update({
+          where: { id: autoCtx.id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+
+        contextIdToValidate = autoCtx.id;
+      }
+    }
+  }
 
     const actionContext = await validateActionContext(
       contextIdToValidate,
@@ -237,34 +466,45 @@ export class ScanRoutingService implements IScanRoutingService {
           );
         }
 
-        // Insert accepted scan record
-        const scanRecord = await tx.rfid_scans.create({
-          data: {
-            device_id: envelope.deviceId,
-            scan_id: envelope.scanId,
-            boot_id: envelope.bootId,
-            sequence: BigInt(envelope.sequence),
-            reader_index: envelope.readerIndex,
-            reported_mapping_version: envelope.mappingVersion,
-            tag_uid: normalizeTagUid(envelope.tagUid),
-            reported_context_id: effectiveEnvelope.actionContextId ?? null,
-            resolved_context_id: actionContext?.id ?? null,
-            reader_session_id: session.id,
-            station_code: stationCode,
-            tag_binding_id: tagBindingId,
-            garment_id: subject.kind === "garment" ? subject.subjectId : null,
-            material_lot_id: subject.kind === "material_lot" ? subject.subjectId : null,
-            device_uptime_ms:
-              envelope.deviceUptimeMs !== null && envelope.deviceUptimeMs !== undefined
-                ? BigInt(envelope.deviceUptimeMs)
-                : null,
-            request_sha256: new Uint8Array(requestFingerprint),
-            received_at: new Date(),
-            outcome: "accepted",
-            outcome_code: "success",
-            outcome_message: "Scan accepted and processed",
-          },
-        });
+        // Insert or update accepted scan record (upsert handles retries after transient failure)
+        const scanData = {
+          device_id: envelope.deviceId,
+          scan_id: envelope.scanId,
+          boot_id: envelope.bootId,
+          sequence: BigInt(envelope.sequence),
+          reader_index: envelope.readerIndex,
+          reported_mapping_version: envelope.mappingVersion,
+          tag_uid: normalizeTagUid(envelope.tagUid),
+          reported_context_id: effectiveEnvelope.actionContextId ?? null,
+          resolved_context_id: actionContext?.id ?? null,
+          reader_session_id: session.id,
+          station_code: stationCode,
+          tag_binding_id: tagBindingId,
+          garment_id: subject.kind === "garment" ? subject.subjectId : null,
+          material_lot_id: subject.kind === "material_lot" ? subject.subjectId : null,
+          device_uptime_ms:
+            envelope.deviceUptimeMs !== null && envelope.deviceUptimeMs !== undefined
+              ? BigInt(envelope.deviceUptimeMs)
+              : null,
+          request_sha256: new Uint8Array(requestFingerprint),
+          received_at: new Date(),
+          outcome: "accepted" as const,
+          outcome_code: "success",
+          outcome_message: "Scan accepted and processed",
+        };
+
+        const scanRecord = typeof (tx.rfid_scans as any).upsert === "function"
+          ? await tx.rfid_scans.upsert({
+              where: {
+                device_id_scan_id: {
+                  device_id: envelope.deviceId,
+                  scan_id: envelope.scanId,
+                },
+              },
+              update: scanData,
+              create: scanData,
+            })
+          : await (tx.rfid_scans as any).create({ data: scanData });
 
         // Phase 2: Execute station business mutations
         const effectiveScanContext: DomainScanContext = {
@@ -319,29 +559,52 @@ export class ScanRoutingService implements IScanRoutingService {
     db: PrismaClient | PrismaTransactionClient,
   ): Promise<void> {
     try {
-      await db.rfid_scans.create({
-        data: {
-          device_id: envelope.deviceId,
-          scan_id: envelope.scanId,
-          boot_id: envelope.bootId,
-          sequence: BigInt(envelope.sequence),
-          reader_index: envelope.readerIndex,
-          reported_mapping_version: envelope.mappingVersion,
-          tag_uid: normalizeTagUid(envelope.tagUid),
-          reported_context_id: envelope.actionContextId ?? null,
-          resolved_context_id: null,
-          reader_session_id: readerSessionId,
-          station_code: stationCode,
-          device_uptime_ms:
-            envelope.deviceUptimeMs !== null && envelope.deviceUptimeMs !== undefined
-              ? BigInt(envelope.deviceUptimeMs)
-              : null,
-          request_sha256: new Uint8Array(requestFingerprint),
-          outcome: "rejected",
-          outcome_code: outcomeCode.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 32),
-          outcome_message: outcomeMessage.slice(0, 500),
-        },
-      });
+      const rejectedData = {
+        device_id: envelope.deviceId,
+        scan_id: envelope.scanId,
+        boot_id: envelope.bootId,
+        sequence: BigInt(envelope.sequence),
+        reader_index: envelope.readerIndex,
+        reported_mapping_version: envelope.mappingVersion,
+        tag_uid: normalizeTagUid(envelope.tagUid),
+        reported_context_id: envelope.actionContextId ?? null,
+        resolved_context_id: null,
+        reader_session_id: readerSessionId,
+        station_code: stationCode,
+        device_uptime_ms:
+          envelope.deviceUptimeMs !== null && envelope.deviceUptimeMs !== undefined
+            ? BigInt(envelope.deviceUptimeMs)
+            : null,
+        request_sha256: new Uint8Array(requestFingerprint),
+        outcome: "rejected" as const,
+        outcome_code: outcomeCode.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 32),
+        outcome_message: outcomeMessage.slice(0, 500),
+      };
+
+      if (typeof (db.rfid_scans as any).upsert === "function") {
+        await (db.rfid_scans as any).upsert({
+          where: {
+            device_id_scan_id: {
+              device_id: envelope.deviceId,
+              scan_id: envelope.scanId,
+            },
+          },
+          update: {
+            outcome: "rejected",
+            outcome_code: rejectedData.outcome_code,
+            outcome_message: rejectedData.outcome_message,
+            received_at: new Date(),
+          },
+          create: rejectedData,
+        });
+      } else {
+        await (db.rfid_scans as any).create({
+          data: {
+            ...rejectedData,
+            received_at: new Date(),
+          },
+        });
+      }
     } catch {
       // Non-fatal if logging fails or already recorded concurrently
     }

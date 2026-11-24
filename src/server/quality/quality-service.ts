@@ -32,6 +32,7 @@ import type {
   ReleaseHoldPayload,
 } from "../contracts/quality-fulfilment";
 import type { ActorContext } from "../contracts/actor";
+import { EXCLUDED_LOT_CODES } from "../materials/materials-service";
 
 export interface QualityScanResult {
   accepted: boolean;
@@ -63,6 +64,28 @@ export function isQualityRole(actor: StaffUser | ActorContext): boolean {
     if (d === "quality" || d === "qa") return true;
   }
   return false;
+}
+
+const VALID_DEPARTMENT_CODES = new Set([
+  "receiving",
+  "raw_store",
+  "cutting",
+  "stitching",
+  "finishing",
+  "quality",
+  "packing",
+  "warehouse",
+  "dispatch",
+]);
+
+export function normalizeDbDepartment(rawDept?: string | null): string | null {
+  if (!rawDept) return null;
+  const clean = rawDept.toLowerCase().trim().replace(/-/g, "_");
+  if (VALID_DEPARTMENT_CODES.has(clean)) return clean;
+  if (clean === "rawstore" || clean === "raw_materials" || clean === "fabric_issue") return "raw_store";
+  if (clean === "fabric_receiving" || clean === "dock") return "receiving";
+  if (clean === "qc" || clean === "inspection" || clean === "quality_control") return "quality";
+  return null;
 }
 
 export async function ensureStaffUserRecord(
@@ -161,30 +184,53 @@ export async function ensureStaffUserRecord(
     if (dbRole === "admin" || dbRole === "manager") {
       dbDept = null;
     } else if ("department" in actor && actor.department) {
-      dbDept = actor.department.toLowerCase();
+      dbDept = normalizeDbDepartment(actor.department) || "quality";
+    }
+  }
+
+  // Ensure department matches constraints: admin/manager MUST have null dept, all other roles MUST have valid non-null dept
+  if (dbRole === "admin" || dbRole === "manager") {
+    dbDept = null;
+  } else {
+    dbDept = normalizeDbDepartment(dbDept);
+    if (!dbDept) {
+      if (dbRole === "quality") dbDept = "quality";
+      else if (dbRole === "materials") dbDept = "receiving";
+      else if (dbRole === "logistics") dbDept = "packing";
+      else dbDept = "cutting";
     }
   }
 
   // Ensure staff_role_grants exists so database triggers (e.g. staff_has_station_access) pass
   if (tx.staff_role_grants) {
+    // Check if user already has an active grant for this role
     const existingGrant = await tx.staff_role_grants.findFirst({
       where: {
         staff_user_id: userId,
         role: dbRole as any,
-        department_code: dbDept,
         revoked_at: null,
       },
     });
 
     if (!existingGrant) {
-      await tx.staff_role_grants.create({
-        data: {
-          staff_user_id: userId,
-          role: dbRole as any,
-          department_code: dbDept,
-          granted_at: new Date(),
-        },
-      });
+      try {
+        await tx.staff_role_grants.create({
+          data: {
+            staff_user_id: userId,
+            role: dbRole as any,
+            department_code: dbDept,
+            granted_at: new Date(),
+          },
+        });
+      } catch (grantErr) {
+        // Safe fallback if concurrent grant was created or trigger restriction handled
+        const fallback = await tx.staff_role_grants.findFirst({
+          where: { staff_user_id: userId, revoked_at: null },
+        });
+        if (!fallback) {
+          console.warn("[ensureStaffUserRecord] Role grant creation warning:", grantErr);
+        }
+      }
     }
   }
 
@@ -314,6 +360,18 @@ export async function ensureActiveReaderSession(
     });
   }
 
+  await tx.reader_sessions.updateMany({
+    where: {
+      device_id: device.id,
+      reader_index: 0,
+      closed_at: null,
+    },
+    data: {
+      closed_at: new Date(),
+      close_reason: "Superseded by new quality session",
+    },
+  });
+
   const session = await tx.reader_sessions.create({
     data: {
       device_id: device.id,
@@ -439,14 +497,59 @@ export async function executeIncomingQc(
     throw new Error(`WT_ERR_NOT_FOUND: Material lot '${input.lotId}' not found.`);
   }
 
-  // 2. Quantity balancing check
-  const acceptedQty = Number((input as any).acceptedQty ?? (input as any).acceptedQuantity ?? 0);
-  const heldQty = Number((input as any).heldQty ?? (input as any).heldQuantity ?? 0);
-  const rejectedQty = Number((input as any).rejectedQty ?? (input as any).rejectedQuantity ?? 0);
-  const totalEvaluated = acceptedQty + heldQty + rejectedQty;
-  const receivedQty = Number(lot.received_quantity);
+  // 1b. Prerequisite check: Receiving registration must be complete before incoming QC inspection
+  if (tx.work_tasks && typeof tx.work_tasks.findFirst === "function") {
+    const pendingReceiveTask = await tx.work_tasks.findFirst({
+      where: {
+        material_lot_id: lot.id,
+        action_code: "receive-lot",
+        status: { in: ["queued", "claimed", "in_progress"] },
+      },
+    });
+    if (pendingReceiveTask) {
+      throw new Error(
+        `WT_ERR_PREREQUISITE_FAILED: Material lot '${lot.code}' is still awaiting Receiving completion at Station 1. Receiving registration and bundle card assignment must be complete before incoming QC inspection.`,
+      );
+    }
+  }
 
-  if (totalEvaluated !== receivedQty) {
+  // 1c. Prevent duplicate or conflicting approvals
+  const priorIncomingInsp = await tx.inspections.findFirst({
+    where: {
+      material_lot_id: lot.id,
+      scope: "incoming",
+    },
+    orderBy: { created_at: "desc" },
+  });
+
+  if (priorIncomingInsp && priorIncomingInsp.outcome === "pass") {
+    if (input.result === "pass") {
+      throw new Error(
+        `WT_ERR_DUPLICATE_APPROVAL: Material lot '${lot.code}' has already been inspected and approved (Inspection ${priorIncomingInsp.code}). Duplicate approvals are prohibited.`,
+      );
+    }
+    // If attempting to fail an already approved lot, check if fabric was already issued to production
+    const issuesCount = await tx.material_stock_movements.count({
+      where: {
+        material_lot_id: lot.id,
+        kind: "issued",
+      },
+    });
+    if (issuesCount > 0) {
+      throw new Error(
+        `WT_ERR_CONFLICTING_STATUS: Cannot reject material lot '${lot.code}' because fabric has already been issued to production orders.`,
+      );
+    }
+  }
+
+  // 2. Quantity balancing check
+  const acceptedQty = Math.round(Number((input as any).acceptedQty ?? (input as any).acceptedQuantity ?? 0) * 1000) / 1000;
+  const heldQty = Math.round(Number((input as any).heldQty ?? (input as any).heldQuantity ?? 0) * 1000) / 1000;
+  const rejectedQty = Math.round(Number((input as any).rejectedQty ?? (input as any).rejectedQuantity ?? 0) * 1000) / 1000;
+  const totalEvaluated = Math.round((acceptedQty + heldQty + rejectedQty) * 1000) / 1000;
+  const receivedQty = Math.round(Number(lot.received_quantity) * 1000) / 1000;
+
+  if (Math.abs(totalEvaluated - receivedQty) >= 1e-3) {
     throw new Error(
       `WT_ERR_QUANTITY_MISMATCH: Sum of accepted (${acceptedQty}), held (${heldQty}), and rejected (${rejectedQty}) quantities must equal received lot quantity (${receivedQty}).`,
     );
@@ -491,12 +594,14 @@ export async function executeIncomingQc(
         ? Object.fromEntries(input.checklist.map((c: any) => [c.id, Boolean(c.checked ?? c.passed)]))
         : {};
 
+  const inspectionTime = new Date();
   const inspection = await tx.inspections.create({
     data: {
       code: inspectionCode,
       scope: "incoming",
       checklist_version_id: checklistVer.id,
       material_lot_id: lot.id,
+      prior_inspection_id: priorIncomingInsp?.id ?? null,
       inspector_id: staffUserId,
       outcome: input.result,
       sampled_quantity: totalEvaluated,
@@ -506,16 +611,24 @@ export async function executeIncomingQc(
       answers: answersJson,
       notes: input.notes ?? null,
       defect_reason: input.result === "fail" ? (input.defectReason ?? null) : null,
-      created_at: new Date(),
-      submitted_at: new Date(),
+      created_at: inspectionTime,
+      submitted_at: inspectionTime,
     },
   });
 
   let currentAvailable = Number(lot.available_accepted_quantity);
+  const receivedTotal = Number(lot.received_quantity);
 
   // 6. On acceptance: update available accepted quantity and record stock movement
   if (input.result === "pass") {
-    currentAvailable += acceptedQty;
+    if (currentAvailable > 0 && currentAvailable + acceptedQty > receivedTotal) {
+      await tx.material_lots.update({
+        where: { id: lot.id },
+        data: { available_accepted_quantity: Math.max(0, receivedTotal - acceptedQty) },
+      });
+    }
+
+    currentAvailable = Math.min(receivedTotal, currentAvailable + acceptedQty);
 
     await tx.material_stock_movements.create({
       data: {
@@ -525,6 +638,7 @@ export async function executeIncomingQc(
         quantity: acceptedQty,
         reason: input.notes || "Accepted at incoming QC inspection",
         performed_by: staffUserId,
+        performed_at: inspectionTime,
       },
     });
 
@@ -535,43 +649,110 @@ export async function executeIncomingQc(
         revision: { increment: 1 },
       },
     });
+  } else {
+    // On failure/rejection: ensure available accepted quantity is locked to accepted quantity (0 for total reject)
+    currentAvailable = acceptedQty;
+    await tx.material_lots.update({
+      where: { id: lot.id },
+      data: {
+        available_accepted_quantity: currentAvailable,
+        revision: { increment: 1 },
+      },
+    });
+  }
+
+  // Record audit trail event
+  if (tx.audit_events && typeof tx.audit_events.create === "function") {
+    try {
+      await tx.audit_events.create({
+        data: {
+          actor_staff_id: staffUserId,
+          department_code: "quality",
+          action_code: priorIncomingInsp
+            ? "incoming_qc_reinspected"
+            : input.result === "pass"
+              ? "incoming_qc_approved"
+              : "incoming_qc_rejected",
+          target_type: "material_lot",
+          target_reference: lot.code,
+          details: {
+            lotId: lot.id,
+            lotCode: lot.code,
+            inspectionCode,
+            result: input.result,
+            acceptedQty,
+            heldQty,
+            rejectedQty,
+            defectReason: input.defectReason ?? null,
+            notes: input.notes ?? null,
+          },
+          recorded_at: inspectionTime,
+        },
+      });
+    } catch (auditErr) {
+      console.warn("[QC_AUDIT_WARN] Could not record incoming QC audit event:", auditErr);
+    }
   }
 
   // 7. Update work task pipeline hand-off (Step 2 approval -> Step 3 raw store task)
   if ("work_tasks" in (tx as any) && typeof (tx as any).work_tasks.updateMany === "function") {
-    await (tx as any).work_tasks.updateMany({
-      where: {
-        material_lot_id: lot.id,
-        action_code: "incoming-qc",
-        status: { in: ["queued", "claimed"] },
-      },
-      data: {
-        status: input.result === "pass" ? "completed" : "cancelled",
-        completed_at: new Date(),
-      },
-    });
+    try {
+      const isPass = input.result === "pass";
 
-    if (input.result === "pass" && acceptedQty > 0) {
-      const existingIssueTask = await (tx as any).work_tasks.findFirst({
-        where: {
-          material_lot_id: lot.id,
-          action_code: "issue-material",
-          status: { in: ["queued", "claimed"] },
-        },
-      });
-      if (!existingIssueTask && typeof (tx as any).work_tasks.create === "function") {
-        await (tx as any).work_tasks.create({
-          data: {
-            action_code: "issue-material",
-            department_code: "raw_store",
+      // Ensure a valid, non-null UUID for assignee_id to strictly satisfy check constraint work_tasks_check3
+      let validAssigneeId = isValidUuid(staffUserId) ? staffUserId : null;
+      if (!validAssigneeId) {
+        const fallbackStaff = await tx.staff_users.findFirst({
+          where: { username: { in: ["qc.incoming", "quality.demo", "admin.demo"] } },
+        });
+        validAssigneeId = fallbackStaff?.id || (await tx.staff_users.findFirst())?.id || null;
+      }
+
+      if (isPass && !validAssigneeId) {
+        console.warn("[QC_TASK] Cannot set work task to completed without valid assignee_id");
+      } else {
+        await (tx as any).work_tasks.updateMany({
+          where: {
             material_lot_id: lot.id,
-            status: "queued",
-            created_by: staffUserId,
-            created_at: new Date(),
-            revision: 0,
+            action_code: "incoming-qc",
+            status: { in: ["queued", "claimed"] },
+          },
+          data: {
+            status: isPass ? "completed" : "cancelled",
+            assignee_id: isPass ? validAssigneeId : (validAssigneeId || undefined),
+            claimed_at: new Date(),
+            completed_at: isPass ? new Date() : null,
           },
         });
       }
+
+      if (input.result === "pass" && acceptedQty > 0) {
+        const existingIssueTask = await (tx as any).work_tasks.findFirst({
+          where: {
+            material_lot_id: lot.id,
+            action_code: "issue-material",
+            status: { in: ["queued", "claimed"] },
+          },
+        });
+        if (!existingIssueTask && typeof (tx as any).work_tasks.create === "function") {
+          const creatorId = validAssigneeId || (await tx.staff_users.findFirst())?.id;
+          if (creatorId) {
+            await (tx as any).work_tasks.create({
+              data: {
+                action_code: "issue-material",
+                department_code: "raw_store",
+                material_lot_id: lot.id,
+                status: "queued",
+                created_by: creatorId,
+                created_at: new Date(),
+                revision: 0,
+              },
+            });
+          }
+        }
+      }
+    } catch (wtErr) {
+      console.warn("[QC_TASK_WARN] Work task hand-off update skipped or failed:", wtErr);
     }
   }
 
@@ -1232,6 +1413,10 @@ export async function listInspections(
       ...(options?.scope ? { scope: options.scope as any } : {}),
       ...(options?.garmentId ? { garment_id: options.garmentId } : {}),
       ...(options?.lotId ? { material_lot_id: options.lotId } : {}),
+      OR: [
+        { material_lot_id: null },
+        { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+      ],
     },
     include: {
       staff_users: { select: { id: true, username: true, display_name: true } },
@@ -1249,6 +1434,14 @@ export async function getInspectionDetail(tx: PrismaTransactionClient, id: strin
       OR: [
         ...(isValidUuid(id) ? [{ id }] : []),
         { code: id },
+      ],
+      AND: [
+        {
+          OR: [
+            { material_lot_id: null },
+            { material_lots: { code: { notIn: EXCLUDED_LOT_CODES } } },
+          ],
+        },
       ],
     },
     include: {

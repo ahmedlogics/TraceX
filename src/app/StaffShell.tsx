@@ -79,7 +79,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
     <div className="flex min-h-screen w-full">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
         <div className="border-b px-4 py-4">
-          <AppLink href={paths.home} aria-label="WearTrail staff home">
+          <AppLink href={paths.home} aria-label="TraceX staff home">
             <Logo height={26} />
           </AppLink>
           <p className="wt-eyebrow mt-1">Staff workspace</p>
@@ -113,7 +113,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               </div>
             </SheetContent>
           </Sheet>
-          <AppLink href={paths.home} className="lg:hidden" aria-label="WearTrail staff home">
+          <AppLink href={paths.home} className="lg:hidden" aria-label="TraceX staff home">
             <Logo height={20} />
           </AppLink>
           <div className="ml-auto flex min-w-0 items-center gap-2">
@@ -136,9 +136,6 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               />
               {dataMode === "live" ? "Live API" : "Mock Mode"}
             </button>
-            <span className="hidden sm:inline-flex">
-              <RoleChip user={user} />
-            </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" aria-label="Account menu">
@@ -169,9 +166,6 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
           </div>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
-          <span className="mb-4 inline-flex sm:hidden">
-            <RoleChip user={user} />
-          </span>
           {children}
         </main>
       </div>

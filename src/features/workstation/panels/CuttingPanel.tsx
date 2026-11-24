@@ -1,661 +1,1003 @@
-import { useState } from "react";
-import { ArrowRight, CheckCircle2, Layers, Radio, RotateCcw, ScanLine, Scissors, Sparkles, Tag } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  Cpu,
+  Layers,
+  Package,
+  Radio,
+  RotateCcw,
+  ScanLine,
+  Scissors,
+  Sparkles,
+  Tag,
+  Wrench,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
-import { Field, NativeSelect, ScopeNote } from "@/components/wt/forms";
-import { fmt, IdLink, KeyValue, Section } from "@/components/wt/layout";
-import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
-import { EmptyState, Loadable } from "@/components/wt/states";
+import { IdLink } from "@/components/wt/layout";
+import { StatusBadge } from "@/components/wt/StatusBadge";
+import { Loadable } from "@/components/wt/states";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
+import type { Garment, MaterialLot, ProductionOrder, ReworkCase } from "@/domain/types";
 
 function generateFreshUid(): string {
   return "04" + Array.from({ length: 6 }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join("");
 }
 
+type CuttingStep = "awaiting_bundle" | "bundle_orders" | "scanning_products";
+
 export function CuttingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
-  const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
+
+  // Primary Queries
+  const qOrders = useWtQuery(["orders"], (c) => c.listOrders(), { refetchInterval: 3000 });
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 2000 });
+  const qRework = useWtQuery(["rework"], (c) => c.listRework());
 
-  const [selectedOrderId, setSelectedOrderId] = useState("");
-  const [selectedIssueId, setSelectedIssueId] = useState("");
-  const [consumedQty, setConsumedQty] = useState("2.0");
-  const [wasteQty, setWasteQty] = useState("0.1");
-  const [size, setSize] = useState("M");
-  const [scanUid, setScanUid] = useState("04B1C2D3");
+  // Cutting Workflow Step:
+  // 1. "awaiting_bundle" -> Staff scans fabric bundle card (RFID tag from Station 2).
+  // 2. "bundle_orders"   -> Dedicated screen showing production orders linked to this bundle card.
+  // 3. "scanning_products" -> Staff scans individual product garment tags to link them to the bundle & order.
+  const [step, setStep] = useState<CuttingStep>("awaiting_bundle");
 
-  const isCuttingStaff = me.role === "M" || me.department === "cutting";
-  const source = stationData.cuttingSourceSelection;
-  const activeCtx = stationData.activeContext;
-  const isCtxForThisStation = activeCtx && activeCtx.stationCode === "cutting";
+  // Selected State
+  const [scannedLotId, setScannedLotId] = useState<string>("");
+  const [selectedOrderId, setSelectedOrderId] = useState<string>("");
+  const [selectedSize, setSelectedSize] = useState<string>("M");
+  const [completedOrders, setCompletedOrders] = useState<Record<string, boolean>>({});
 
-  const orderId = selectedOrderId || source?.orderId || "";
-  const qOrderDetail = useWtQuery(["order", orderId], (c) =>
-    orderId ? c.getOrder(orderId) : Promise.resolve(null),
-  );
-  const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
+  // Alerts & Feedback
+  const [alertMessage, setAlertMessage] = useState<{
+    type: "success" | "error" | "info";
+    title: string;
+    message: string;
+  } | null>(null);
+
+  // Active Tab: "cutting" (default) or "rework" (if panel recutting is needed)
+  const [activeTab, setActiveTab] = useState<"cutting" | "rework">("cutting");
+  const [repairNotes, setRepairNotes] = useState<string>("");
+
+  // Global Hardware RFID Scanner Listener (Captures USB/wedge scanner key events automatically)
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in a modal or search field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastKeyTime > 500) {
+        buffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const uid = buffer.trim().toUpperCase();
+        buffer = "";
+        if (uid.length >= 4) {
+          if (step === "awaiting_bundle") {
+            const lots = qLots.data ?? [];
+            const matchingLot = lots.find(
+              (l) =>
+                l.rfidUid?.toUpperCase() === uid ||
+                l.id.toUpperCase() === uid ||
+                (l.rfidUid && l.rfidUid.toUpperCase().includes(uid)),
+            );
+            if (!matchingLot) {
+              setAlertMessage({
+                type: "error",
+                title: "Scan Rejected — Unrecognised Bundle Tag",
+                message: `Tag UID '${uid}' is not registered as a fabric roll card. Present a valid fabric roll card issued from Station 2.`,
+              });
+              return;
+            }
+            if (matchingLot.status !== "accepted") {
+              setAlertMessage({
+                type: "error",
+                title: "Scan Rejected — Bundle Not Accepted by QC",
+                message: `Bundle ${matchingLot.id} has status '${matchingLot.status}'. Only fabric rolls inspected and accepted at dock QC can be issued to cutting.`,
+              });
+              return;
+            }
+            setScannedLotId(matchingLot.id);
+            setStep("bundle_orders");
+            setAlertMessage({
+              type: "success",
+              title: `Fabric Bundle Loaded: ${matchingLot.id}`,
+              message: `Loaded roll details for ${matchingLot.material} (${matchingLot.balanceQty || matchingLot.receivedQty}m available). Select an order to cut.`,
+            });
+          } else if (step === "scanning_products" && selectedOrderId && scannedLotId) {
+            const garments = qGarments.data ?? [];
+            const lots = qLots.data ?? [];
+            const existingGarment = garments.find((g) => g.rfidUid === uid);
+            if (existingGarment) {
+              setAlertMessage({
+                type: "error",
+                title: "Scan Rejected — Card Already Active",
+                message: `Tag UID '${uid}' is already assigned to garment ${existingGarment.id}. Please use a fresh, unassigned RFID card.`,
+              });
+              return;
+            }
+            const existingLot = lots.find((l) => l.rfidUid === uid);
+            if (existingLot) {
+              setAlertMessage({
+                type: "error",
+                title: "Scan Rejected — Fabric Bundle Card Presented",
+                message: `Tag UID '${uid}' is the fabric bundle card for lot ${existingLot.id}. Present a fresh garment card for product serialization.`,
+              });
+              return;
+            }
+            void run(
+              (c) =>
+                c.recordCuttingOutput({
+                  orderId: selectedOrderId,
+                  fabricUsed: 2.0,
+                  size: selectedSize,
+                  tagUid: uid,
+                }),
+              `Enrolled garment at Scanner 3. Linked to Bundle ${scannedLotId} → Order ${selectedOrderId}`,
+            ).then((garmentCode) => {
+              setAlertMessage({
+                type: "success",
+                title: `Garment Cut & Enrolled: ${garmentCode || "Success"}`,
+                message: `Panel set serialized with tag ${uid}. Lineage: Lot ${scannedLotId} ➔ Order ${selectedOrderId} ➔ ${garmentCode}. Advanced to Stitching.`,
+              });
+            });
+          }
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [step, selectedOrderId, scannedLotId, selectedSize, qLots.data, qGarments.data, run]);
+
+  // Background listener for ESP32 hardware scans on Station 3 reader via stationData
+  const lastSeenScanAt = useRef<string | null>(stationData?.lastScanOutcome?.at ?? null);
+  useEffect(() => {
+    if (!stationData?.lastScanOutcome) return;
+    const outcome = stationData.lastScanOutcome;
+    if (outcome.at && outcome.at !== lastSeenScanAt.current) {
+      lastSeenScanAt.current = outcome.at;
+      const uid = outcome.uid?.trim().toUpperCase();
+      if (!uid) return;
+
+      if (step === "awaiting_bundle") {
+        const lots = qLots.data ?? [];
+        const matchingLot = lots.find(
+          (l) =>
+            l.rfidUid?.toUpperCase() === uid ||
+            l.id.toUpperCase() === uid ||
+            (l.rfidUid && l.rfidUid.toUpperCase().includes(uid)),
+        );
+        if (!matchingLot) {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected — Unrecognised Bundle Tag",
+            message: `Tag UID '${uid}' is not registered as a fabric roll card. Present a valid fabric roll card issued from Station 2.`,
+          });
+          return;
+        }
+        if (matchingLot.status !== "accepted") {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected — Bundle Not Accepted by QC",
+            message: `Bundle ${matchingLot.id} has status '${matchingLot.status}'. Only fabric rolls inspected and accepted at dock QC can be issued to cutting.`,
+          });
+          return;
+        }
+        setScannedLotId(matchingLot.id);
+        setStep("bundle_orders");
+        setAlertMessage({
+          type: "success",
+          title: `Fabric Bundle Loaded: ${matchingLot.id}`,
+          message: `Loaded roll details for ${matchingLot.material} (${matchingLot.balanceQty || matchingLot.receivedQty}m available). Select an order to cut.`,
+        });
+      } else if (step === "scanning_products" && selectedOrderId && scannedLotId) {
+        if (outcome.resolution === "rejected") {
+          setAlertMessage({
+            type: "error",
+            title: "Scan Rejected",
+            message: outcome.message || `Tag UID '${uid}' was rejected by Scanner 3.`,
+          });
+          return;
+        }
+
+        // Hardware scan outcome accepted by the backend:
+        void qGarments.refetch();
+        void qOrders.refetch();
+
+        const enrolledCode = outcome.subjectCode || "Success";
+        setAlertMessage({
+          type: "success",
+          title: `Garment Cut & Enrolled: ${enrolledCode}`,
+          message: `Panel set serialized with tag ${uid}. Lineage: Lot ${scannedLotId} ➔ Order ${selectedOrderId} ➔ ${enrolledCode}. Advanced to Stitching.`,
+        });
+      }
+    }
+  }, [stationData?.lastScanOutcome, step, selectedOrderId, scannedLotId, selectedSize, qLots.data, qGarments.data, run, qGarments, qOrders]);
 
   return (
     <Loadable query={qOrders}>
       {(orders) => (
         <Loadable query={qLots}>
-          {(lots) => {
-            const approvedOrders = orders.filter(
-              (o) =>
-                o.status === "approved" || o.status === "in-progress" || o.status === "planned",
-            );
-            const orderId = selectedOrderId || source?.orderId || approvedOrders[0]?.id || "";
-            const currentOrder = orders.find((o) => o.id === orderId);
-            const availableIssues = qOrderDetail.data?.issues ?? [];
-            const activeIssueId = selectedIssueId || availableIssues[0]?.id || "";
-            const activeIssue = availableIssues.find((i) => i.id === activeIssueId);
-            const activeIssueLot = lots.find((l) => l.id === activeIssue?.lotId);
-            const orderGarments = (qGarments.data ?? []).filter(
-              (g) => g.orderId === (source?.orderId ?? orderId),
-            );
+          {(lots) => (
+            <Loadable query={qGarments}>
+              {(garments) => (
+                <Loadable query={qRework}>
+                  {(reworkCases) => {
+                    // Cutting-specific rework cases: strictly assigned to cutting
+                    const cuttingReworkCases = reworkCases.filter(
+                      (rc) => rc.assignedDepartment === "cutting",
+                    );
 
-            return (
-              <div className="space-y-6">
-                {/* Mode 1: Confirmed source banner if active */}
-                {source && source.active ? (
-                  <section className="rounded-lg border-2 border-primary/50 bg-card p-5 space-y-4">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="size-5 text-success" />
-                            <h3 className="font-semibold text-lg">Active Confirmed Fabric Source</h3>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            Selection ID: <span className="wt-id">{source.id}</span> · Fabric
-                            confirmed by RFID scan
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={pending}
-                          onClick={() => {
-                            if (activeCtx) {
-                              void run((c) => c.cancelContext(activeCtx.id));
-                            }
-                            setSelectedOrderId("");
-                          }}
-                        >
-                          <RotateCcw className="size-4 mr-1" /> Change Fabric Source
-                        </Button>
-                      </div>
+                    // Active Scanned Bundle Lot
+                    const activeLot = lots.find(
+                      (l) =>
+                        l.id === scannedLotId ||
+                        (l as any).code === scannedLotId ||
+                        (l as any).lotId === scannedLotId,
+                    );
 
-                      <div className="rounded-md border bg-muted/30 p-3">
-                        <KeyValue
-                          items={[
-                            {
-                              label: "Production Order",
-                              value: `${source.orderId} (${currentOrder?.product ?? "Order"})`,
-                            },
-                            {
-                              label: "Material Issue",
-                              value: <span className="wt-id">{source.issueId}</span>,
-                            },
-                            {
-                              label: "Fabric Lot",
-                              value: <span className="wt-id">{source.lotId}</span>,
-                            },
-                            { label: "Consumption Per Garment", value: `${source.consumedQty} m` },
-                            { label: "Estimated Waste", value: `${source.wasteQty} m` },
-                            {
-                              label: "Status",
-                              value: <StatusBadge status="Source active" tone="success" />,
-                            },
-                          ]}
-                        />
-                      </div>
+                    // Production orders associated with this fabric bundle
+                    const associatedOrders = useMemo(() => {
+                      if (!activeLot) return [];
+                      const targetLotId = activeLot.id;
+                      const targetLotCode = (activeLot as any).code || activeLot.id;
+                      const targetDbLotId = (activeLot as any).lotId;
 
-                      {/* Production Progress Bar */}
-                      {currentOrder && (
-                        <div className="space-y-1.5 rounded-md border bg-muted/20 p-3">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-muted-foreground">
-                              Cutting Progress for Order {currentOrder.id}:
-                            </span>
-                            <span className="font-bold tabular-nums">
-                              {orderGarments.length} / {currentOrder.plannedQty} cut (
-                              {Math.min(
-                                100,
-                                Math.round(
-                                  (orderGarments.length / Math.max(1, currentOrder.plannedQty)) * 100,
-                                ),
-                              )}
-                              %)
-                            </span>
-                          </div>
-                          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-primary transition-all"
-                              style={{
-                                width: `${Math.min(100, Math.round((orderGarments.length / Math.max(1, currentOrder.plannedQty)) * 100))}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
+                      return orders.filter((o) => {
+                        const lotIds = o.lotIds ?? ((o as any).lotId ? [(o as any).lotId] : []);
+                        const lotCodes = o.lotCodes ?? ((o as any).lotCode ? [(o as any).lotCode] : []);
 
-                      {/* Sub-mode: Assign Next Garment Tag */}
-                      <div className="border-t pt-4 space-y-4">
-                        <div className="flex items-center justify-between">
+                        const matchesLotId =
+                          lotIds.includes(targetLotId) ||
+                          (targetDbLotId && lotIds.includes(targetDbLotId));
+                        const matchesLotCode =
+                          lotCodes.includes(targetLotCode) ||
+                          lotCodes.includes(targetLotId);
+                        const matchesDirect =
+                          (o as any).lotId === targetLotId ||
+                          (targetDbLotId && (o as any).lotId === targetDbLotId) ||
+                          (o as any).lotId === targetLotCode;
+
+                        return matchesLotId || matchesLotCode || matchesDirect;
+                      });
+                    }, [orders, activeLot]);
+
+                    // Currently selected production order for cutting
+                    const selectedOrder = orders.find((o) => o.id === selectedOrderId);
+
+                    // Garments cut for current selected order
+                    const currentOrderGarments = garments.filter(
+                      (g) =>
+                        g.orderId === selectedOrderId ||
+                        (selectedOrder && (g.orderId === selectedOrder.id || (selectedOrder as any).code === g.orderId)),
+                    );
+                    const plannedCount = selectedOrder ? Math.max(1, selectedOrder.plannedQty) : 1;
+                    const cutCount = currentOrderGarments.length;
+                    const progressPercent = Math.min(100, Math.round((cutCount / plannedCount) * 100));
+
+                    // -------------------------------------------------------------
+                    // STEP 1: Process Bundle Card Scan (RFID from Station 2)
+                    // -------------------------------------------------------------
+                    const handleScanBundleCard = (rawUid: string) => {
+                      const uid = rawUid.trim().toUpperCase();
+                      if (!uid) return;
+
+                      // Check if UID matches an accepted fabric roll
+                      const matchingLot = lots.find(
+                        (l) =>
+                          l.rfidUid?.toUpperCase() === uid ||
+                          l.id.toUpperCase() === uid ||
+                          (l.rfidUid && l.rfidUid.toUpperCase().includes(uid)),
+                      );
+
+                      if (!matchingLot) {
+                        setAlertMessage({
+                          type: "error",
+                          title: "Scan Rejected — Unrecognised Bundle Tag",
+                          message: `Tag UID '${uid}' is not registered as a fabric roll card. Present a valid fabric roll card issued from Station 2.`,
+                        });
+                        return;
+                      }
+
+                      // Verify Incoming QC Acceptance
+                      if (matchingLot.status !== "accepted") {
+                        setAlertMessage({
+                          type: "error",
+                          title: "Scan Rejected — Bundle Not Accepted by QC",
+                          message: `Bundle ${matchingLot.id} has status '${matchingLot.status}'. Only fabric rolls inspected and accepted at dock QC can be issued to cutting.`,
+                        });
+                        return;
+                      }
+
+                      // Valid Bundle Scanned: Transition to "Bundle Orders" screen
+                      setScannedLotId(matchingLot.id);
+                      setStep("bundle_orders");
+                      setAlertMessage({
+                        type: "success",
+                        title: `Fabric Bundle Loaded: ${matchingLot.id}`,
+                        message: `Loaded roll details for ${matchingLot.material} (${matchingLot.balanceQty || matchingLot.receivedQty}m available). Select an order to cut.`,
+                      });
+                    };
+
+                    // -------------------------------------------------------------
+                    // STEP 2: Operator Selects Order from "Bundle Orders" Screen
+                    // -------------------------------------------------------------
+                    const handleSelectOrder = (order: ProductionOrder) => {
+                      setSelectedOrderId(order.id);
+                      setStep("scanning_products");
+                      setAlertMessage({
+                        type: "info",
+                        title: `Order Selected: ${order.id}`,
+                        message: `Ready for product serialization. Scan fresh garment RFID cards at Scanner 3 for each cut panel set. Target: ${order.plannedQty} pcs.`,
+                      });
+                    };
+
+                    // -------------------------------------------------------------
+                    // STEP 3: Process Individual Garment Tag Scan
+                    // -------------------------------------------------------------
+                    const handleScanProductTag = async (rawUid: string) => {
+                      const uid = rawUid.trim().toUpperCase();
+                      if (!uid || !selectedOrder || !activeLot) return;
+
+                      // Check if card is already actively bound to another garment or lot
+                      const existingGarment = garments.find((g) => g.rfidUid === uid);
+                      if (existingGarment) {
+                        setAlertMessage({
+                          type: "error",
+                          title: "Scan Rejected — Card Already Active",
+                          message: `Tag UID '${uid}' is already assigned to garment ${existingGarment.id}. Please use a fresh, unassigned RFID card.`,
+                        });
+                        return;
+                      }
+
+                      const existingLot = lots.find((l) => l.rfidUid === uid);
+                      if (existingLot) {
+                        setAlertMessage({
+                          type: "error",
+                          title: "Scan Rejected — Fabric Bundle Card Presented",
+                          message: `Tag UID '${uid}' is the fabric bundle card for lot ${existingLot.id}. Present a fresh garment card for product serialization.`,
+                        });
+                        return;
+                      }
+
+                      try {
+                        const garmentCode = await run(
+                          (c) =>
+                            c.recordCuttingOutput({
+                              orderId: selectedOrder.id,
+                              fabricUsed: 2.0,
+                              size: selectedSize,
+                              tagUid: uid,
+                            }),
+                          `Enrolled garment at Scanner 3. Linked to Bundle ${activeLot.id} → Order ${selectedOrder.id}`,
+                        );
+
+                        // Success feedback
+                        void qGarments.refetch();
+                        void qOrders.refetch();
+                        setAlertMessage({
+                          type: "success",
+                          title: `Garment Cut & Enrolled: ${garmentCode || "Success"}`,
+                          message: `Size ${selectedSize} panel set serialized with tag ${uid}. Lineage established: Lot ${activeLot.id} ➔ Order ${selectedOrder.id} ➔ ${garmentCode}. Advanced to Stitching.`,
+                        });
+                      } catch (err: any) {
+                        setAlertMessage({
+                          type: "error",
+                          title: "Enrollment Error",
+                          message: err?.message || "Failed to record cut product. Check server connection.",
+                        });
+                      }
+                    };
+
+                    // -------------------------------------------------------------
+                    // STEP 4: Complete All Products for this Order
+                    // -------------------------------------------------------------
+                    const handleCompleteOrderCutting = () => {
+                      if (!selectedOrder) return;
+                      const orderId = selectedOrder.id;
+                      setCompletedOrders((prev) => ({ ...prev, [orderId]: true }));
+                      setStep("awaiting_bundle");
+                      setScannedLotId("");
+                      setSelectedOrderId("");
+
+                      setAlertMessage({
+                        type: "success",
+                        title: `All Products of Order ${orderId} Scan Complete`,
+                        message: `Order cutting finished successfully! All cut garments have been serialized and advanced to Station 4 (Stitching Table). Awaiting next fabric bundle.`,
+                      });
+                    };
+
+                    // Inspected lots available for quick selection
+                    const availableInspectedLots = lots.filter(
+                      (l) => l.status === "accepted" && l.rfidUid,
+                    );
+
+                    return (
+                      <div className="space-y-5">
+                        {/* Streamlined Station Header — Clean and single-layered */}
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
                           <div>
-                            <h4 className="font-medium text-sm">Assign Next Garment Tag</h4>
-                            <p className="text-xs text-muted-foreground">
-                              Scan a fresh, unassigned RFID card for each cut panel set. Creates
-                              garment and binds actual material lineage.
+                            <div className="flex items-center gap-2">
+                              <span className="rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                                Station 3
+                              </span>
+                              <h2 className="text-xl font-bold tracking-tight text-foreground">
+                                Cutting Table
+                              </h2>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Operator: <span className="font-semibold text-foreground">{me.displayName}</span> ({me.username}) · Department: <span className="font-mono">{me.department}</span>
                             </p>
                           </div>
+
+                          <div className="flex items-center gap-3">
+                            {cuttingReworkCases.length > 0 && (
+                              <Button
+                                variant={activeTab === "rework" ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setActiveTab(activeTab === "rework" ? "cutting" : "rework")}
+                                className="text-xs gap-1.5 h-8"
+                              >
+                                <Wrench className="size-3.5" />
+                                Cutting Rework ({cuttingReworkCases.length})
+                              </Button>
+                            )}
+
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                              Scanner 3 Online
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <Field label="Garment Size" htmlFor="cut-size">
-                            <NativeSelect
-                              id="cut-size"
-                              value={size}
-                              onChange={setSize}
-                              options={["S", "M", "L", "XL"].map((s) => ({
-                                value: s,
-                                label: `Size ${s}`,
-                              }))}
-                            />
-                          </Field>
-
-                          <div className="flex items-end">
+                        {/* Alert / Notification Banner */}
+                        {alertMessage && (
+                          <div
+                            className={`rounded-lg border p-3.5 text-xs flex items-start gap-3 transition-all ${
+                              alertMessage.type === "success"
+                                ? "border-emerald-500/30 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
+                                : alertMessage.type === "error"
+                                  ? "border-destructive/30 bg-destructive/10 text-destructive dark:bg-destructive/20"
+                                  : "border-primary/30 bg-primary/5 text-foreground"
+                            }`}
+                          >
+                            <div className="mt-0.5 shrink-0">
+                              {alertMessage.type === "success" && <CheckCircle2 className="size-4 text-emerald-600" />}
+                              {alertMessage.type === "error" && <XCircle className="size-4 text-destructive" />}
+                              {alertMessage.type === "info" && <Sparkles className="size-4 text-primary" />}
+                            </div>
+                            <div className="flex-1 space-y-0.5">
+                              <p className="font-bold">{alertMessage.title}</p>
+                              <p className="opacity-90">{alertMessage.message}</p>
+                            </div>
                             <Button
-                              className="w-full sm:w-auto"
-                              disabled={
-                                pending ||
-                                !isCuttingStaff ||
-                                (isCtxForThisStation && activeCtx.status !== "expired")
-                              }
-                              onClick={() =>
-                                void run(
-                                  (c) =>
-                                    c.prepareActionContext("cutting", "bind_garment_tag", {
-                                      kind: "bind_garment_tag",
-                                      cuttingSourceSelectionId: source.id,
-                                      orderId: source.orderId,
-                                      size,
-                                    }),
-                                  "Prepared context for garment tag assignment.",
-                                )
-                              }
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setAlertMessage(null)}
+                              className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
                             >
-                              <Radio className="size-4 mr-1.5" /> Prepare Next Garment Card
+                              ✕
                             </Button>
                           </div>
-                        </div>
-                      </div>
-                    </section>
-                ) : (
-                  /* Mode 2: Select Fabric Source */
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    <Section
-                      title="Step 1: Select Fabric Source"
-                      description="Select an approved order and issued fabric bundle, then scan the lot card to confirm source."
-                    >
-                      {approvedOrders.length === 0 ? (
-                        <EmptyState title="No approved production orders available" />
-                      ) : (
-                        <div className="space-y-4">
-                          <Field label="Production Order" htmlFor="cut-order">
-                            <NativeSelect
-                              id="cut-order"
-                              value={orderId}
-                              onChange={(v) => {
-                                setSelectedOrderId(v);
-                                setSelectedIssueId("");
-                              }}
-                              options={approvedOrders.map((o) => ({
-                                value: o.id,
-                                label: `${o.id} — ${o.product} (${o.plannedQty} planned)`,
-                              }))}
+                        )}
+
+                        {/* Optional Rework Panel (if active) */}
+                        {activeTab === "rework" && (
+                          <div className="rounded-xl border bg-card p-5 space-y-4">
+                            <div className="flex items-center justify-between border-b pb-3">
+                              <h3 className="text-sm font-bold flex items-center gap-2">
+                                <Wrench className="size-4 text-accent" />
+                                Cutting Rework Queue ({cuttingReworkCases.length} items)
+                              </h3>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setActiveTab("cutting")}
+                                className="text-xs h-7"
+                              >
+                                Return to Cutting
+                              </Button>
+                            </div>
+                            <DataTable
+                              rows={cuttingReworkCases}
+                              rowKey={(rc) => rc.id}
+                              columns={[
+                                {
+                                  header: "Garment ID",
+                                  cell: (rc) => <IdLink href={paths.garment(rc.garmentId)} id={rc.garmentId} />,
+                                },
+                                {
+                                  header: "Defect Reason",
+                                  cell: (rc) => <span className="text-xs">{rc.defectReason || "Panel defect"}</span>,
+                                },
+                                {
+                                  header: "Status",
+                                  cell: (rc) => <StatusBadge status={rc.status} />,
+                                },
+                                {
+                                  header: "Action",
+                                  cell: (rc) => (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-xs h-7"
+                                      onClick={() => {
+                                        void run(
+                                          (c) => c.completeRework(rc.id, repairNotes || "Recut replacement panel"),
+                                          `Recut completed for ${rc.garmentId}. Routed to QA for reinspection.`,
+                                        );
+                                      }}
+                                    >
+                                      Complete Recut
+                                    </Button>
+                                  ),
+                                },
+                              ]}
                             />
-                          </Field>
+                          </div>
+                        )}
 
-                          {(() => {
-                            const availableIssues = qOrderDetail.data?.issues ?? [];
-                            const activeIssueId = selectedIssueId || availableIssues[0]?.id || "";
-                            const activeIssue = availableIssues.find((i) => i.id === activeIssueId);
+                        {/* ------------------------------------------------------------- */}
+                        {/* SCREEN 1: Awaiting Fabric Bundle Card Scan                     */}
+                        {/* No text input box. Operator clicks Scan Bundle Tag or taps    */}
+                        {/* ------------------------------------------------------------- */}
+                        {activeTab === "cutting" && step === "awaiting_bundle" && (
+                          <div className="rounded-xl border bg-card p-8 space-y-6 shadow-xs text-center max-w-xl mx-auto">
+                            <div className="size-16 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center animate-pulse">
+                              <ScanLine className="size-8" />
+                            </div>
+                            <div className="space-y-1">
+                              <h3 className="text-xl font-bold text-foreground">
+                                Station 3 — Cutting Table Reader
+                              </h3>
+                              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                                Click below to scan the fabric bundle tag or present it to the hardware reader. The system will automatically load associated production orders.
+                              </p>
+                            </div>
 
-                            return (
-                              <>
-                                <Field
-                                  label="Material Input (Issued Fabric)"
-                                  htmlFor="cut-issue"
-                                  hint={
-                                    activeIssue
-                                      ? `Allocated from Lot ${activeIssue.lotId} · ${activeIssue.qty} m issued`
-                                      : undefined
-                                  }
-                                >
-                                  {availableIssues.length === 0 ? (
-                                    <div className="rounded-md border border-warning/40 bg-warning-soft p-2.5 text-xs text-warning-foreground">
-                                      No material has been issued to {orderId} yet. Allocate fabric at Station 2 (Fabric Issue) first.
-                                    </div>
-                                  ) : (
-                                    <NativeSelect
-                                      id="cut-issue"
-                                      value={activeIssueId}
-                                      onChange={(v) => setSelectedIssueId(v)}
-                                      options={availableIssues.map((i) => ({
-                                        value: i.id,
-                                        label: `${i.id} — ${i.qty} m from Lot ${i.lotId}`,
-                                      }))}
-                                    />
-                                  )}
-                                </Field>
+                            {/* Direct Action Button — No text input box */}
+                            <div className="pt-2 flex flex-col items-center gap-2">
+                              <Button
+                                size="lg"
+                                disabled={pending}
+                                onClick={() => {
+                                  setAlertMessage({
+                                    type: "info",
+                                    title: "Scanner 3 Armed & Ready",
+                                    message: "Awaiting physical fabric bundle tag tap on Scanner 3 (or tap any available bundle chip below).",
+                                  });
 
-                                <div className="grid grid-cols-2 gap-3">
-                                  <Field label="Fabric Consumed (m)" htmlFor="cut-cons">
-                                    <Input
-                                      id="cut-cons"
-                                      type="number"
-                                      min="0.1"
-                                      step="0.1"
-                                      value={consumedQty}
-                                      onChange={(e) => setConsumedQty(e.target.value)}
-                                    />
-                                  </Field>
-                                  <Field label="Fabric Waste (m)" htmlFor="cut-waste">
-                                    <Input
-                                      id="cut-waste"
-                                      type="number"
-                                      min="0"
-                                      step="0.05"
-                                      value={wasteQty}
-                                      onChange={(e) => setWasteQty(e.target.value)}
-                                    />
-                                  </Field>
+                                  // Start polling loop to capture hardware scan from ESP32 on Station 3
+                                  void run(
+                                    async (c) => {
+                                      const startTime = Date.now();
+                                      while (Date.now() - startTime < 35000) {
+                                        const data = await c.getRfidStationData("cutting");
+                                        if (data.lastScanOutcome) {
+                                          const outcomeTime = new Date(data.lastScanOutcome.at).getTime();
+                                          if (outcomeTime >= startTime - 2000) {
+                                            const scannedTag = data.lastScanOutcome.uid;
+                                            if (scannedTag) {
+                                              handleScanBundleCard(scannedTag);
+                                              return data.lastScanOutcome;
+                                            }
+                                          }
+                                        }
+                                        await new Promise((r) => setTimeout(r, 600));
+                                      }
+                                      return null;
+                                    },
+                                    "Awaiting hardware bundle tag scan...",
+                                  );
+                                }}
+                                className="h-12 px-8 text-sm font-bold gap-2.5 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
+                              >
+                                {pending ? (
+                                  <>
+                                    <span className="relative flex h-2.5 w-2.5 mr-1">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                    </span>
+                                    <span>Awaiting Hardware Bundle Scan (Scanner 3)...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ScanLine className="size-5" />
+                                    <span>Scan Bundle Tag</span>
+                                  </>
+                                )}
+                              </Button>
+                              {pending && (
+                                <p className="text-xs text-muted-foreground animate-pulse">
+                                  Present physical bundle card to reader antenna, or click an inspected bundle chip below.
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Available Inspected Bundles (One-Click Tap for Hardware / Demo) */}
+                            {availableInspectedLots.length > 0 && (
+                              <div className="pt-4 border-t space-y-2">
+                                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block text-center">
+                                  Or Tap Available Inspected Bundles:
+                                </span>
+                                <div className="flex flex-wrap justify-center gap-2">
+                                  {availableInspectedLots.map((lot) => (
+                                    <Button
+                                      key={lot.id}
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleScanBundleCard(lot.rfidUid!)}
+                                      className="text-xs h-8 gap-1.5 font-mono hover:border-primary cursor-pointer"
+                                    >
+                                      <Package className="size-3 text-primary" />
+                                      <span>{lot.id}</span>
+                                      <span className="text-muted-foreground">({lot.rfidUid})</span>
+                                      <span className="text-emerald-600 font-bold">✓</span>
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ------------------------------------------------------------- */}
+                        {/* SCREEN 2: BUNDLE ORDERS SCREEN                                */}
+                        {/* Shows orders associated with scanned bundle for staff choice  */}
+                        {/* ------------------------------------------------------------- */}
+                        {activeTab === "cutting" && step === "bundle_orders" && activeLot && (
+                          <div className="space-y-5">
+                            {/* Scanned Bundle Banner */}
+                            <div className="rounded-xl border bg-card p-5 space-y-4 shadow-xs">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                                    Scanned Fabric Bundle
+                                  </span>
+                                  <h3 className="text-lg font-bold flex items-center gap-2 text-foreground">
+                                    <Package className="size-5 text-primary" />
+                                    {activeLot.id} — {activeLot.material}
+                                  </h3>
                                 </div>
 
-                                {!isCuttingStaff && (
-                                  <ScopeNote>
-                                    Only cutting department staff or managers can prepare cutting sources.
-                                  </ScopeNote>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  <StatusBadge status="QC Passed" tone="success" />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setStep("awaiting_bundle");
+                                      setScannedLotId("");
+                                    }}
+                                    className="text-xs h-8 gap-1"
+                                  >
+                                    <ArrowLeft className="size-3.5" />
+                                    Scan Different Bundle
+                                  </Button>
+                                </div>
+                              </div>
 
-                                {isCuttingStaff && (
-                                  <div className="pt-2">
-                                    <Button
-                                      disabled={
-                                        pending ||
-                                        !currentOrder ||
-                                        availableIssues.length === 0 ||
-                                        !activeIssueId ||
-                                        Number(consumedQty) <= 0 ||
-                                        (isCtxForThisStation && activeCtx.status !== "expired")
-                                      }
-                                      onClick={() =>
-                                        void run(
-                                          (c) =>
-                                            c.prepareActionContext("cutting", "select_cutting_source", {
-                                              kind: "select_cutting_source",
-                                              orderId,
-                                              issueId: activeIssueId,
-                                              consumedQty: Number(consumedQty),
-                                              wasteQty: Number(wasteQty),
-                                            }),
-                                          "Prepared cutting source confirmation.",
-                                        )
-                                      }
-                                    >
-                                      <Radio className="size-4" /> Prepare: Select Fabric Source
-                                    </Button>
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </Section>
-
-                    <Section
-                      title="Reader Action & Scan Lifecycle"
-                      description="Scan the fabric bundle card to confirm source input."
-                    >
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Lifecycle state:</span>
-                          {isCtxForThisStation ? (
-                            <div className="inline-flex items-center gap-1.5">
-                              {activeCtx.status === "ready" && (
-                                <span className="relative flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-                                </span>
-                              )}
-                              <StatusBadge
-                                status={activeCtx.status}
-                                tone={
-                                  activeCtx.status === "ready"
-                                    ? "success"
-                                    : activeCtx.status === "awaiting_ack"
-                                      ? "warning"
-                                      : activeCtx.status === "confirmed"
-                                        ? "success"
-                                        : "neutral"
-                                }
-                              />
+                              <div className="grid gap-3 sm:grid-cols-4 text-xs">
+                                <div className="rounded-lg border bg-muted/20 p-2.5">
+                                  <span className="text-muted-foreground block text-[10px] font-semibold uppercase">
+                                    Lot Code
+                                  </span>
+                                  <span className="font-bold text-sm text-foreground">{activeLot.id}</span>
+                                </div>
+                                <div className="rounded-lg border bg-muted/20 p-2.5">
+                                  <span className="text-muted-foreground block text-[10px] font-semibold uppercase">
+                                    Usable Roll Length
+                                  </span>
+                                  <span className="font-bold text-sm text-foreground">
+                                    {activeLot.balanceQty || activeLot.receivedQty} m
+                                  </span>
+                                </div>
+                                <div className="rounded-lg border bg-muted/20 p-2.5">
+                                  <span className="text-muted-foreground block text-[10px] font-semibold uppercase">
+                                    Bundle RFID Tag UID
+                                  </span>
+                                  <span className="font-mono font-bold text-sm text-foreground">
+                                    {activeLot.rfidUid}
+                                  </span>
+                                </div>
+                                <div className="rounded-lg border bg-muted/20 p-2.5">
+                                  <span className="text-muted-foreground block text-[10px] font-semibold uppercase">
+                                    QC Clearance
+                                  </span>
+                                  <span className="font-bold text-sm text-emerald-600 flex items-center gap-1">
+                                    <CheckCircle2 className="size-3.5" /> Approved at Dock
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          ) : (
-                            <StatusBadge status="idle" tone="neutral" />
-                          )}
-                        </div>
 
-                        {isCtxForThisStation && activeCtx.status === "awaiting_ack" && (
-                          <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 space-y-3">
-                            <p className="text-sm font-medium text-warning-foreground">
-                              Context <span className="wt-id">{activeCtx.id}</span> created.
-                              Awaiting reader board acknowledgement.
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                size="sm"
-                                disabled={pending}
-                                onClick={() =>
-                                  void run(
-                                    (c) => c.acknowledgeContext(activeCtx.id),
-                                    "Reader board acknowledged context.",
-                                  )
-                                }
-                              >
-                                Simulate Board Acknowledgment
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={pending}
-                                onClick={() =>
-                                  void run(
-                                    (c) => c.cancelContext(activeCtx.id),
-                                    "Context cancelled.",
-                                  )
-                                }
-                              >
-                                Cancel context
-                              </Button>
+                            {/* "Bundle Orders" dedicated list */}
+                            <div className="rounded-xl border bg-card p-5 space-y-4 shadow-xs">
+                              <div>
+                                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                                  <Scissors className="size-4 text-primary" />
+                                  Bundle Orders
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                  Select which production order to cut from bundle {activeLot.id}. After selecting, subsequent scans will enroll individual products for that order.
+                                </p>
+                              </div>
+
+                              {associatedOrders.length === 0 ? (
+                                <div className="p-8 text-center text-xs text-muted-foreground border rounded-lg bg-muted/10">
+                                  No production orders currently assigned to this fabric bundle.
+                                </div>
+                              ) : (
+                                <div className="grid gap-3">
+                                  {associatedOrders.map((order) => {
+                                    const orderGarments = garments.filter((g) => g.orderId === order.id);
+                                    const isDone = !!completedOrders[order.id] || orderGarments.length >= order.plannedQty;
+                                    const reqFabric = Math.round(order.plannedQty * 2.0 * 10) / 10;
+
+                                    return (
+                                      <div
+                                        key={order.id}
+                                        className={`rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-all ${
+                                          isDone
+                                            ? "bg-muted/30 border-muted"
+                                            : "bg-card hover:border-primary/50 shadow-xs"
+                                        }`}
+                                      >
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-bold text-sm text-foreground">
+                                              {order.id}
+                                            </span>
+                                            <StatusBadge status={order.status} />
+                                            {isDone && (
+                                              <span className="rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 dark:bg-emerald-950 dark:text-emerald-300">
+                                                Cutting Complete
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="text-xs text-foreground font-semibold">
+                                            {order.product}
+                                          </p>
+                                          <p className="text-[11px] text-muted-foreground">
+                                            Style: <span className="font-mono">{order.styleCode}</span> · Target: <span className="font-bold text-foreground">{order.plannedQty} pcs</span> · Required: <span className="font-bold text-foreground">{reqFabric} m</span> · Progress: <span className="font-mono">{orderGarments.length} / {order.plannedQty} pcs cut</span>
+                                          </p>
+                                        </div>
+
+                                        <div className="shrink-0 flex items-center gap-2">
+                                          {isDone ? (
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => handleSelectOrder(order)}
+                                              className="text-xs gap-1.5"
+                                            >
+                                              <RotateCcw className="size-3.5" />
+                                              Review Cut Garments
+                                            </Button>
+                                          ) : (
+                                            <Button
+                                              onClick={() => handleSelectOrder(order)}
+                                              className="gap-2 text-xs font-bold"
+                                            >
+                                              <Scissors className="size-3.5" />
+                                              Select Order &amp; Start Product Scans →
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
 
-                        {isCtxForThisStation && activeCtx.status === "ready" && (
-                          <div className="rounded-lg border border-success/40 bg-success-soft p-4 space-y-3">
-                            <p className="text-sm font-medium text-success-foreground">
-                              Ready to scan! Present the fabric bundle card at Station 3 (Cutting).
-                            </p>
-                            <div className="space-y-2">
-                              <Field label="Fabric Bundle Card UID" htmlFor="cut-src-uid">
-                                <Input
-                                  id="cut-src-uid"
-                                  value={scanUid}
-                                  onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                  className="font-mono bg-card"
-                                  placeholder="e.g. 04A1B2C3"
-                                />
-                              </Field>
-                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {/* ------------------------------------------------------------- */}
+                        {/* SCREEN 3: PRODUCT ENROLLMENT SCANNING                         */}
+                        {/* Scans individual garment tags, linking them to bundle & order */}
+                        {/* ------------------------------------------------------------- */}
+                        {activeTab === "cutting" && step === "scanning_products" && selectedOrder && activeLot && (
+                          <div className="space-y-5">
+                            {/* Active Cutting Job Card */}
+                            <div className="rounded-xl border bg-card p-5 space-y-4 shadow-xs">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
+                                      ACTIVE ORDER
+                                    </span>
+                                    <h3 className="text-lg font-bold text-foreground">
+                                      {selectedOrder.id} — {selectedOrder.product}
+                                    </h3>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    Linked Fabric Roll: <strong className="text-foreground">{activeLot.id}</strong> ({activeLot.material}) ·
+                                    Style: <span className="font-mono">{selectedOrder.styleCode}</span> ·
+                                    Target: <strong className="text-foreground">{selectedOrder.plannedQty} pcs</strong>
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2">
                                   <Button
-                                    disabled={pending || !scanUid.trim()}
-                                    onClick={() =>
-                                      void run(
-                                        (c) => c.resolveRfidScan(scanUid.trim()),
-                                        (outcome) =>
-                                          outcome.resolution === "accepted"
-                                            ? `Fabric source confirmed! Ready to assign garment tags.`
-                                            : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
-                                      )
-                                    }
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setStep("bundle_orders")}
+                                    className="text-xs h-8 gap-1"
                                   >
-                                    <ScanLine className="size-4 mr-1.5" /> Simulate Scan
+                                    <ArrowLeft className="size-3" />
+                                    Bundle Orders
                                   </Button>
-                                  {activeIssueLot?.rfidUid && (
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      size="sm"
-                                      disabled={pending}
-                                      onClick={() => setScanUid(activeIssueLot.rfidUid!)}
-                                    >
-                                      Pre-fill Lot Card ({activeIssueLot.rfidUid})
-                                    </Button>
-                                  )}
+
+                                  <Button
+                                    onClick={handleCompleteOrderCutting}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 text-xs font-bold h-8"
+                                  >
+                                    <Check className="size-4" />
+                                    All Products of this Order Scan Complete
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Real-time Progress Bar */}
+                              <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                                <div className="flex items-center justify-between text-xs font-semibold">
+                                  <span className="text-muted-foreground uppercase tracking-wider">
+                                    Cutting Output Progress:
+                                  </span>
+                                  <span className="text-sm font-bold tabular-nums text-foreground">
+                                    {cutCount} / {plannedCount} pcs cut ({progressPercent}%)
+                                  </span>
+                                </div>
+                                <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-600 transition-all duration-300"
+                                    style={{ width: `${progressPercent}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Hardware Scanner 3 Live Listening Banner — Nothing to write or select */}
+                              <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="relative flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                    <ScanLine className="size-5 relative" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                                      Hardware Reader Armed — Scanning Shirts
+                                    </h4>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Scan tags one by one at Scanner 3. Products will appear dynamically below, linked to Bundle <strong className="text-foreground">{activeLot.id}</strong> &amp; Order <strong className="text-foreground">{selectedOrder.id}</strong>.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0 flex items-center gap-2">
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     disabled={pending}
-                                    onClick={() =>
-                                      void run(
-                                        (c) => c.cancelContext(activeCtx.id),
-                                        "Context cancelled.",
-                                      )
-                                    }
+                                    onClick={() => void handleScanProductTag(generateFreshUid())}
+                                    className="gap-1.5 text-xs font-semibold border-primary/40 hover:bg-primary hover:text-primary-foreground transition-all cursor-pointer shadow-2xs"
                                   >
-                                    Cancel
+                                    <Sparkles className="size-3.5 text-primary" />
+                                    Tap Next Garment (Hardware)
                                   </Button>
                                 </div>
+                              </div>
                             </div>
-                          </div>
-                        )}
 
-                        {!isCtxForThisStation && (
-                          <p className="text-sm text-muted-foreground">
-                            No pending source selection. Select an order and click &ldquo;Prepare:
-                            Select Fabric Source&rdquo;.
-                          </p>
-                        )}
-                      </div>
-                    </Section>
-                  </div>
-                )}
-
-                {/* Reader Scan Lifecycle for Garment Tag Binding */}
-                {source && source.active && (
-                  <Section
-                    title="Station 3 Reader & Tag Assignment"
-                    description="Hardware lifecycle: prepare tag assignment → board ack → scan fresh card → garment created."
-                  >
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">Lifecycle state:</span>
-                        {isCtxForThisStation ? (
-                          <div className="inline-flex items-center gap-1.5">
-                            {activeCtx.status === "ready" && (
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
-                              </span>
-                            )}
-                            <StatusBadge
-                              status={activeCtx.status}
-                              tone={
-                                activeCtx.status === "ready"
-                                  ? "success"
-                                  : activeCtx.status === "awaiting_ack"
-                                    ? "warning"
-                                    : activeCtx.status === "confirmed"
-                                      ? "success"
-                                      : "neutral"
-                              }
-                            />
-                          </div>
-                        ) : (
-                          <StatusBadge status="idle" tone="neutral" />
-                        )}
-                      </div>
-
-                      {isCtxForThisStation && activeCtx.status === "awaiting_ack" && (
-                        <div className="rounded-lg border border-warning/40 bg-warning-soft p-4 space-y-3">
-                          <p className="text-sm font-medium text-warning-foreground">
-                            Context <span className="wt-id">{activeCtx.id}</span> created. Awaiting
-                            reader board acknowledgement.
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                void run(
-                                  (c) => c.acknowledgeContext(activeCtx.id),
-                                  "Reader board acknowledged context.",
-                                )
-                              }
-                            >
-                              Simulate Board Acknowledgment
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                void run((c) => c.cancelContext(activeCtx.id), "Context cancelled.")
-                              }
-                            >
-                              Cancel context
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-
-                      {isCtxForThisStation && activeCtx.status === "ready" && (
-                        <div className="rounded-lg border border-success/40 bg-success-soft p-4 space-y-3">
-                          <p className="text-sm font-medium text-success-foreground">
-                            Ready to scan! Present a FRESH, UNBOUND RFID card for the cut panel set.
-                          </p>
-                          <div className="space-y-2">
-                            <Field
-                              label="Fresh Garment Card UID"
-                              htmlFor="cut-tag-uid"
-                              hint="Must be an unassigned card UID."
-                            >
-                              <Input
-                                id="cut-tag-uid"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                className="font-mono bg-card"
-                                placeholder="e.g. 04FF1122"
-                              />
-                            </Field>
-                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                              <Button
-                                disabled={pending || !scanUid.trim()}
-                                onClick={() =>
-                                  void run(
-                                    (c) => c.resolveRfidScan(scanUid.trim()),
-                                    (outcome) => {
-                                      if (outcome.resolution === "accepted") {
-                                        setScanUid(generateFreshUid());
-                                        return `Garment ${outcome.garmentCode ?? outcome.subjectId} created! Product: ${outcome.productName}`;
-                                      }
-                                      return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
-                                    },
-                                  )
-                                }
-                              >
-                                <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={pending}
-                                onClick={() => setScanUid(generateFreshUid())}
-                              >
-                                <Sparkles className="size-3 mr-1" /> Generate Fresh UID
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={pending}
-                                onClick={() =>
-                                  void run((c) => c.cancelContext(activeCtx.id), "Context cancelled.")
-                                }
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {!isCtxForThisStation && (
-                        <p className="text-sm text-muted-foreground">
-                          Ready to assign tags. Click &ldquo;Prepare Next Garment Card&rdquo; above.
-                        </p>
-                      )}
-                    </div>
-                  </Section>
-                )}
-
-                {/* Garments Cut for this Active Order */}
-                {source && source.active && (
-                  <Section
-                    title={`Garments Cut for Order ${source.orderId}`}
-                    description="Individually tagged outputs with actual material lineage from confirmed fabric source."
-                  >
-                    <DataTable
-                      rows={orderGarments}
-                      rowKey={(g) => g.id}
-                      empty="No garments cut yet for this order."
-                      columns={[
-                        {
-                          header: "Garment Code",
-                          cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
-                        },
-                        {
-                          header: "Product & Size",
-                          cell: (g) => (
-                            <div>
-                              <span className="font-medium text-xs sm:text-sm">{g.productName}</span>
-                              {g.size && (
-                                <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">
-                                  Size {g.size}
+                            {/* Enrolled Products Table for this Order */}
+                            <div className="rounded-xl border bg-card p-5 space-y-3 shadow-xs">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                                  <Layers className="size-3.5 text-primary" />
+                                  Cut Products for Order {selectedOrder.id} ({currentOrderGarments.length} pcs)
+                                </h4>
+                                <span className="text-xs text-muted-foreground">
+                                  Destination: <strong className="text-primary font-semibold">Station 4 (Stitching)</strong>
                                 </span>
+                              </div>
+
+                              <DataTable
+                                rows={currentOrderGarments}
+                                rowKey={(g) => g.id}
+                                empty="No garments serialized for this order yet. Present fresh RFID card at Scanner 3."
+                                columns={[
+                                  {
+                                    header: "Garment ID",
+                                    cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
+                                  },
+                                  {
+                                    header: "Product & Size",
+                                    cell: (g) => (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-semibold text-xs">{g.productName}</span>
+                                        {g.size && (
+                                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold">
+                                            Size {g.size}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ),
+                                  },
+                                  {
+                                    header: "Bound RFID UID",
+                                    cell: (g) =>
+                                      g.rfidUid ? (
+                                        <span className="font-mono text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 flex items-center gap-1 w-fit">
+                                          <Radio className="size-3" /> {g.rfidUid}
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs italic text-muted-foreground">Unbound</span>
+                                      ),
+                                  },
+                                  {
+                                    header: "Hierarchy Lineage",
+                                    cell: (g) => (
+                                      <span className="font-mono text-[11px] text-muted-foreground flex items-center gap-1">
+                                        <span className="text-primary font-semibold">{activeLot.id}</span>
+                                        <ArrowRight className="size-3 text-muted-foreground" />
+                                        <span className="text-foreground font-semibold">{selectedOrder.id}</span>
+                                        <ArrowRight className="size-3 text-muted-foreground" />
+                                        <span className="text-emerald-600 font-semibold">{g.id}</span>
+                                      </span>
+                                    ),
+                                  },
+                                  {
+                                    header: "Next Station",
+                                    cell: () => (
+                                      <span className="rounded bg-primary/10 border border-primary/20 px-2 py-0.5 text-[11px] font-bold text-primary">
+                                        Station 4 (Stitching)
+                                      </span>
+                                    ),
+                                  },
+                                ]}
+                              />
+
+                              {/* Prominent Completion Button at bottom as well */}
+                              {currentOrderGarments.length > 0 && (
+                                <div className="pt-3 border-t flex justify-end">
+                                  <Button
+                                    onClick={handleCompleteOrderCutting}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold"
+                                  >
+                                    <Check className="size-4" />
+                                    All Products of this Order Scan Complete
+                                  </Button>
+                                </div>
                               )}
                             </div>
-                          ),
-                        },
-                        {
-                          header: "Active RFID Card",
-                          cell: (g) =>
-                            g.rfidUid ? (
-                              <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
-                                <Radio className="size-3" /> {g.rfidUid}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">Unassigned</span>
-                            ),
-                        },
-                        {
-                          header: "Physical Stage",
-                          cell: (g) => <StatusBadge status={g.stage} />,
-                        },
-                        {
-                          header: "Quality Clearance",
-                          cell: (g) => (
-                            <div className="flex items-center gap-1">
-                              <StatusBadge status={g.disposition} />
-                              {g.hold && <HoldBadge />}
-                            </div>
-                          ),
-                        },
-                      ]}
-                    />
-                  </Section>
-                )}
-              </div>
-            );
-          }}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
+                </Loadable>
+              )}
+            </Loadable>
+          )}
         </Loadable>
       )}
     </Loadable>

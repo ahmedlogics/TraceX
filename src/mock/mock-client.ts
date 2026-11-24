@@ -195,22 +195,17 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     routineScan: (
       uid: string,
-      stationCode: "stitching" | "finishing" | "warehouse",
+      stationCode: "stitching" | "finishing" | "warehouse" | "dispatch",
       _binId?: string,
     ) => act((s, u) => E.routineScan(s, u, uid, stationCode as any)),
 
     warehouseIntake: (tagUid: string, binId?: string) =>
       act((s, u) => {
-        E.receiveStock(s, u, tagUid);
-        return {
-          uid: tagUid,
-          resolution: "accepted" as const,
-          subjectId: tagUid,
-          garmentCode: tagUid,
-          productName: `Received into ${binId || "BIN-A1"}`,
-          at: new Date().toISOString(),
-        };
+        return E.receiveStock(s, u, tagUid, binId);
       }),
+
+    dispatchBoxScan: (boxTagOrId: string, shipmentId?: string) =>
+      act((s, u) => E.dispatchBoxScan(s, u, boxTagOrId, shipmentId)),
 
     simulateRfidScan: (uid: string) => act((s, u) => E.resolveRfidScan(s, u, uid)),
 
@@ -241,7 +236,27 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
     listProductSpecs: () => read((s) => E.listProductSpecs(s)),
     saveProductSpec: (spec) => act((s, u) => E.saveProductSpec(s, u, spec)),
-    listOrders: () => read((s) => s.orders),
+    listOrders: () =>
+      read((s) =>
+        s.orders.map((o) => {
+          const orderIssues = s.issues.filter((i) => i.orderId === o.id);
+          const lotIds = orderIssues.map((i) => i.lotId);
+          return {
+            ...o,
+            lotId: (o as any).lotId || lotIds[0],
+            lotIds: (o as any).lotIds || lotIds,
+            lotCodes: (o as any).lotCodes || lotIds,
+            issues: orderIssues.map((i) => ({
+              id: i.id,
+              lotId: i.lotId,
+              lotCode: i.lotId,
+              materialName: s.lots.find((l) => l.id === i.lotId)?.material || "Fabric Roll",
+              quantity: i.qty,
+              performedAt: i.issuedAt,
+            })),
+          };
+        }),
+      ),
     getOrder: (id) =>
       read((s) => {
         const order = s.orders.find((o) => o.id === id);
@@ -351,8 +366,8 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
         packages: s.packages,
         openShipments: s.shipments.filter((x) => x.status !== "departed"),
       })),
-    packGarment: (gid) => act((s, u) => E.packGarment(s, u, gid)),
-    createPackage: () => act((s, u) => E.createPackage(s, u)),
+    packGarment: (gid, pkgId) => act((s, u) => E.packGarment(s, u, gid, pkgId)),
+    createPackage: (rfidUid, customId) => act((s, u) => E.createPackage(s, u, rfidUid, customId)),
     sealPackage: (packageId) => act((s, u) => E.sealPackage(s, u, packageId)),
     receiveStock: (gid) => act((s, u) => E.receiveStock(s, u, gid)),
     allocateStock: (gid, sid) => act((s, u) => E.allocateStock(s, u, gid, sid)),
@@ -424,7 +439,9 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
   const held = s.garments.filter((g) => g.hold);
   const openInsp = s.inspections.filter((i) => i.status === "open");
   const failedLedger = s.ledger.filter((l) => l.status === "failed");
-  const awaitingLots = s.lots.filter((l) => l.status === "awaiting-inspection");
+  const awaitingLots = s.lots.filter(
+    (l) => l.status === "awaiting-inspection",
+  );
   const activeShipments = s.shipments.filter((x) => x.status !== "departed");
 
   const metricsByRole: Record<StaffUser["role"], DashboardData["metrics"]> = {
@@ -484,14 +501,19 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
         u.department?.toLowerCase() === "raw-store";
 
       if (isIncoming) {
+        const readyForQc = awaitingLots.filter((l) => Boolean(l.rfidUid) && l.rfidUid !== "unassigned");
+        const awaitingRec = awaitingLots.filter((l) => !l.rfidUid || l.rfidUid === "unassigned");
+        const actionableOpen = open.filter((t) => {
+          if (t.kind === "incoming-qc") {
+            return readyForQc.some((l) => l.id === t.subjectId);
+          }
+          return true;
+        });
         return [
-          { label: "My open tasks", value: open.length },
-          { label: "Lots awaiting inspection", value: awaitingLots.length },
-          { label: "Accepted lots", value: s.lots.filter((l) => l.status === "accepted").length },
-          {
-            label: "Held / rejected lots",
-            value: s.lots.filter((l) => l.status === "rejected" || (l.heldQty ?? 0) > 0).length,
-          },
+          { label: "My open tasks", value: actionableOpen.length },
+          { label: "Lots ready for QC", value: readyForQc.length },
+          { label: "Awaiting receiving", value: awaitingRec.length },
+          { label: "Cleared fabric lots", value: s.lots.filter((l) => l.status === "accepted").length },
         ];
       }
 
@@ -549,14 +571,36 @@ function dashboard(s: DemoState, u: StaffUser, tasks: Task[]): DashboardData {
         href: "/staff/ledger",
       }),
     );
-  if (["M", "Q"].includes(u.role))
-    awaitingLots.forEach((l) =>
+  if (["M", "Q"].includes(u.role)) {
+    s.lots
+      .filter((l) => l.status === "rejected")
+      .forEach((l) =>
+        alerts.push({
+          tone: "danger",
+          message: `Material Lot ${l.id} failed incoming QC — quarantined from production.`,
+          href: "/staff/quality",
+        }),
+      );
+    s.lots
+      .filter((l) => (l.heldQty ?? 0) > 0)
+      .forEach((l) =>
+        alerts.push({
+          tone: "warning",
+          message: `Material Lot ${l.id} has ${l.heldQty}${l.unit ?? "m"} on quality hold in quarantine.`,
+          href: "/staff/quality",
+        }),
+      );
+  }
+  if (isIncomingQc) {
+    const readyForQc = awaitingLots.filter((l) => Boolean(l.rfidUid) && l.rfidUid !== "unassigned");
+    if (readyForQc.length > 0) {
       alerts.push({
         tone: "info",
-        message: `${l.id} is awaiting incoming inspection.`,
-        href: `/staff/material-lots/${l.id}`,
-      }),
-    );
+        message: `${readyForQc.length} incoming fabric roll(s) ready in quarantine for QC evaluation.`,
+        href: "/staff/quality",
+      });
+    }
+  }
 
   const assigned = open
     .filter((t) => u.role === "M" || t.assigneeId === u.id || !t.assigneeId)

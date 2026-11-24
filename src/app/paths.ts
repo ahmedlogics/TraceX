@@ -25,6 +25,7 @@ export const paths = {
   reports: "/staff/reports",
   adminUsers: "/staff/admin/users",
   settings: "/staff/settings",
+  nfcHub: "/staff/nfc-passports",
   publicJourney: (publicId: string) => `/p/${encodeURIComponent(publicId)}`,
   publicProof: (publicId: string) => `/p/${encodeURIComponent(publicId)}/proof`,
 } as const;

@@ -3,14 +3,12 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  Cpu,
   Radio,
   ScanLine,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmt, PageHeader } from "@/components/wt/layout";
-import { StatusBadge, type Tone } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import { rfidStationCodes, rfidStationLabels, stationDepartment } from "@/domain/labels";
 import type { RfidStationCode, ScanOutcome, StaffUser } from "@/domain/types";
@@ -25,11 +23,15 @@ import { StitchingPanel } from "./StitchingPanel";
 import { FinishingPanel } from "./FinishingPanel";
 import { QAPanel } from "./QAPanel";
 import { LogisticsPanel } from "./LogisticsPanel";
+import { DispatchPanel } from "./DispatchPanel";
 import { WarehousePanel } from "./WarehousePanel";
+import { PackingPanel } from "./PackingPanel";
 
 function defaultStationForUser(user: StaffUser): RfidStationCode {
   if (user.username === "receiving.demo") return "fabric_receiving";
   if (user.username === "rawstore.demo") return "fabric_issue";
+  if (user.username === "dispatch.demo") return "dispatch";
+  if (user.username === "packing.demo") return "packing";
 
   switch (user.department) {
     case "receiving":
@@ -74,51 +76,46 @@ export function StationShell() {
   );
 
   return (
-    <Loadable query={qStation}>
-      {(stData) => {
-        const lastOutcome = stData.lastScanOutcome;
-
-        return (
-          <div className="space-y-6">
-            {/* Station Operator Bar */}
-            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Active RFID Station:
-                </span>
-                {activeStations.length > 1 ? (
-                  <select
-                    value={effectiveStation}
-                    onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                    className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    {activeStations.map((code) => (
-                      <option key={code} value={code}>
-                        {rfidStationLabels[code]} ({code})
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary">
-                    {rfidStationLabels[effectiveStation]} ({effectiveStation})
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Operator:</span>
-                <span className="font-semibold text-foreground">{me.displayName}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
-                  {me.department}
-                </span>
-              </div>
+    <div className="space-y-6">
+      {activeStations.length > 1 && (
+        <PageHeader
+          title="Workstation"
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Station:
+              </span>
+              <select
+                value={effectiveStation}
+                onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
+                className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {activeStations.map((code) => (
+                  <option key={code} value={code}>
+                    {rfidStationLabels[code]} ({code})
+                  </option>
+                ))}
+              </select>
             </div>
+          }
+        />
+      )}
 
-            {/* Station Status Banner (Dedicated panel for Station 2 handles its own layout) */}
-            {effectiveStation !== "fabric_issue" && (
+      <Loadable query={qStation}>
+        {(stData) => {
+          const lastOutcome = stData.lastScanOutcome;
+
+          return (
+            <div className="space-y-6">
+              {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 7, 9 handle their own layout) */}
+            {effectiveStation !== "fabric_issue" &&
+              effectiveStation !== "cutting" &&
+              effectiveStation !== "final_qc" &&
+              effectiveStation !== "packing" &&
+              effectiveStation !== "dispatch" && (
               <section
-                aria-label="Station header"
-                className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 space-y-4 shadow-xs ${
+                aria-label="Active Station Context"
+                className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 shadow-xs ${
                   effectiveStation === "stitching"
                     ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
                     : effectiveStation === "warehouse"
@@ -174,9 +171,6 @@ export function StationShell() {
                           ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
                           : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
                       </p>
-                      <span className="text-xs font-mono text-muted-foreground">
-                        code: {effectiveStation}
-                      </span>
                     </div>
                     <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                       {stData.stationName}
@@ -190,11 +184,6 @@ export function StationShell() {
                   </div>
 
                   <div className="flex flex-col items-start gap-2 md:items-end">
-                    {stData.bridgeConnected && (
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status="Hardware RFID: Connected" tone="success" />
-                      </div>
-                    )}
                     {stData.lastConfirmedSubjectId && (
                       <div className="flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-xs">
                         <span className="text-muted-foreground">Latest Subject:</span>
@@ -224,7 +213,7 @@ export function StationShell() {
                       <p className="font-semibold text-foreground">
                         {lastOutcome.resolution === "accepted"
                           ? `Scan confirmed (${lastOutcome.uid}): ${
-                              lastOutcome.garmentCode ?? lastOutcome.subjectId
+                              lastOutcome.lotCode ?? lastOutcome.garmentCode ?? lastOutcome.subjectId
                             }${lastOutcome.productName ? ` · ${lastOutcome.productName}` : ""}`
                           : `Scan rejected (${lastOutcome.uid}): ${
                               lastOutcome.rejectReason ?? lastOutcome.resolution
@@ -246,12 +235,13 @@ export function StationShell() {
             {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
             {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
             {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
-            {(effectiveStation === "packing" ||
-              effectiveStation === "dispatch") && <LogisticsPanel stationData={stData} />}
+            {effectiveStation === "dispatch" && <DispatchPanel stationData={stData} />}
+            {effectiveStation === "packing" && <PackingPanel stationData={stData} />}
             {effectiveStation === "warehouse" && <WarehousePanel stationData={stData} />}
           </div>
         );
       }}
     </Loadable>
-  );
+  </div>
+);
 }

@@ -235,54 +235,121 @@ export async function authenticateStaff(
   };
 }
 
+interface CachedSession {
+  result: SessionResolutionResult | null;
+  expiresAt: number;
+}
+
+const sessionCache = new Map<string, CachedSession>();
+const inFlightSessionResolutions = new Map<string, Promise<SessionResolutionResult | null>>();
+const SESSION_CACHE_TTL_MS = 15_000; // 15s in-memory cache to absorb rapid concurrent request bursts
+
+export function invalidateSessionCache(token?: string): void {
+  if (token) {
+    try {
+      const digest = hashSessionToken(token);
+      const key = Buffer.from(digest).toString("hex");
+      sessionCache.delete(key);
+    } catch {
+      // ignore
+    }
+  } else {
+    sessionCache.clear();
+  }
+}
+
+export function clearAllSessionCaches(): void {
+  sessionCache.clear();
+  inFlightSessionResolutions.clear();
+}
+
 /**
  * Resolves an active session from an incoming session token.
  * Validates expiration, revocation, and user suspension on every request.
+ * Employs micro-caching (15s) and promise deduplication to protect against connection pool exhaustion
+ * during simultaneous multi-endpoint frontend request floods.
  */
 export async function resolveSession(
   prisma: PrismaClient,
   token: string,
 ): Promise<SessionResolutionResult | null> {
   const tokenDigest = hashSessionToken(token);
+  const cacheKey = Buffer.from(tokenDigest).toString("hex");
+  const now = Date.now();
 
-  const session = await prisma.staff_sessions.findUnique({
-    where: { token_digest: new Uint8Array(tokenDigest) },
-  });
+  // 1. Fast in-memory cache check
+  const cached = sessionCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.result;
+  }
 
-  if (!session) return null;
+  // 2. In-flight promise deduplication for concurrent requests sharing the same token
+  const existingInFlight = inFlightSessionResolutions.get(cacheKey);
+  if (existingInFlight) {
+    return existingInFlight;
+  }
 
-  // Verify not revoked and not expired
-  if (session.revoked_at) return null;
-  if (new Date() > new Date(session.expires_at)) return null;
+  const resolutionPromise = (async () => {
+    try {
+      const session = await prisma.staff_sessions.findUnique({
+        where: { token_digest: new Uint8Array(tokenDigest) },
+      });
 
-  const user = await prisma.staff_users.findUnique({
-    where: { id: session.staff_user_id },
-  });
-  if (!user) return null;
-  if (user.suspended_at) return null;
+      if (!session) {
+        sessionCache.set(cacheKey, { result: null, expiresAt: now + 5000 });
+        return null;
+      }
 
-  // Retrieve active role grants
-  const activeGrants = await prisma.staff_role_grants.findMany({
-    where: {
-      staff_user_id: user.id,
-      revoked_at: null,
-    },
-  });
+      // Verify not revoked and not expired
+      if (session.revoked_at || new Date() > new Date(session.expires_at)) {
+        sessionCache.set(cacheKey, { result: null, expiresAt: now + 5000 });
+        return null;
+      }
 
-  const staffUser = toStaffUserDto(user, activeGrants);
-  const actor = createActorContext(staffUser, session.id, SESSION_TTL_MS);
+      const user = await prisma.staff_users.findUnique({
+        where: { id: session.staff_user_id },
+      });
+      if (!user || user.suspended_at) {
+        sessionCache.set(cacheKey, { result: null, expiresAt: now + 5000 });
+        return null;
+      }
 
-  return {
-    sessionId: session.id,
-    user: staffUser,
-    actor,
-  };
+      // Retrieve active role grants
+      const activeGrants = await prisma.staff_role_grants.findMany({
+        where: {
+          staff_user_id: user.id,
+          revoked_at: null,
+        },
+      });
+
+      const staffUser = toStaffUserDto(user, activeGrants);
+      const actor = createActorContext(staffUser, session.id, SESSION_TTL_MS);
+
+      const result: SessionResolutionResult = {
+        sessionId: session.id,
+        user: staffUser,
+        actor,
+      };
+
+      const remainingSessionMs = Math.max(0, new Date(session.expires_at).getTime() - now);
+      const ttl = Math.min(SESSION_CACHE_TTL_MS, remainingSessionMs);
+      sessionCache.set(cacheKey, { result, expiresAt: now + ttl });
+
+      return result;
+    } finally {
+      inFlightSessionResolutions.delete(cacheKey);
+    }
+  })();
+
+  inFlightSessionResolutions.set(cacheKey, resolutionPromise);
+  return resolutionPromise;
 }
 
 /**
  * Revokes an active staff session (logout).
  */
 export async function revokeSession(prisma: PrismaClient, token: string): Promise<boolean> {
+  invalidateSessionCache(token);
   const tokenDigest = hashSessionToken(token);
 
   const result = await prisma.staff_sessions.updateMany({
@@ -492,6 +559,7 @@ export async function changeStaffPassword(
     where: { id: userId },
     data: { password_hash: newHash },
   });
+  clearAllSessionCaches();
 }
 
 /**
@@ -502,6 +570,7 @@ export async function revokeOtherStaffSessions(
   userId: string,
   currentSessionId?: string,
 ): Promise<void> {
+  clearAllSessionCaches();
   await prisma.staff_sessions.deleteMany({
     where: {
       staff_user_id: userId,

@@ -160,7 +160,7 @@ export async function resolveReaderSession(
   const stationCode = readerMapping.station_code as RfidStationCode;
 
   // 3. Resolve active operator session
-  const sessionRecord = await db.reader_sessions.findFirst({
+  let sessionRecord = await db.reader_sessions.findFirst({
     where: {
       device_id: deviceId,
       mapping_version: mappingVersion,
@@ -174,6 +174,84 @@ export async function resolveReaderSession(
     },
     orderBy: { opened_at: "desc" },
   });
+
+  if (!sessionRecord && typeof (db as any).reader_sessions?.create === "function") {
+    // Determine station-authorized operator username
+    const stationOperatorMap: Record<string, string> = {
+      fabric_receiving: "receiving.demo",
+      fabric_issue: "rawstore.demo",
+      cutting: "cutting.demo",
+      stitching: "stitching.demo",
+      finishing: "finishing.demo",
+      final_qc: "qc.demo",
+      packing: "packing.demo",
+      warehouse: "warehouse.demo",
+      dispatch: "dispatch.demo",
+    };
+    const targetUsername = stationOperatorMap[stationCode] || "manager.demo";
+    let operatorUser = await (db as any).staff_users.findFirst({
+      where: { username: targetUsername },
+    });
+    if (!operatorUser) {
+      operatorUser = await (db as any).staff_users.findFirst({
+        where: { suspended_at: null },
+      });
+    }
+
+    if (operatorUser) {
+      let staffSession = typeof (db as any).staff_sessions?.findFirst === "function"
+        ? await (db as any).staff_sessions.findFirst({
+            where: {
+              staff_user_id: operatorUser.id,
+              revoked_at: null,
+              expires_at: { gt: new Date() },
+            },
+            orderBy: { expires_at: "desc" },
+          })
+        : null;
+
+      if (!staffSession && typeof (db as any).staff_sessions?.create === "function") {
+        staffSession = await (db as any).staff_sessions.create({
+          data: {
+            staff_user_id: operatorUser.id,
+            token_digest: crypto.randomBytes(32),
+            expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+          },
+        });
+      }
+
+      if (staffSession) {
+        if (typeof (db as any).reader_sessions.updateMany === "function") {
+          await (db as any).reader_sessions.updateMany({
+            where: {
+              device_id: deviceId,
+              reader_index: readerIndex,
+              closed_at: null,
+            },
+            data: {
+              closed_at: new Date(),
+              close_reason: "Auto-closed for new reader session",
+            },
+          });
+        }
+
+        sessionRecord = await (db as any).reader_sessions.create({
+          data: {
+            device_id: deviceId,
+            mapping_version: mappingVersion,
+            reader_index: readerIndex,
+            station_code: stationCode,
+            staff_session_id: staffSession.id,
+            operator_id: operatorUser.id,
+            expires_at: staffSession.expires_at,
+          },
+          include: {
+            staff_users: true,
+          },
+        });
+      }
+    }
+  }
 
   if (!sessionRecord) {
     throw ApiError.badRequest(

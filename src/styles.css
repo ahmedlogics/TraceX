@@ -204,6 +204,41 @@
   animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* RFID Workstation Scan & Sonar Ripple Animations */
+@keyframes sonar-ripple {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  60% {
+    transform: scale(1.45);
+    opacity: 0.15;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+@keyframes soft-scan-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+}
+
+.animate-sonar {
+  animation: sonar-ripple 2.4s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.animate-soft-scan {
+  animation: soft-scan-pulse 2s ease-in-out infinite;
+}
+
 .font-editorial {
   font-family: var(--font-serif);
 }

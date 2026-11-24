@@ -6,7 +6,7 @@ export const Route = createFileRoute("/staff/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
     typeof search["redirect"] === "string" ? { redirect: search["redirect"] } : {},
   head: () =>
-    pageHead("Staff sign-in", "Sign in to the WearTrail staff workspace or pick a demo account."),
+    pageHead("Staff sign-in", "Sign in to the TraceX staff workspace or pick a demo account."),
   component: LoginRoute,
 });
 

@@ -253,9 +253,29 @@ export async function getPublicJourney(
     }
   }
 
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+  const normalizedUid = cleanId.replace(/[\s:-]/g, "").toUpperCase();
+
   // 2. Fall back to live database projection for active garments
   let garment: any = await prisma.garments.findFirst({
-    where: { public_id: cleanId },
+    where: {
+      OR: [
+        { public_id: cleanId },
+        { code: { equals: cleanId, mode: "insensitive" } },
+        ...(isUuid ? [{ id: cleanId }] : []),
+        {
+          rfid_tag_bindings: {
+            is: {
+              OR: [
+                { tag_identifier: { equals: cleanId, mode: "insensitive" } },
+                { tag_uid: { equals: normalizedUid, mode: "insensitive" } },
+              ],
+              unbound_at: null,
+            },
+          },
+        },
+      ],
+    },
     include: {
       cutting_jobs: {
         include: {
@@ -797,7 +817,7 @@ export async function publishPublicGarmentPayload(
   // Construct allowable public milestones
   const milestones: PublicMilestone[] = [];
 
-  const lotInput = garment.garment_material_inputs[0]?.cutting_inputs?.material_stock_movements?.material_lots;
+  const lotInput = garment.garment_material_inputs?.[0]?.cutting_inputs?.material_stock_movements?.material_lots;
   if (lotInput) {
     milestones.push({
       key: "fabric-sourced",
@@ -817,7 +837,7 @@ export async function publishPublicGarmentPayload(
     description: MILESTONE_DESCRIPTIONS["garment-cut"],
   });
 
-  const assemblyEvent = garment.trace_events.find(
+  const assemblyEvent = garment.trace_events?.find(
     (e) => e.event_type === "finishing_completed" || e.event_type === "assembly_completed",
   );
   if (assemblyEvent) {
@@ -843,7 +863,7 @@ export async function publishPublicGarmentPayload(
   }
 
   if (garment.stage === "dispatched") {
-    const dispatchEvent = garment.trace_events.find((e) => e.event_type === "shipment_dispatched");
+    const dispatchEvent = garment.trace_events?.find((e) => e.event_type === "shipment_dispatched");
     const dispatchDate = dispatchEvent?.occurred_at ?? new Date();
     milestones.push({
       key: "dispatched",

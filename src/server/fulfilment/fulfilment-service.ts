@@ -26,8 +26,7 @@ import type {
 import type { ActorContext } from "../contracts/actor";
 import { ensureStaffUserRecord } from "../quality/quality-service";
 import { publishPublicGarmentPayload } from "../public/public-service";
-import { normalizeTagUid } from "../contracts/rfid";
-import { createInternalCommitment, getActiveLedgerDeployment } from "../ledger/commitment-service";
+import { createInternalCommitment } from "../ledger/commitment-service";
 
 function isValidUuid(id?: string): boolean {
   if (!id) return false;
@@ -1396,4 +1395,290 @@ export async function getShipmentDetail(tx: PrismaTransactionClient, id: string)
       },
     },
   });
+}
+
+/**
+ * Station 9: Aggregate Carton Dispatch Scan.
+ * Scans master container/box tag UID or code.
+ * Automates checks:
+ *   1. Valid box tag registration
+ *   2. Box contains linked products (> 0)
+ *   3. Box not already dispatched
+ *   4. Zero active quality holds on any linked garments
+ * Upon pass:
+ *   - Atomically updates package status to 'dispatched'
+ *   - Atomically updates all linked garments stage to 'dispatched'
+ *   - Closes dispatch work tasks
+ *   - Creates trace events, internal commitments, and publishes DPP public payload
+ */
+export async function dispatchBoxScan(
+  tx: PrismaTransactionClient,
+  actor: StaffUser | ActorContext,
+  boxTagOrId: string,
+  shipmentId?: string,
+) {
+  const staffUserId =
+    "actorId" in actor ? actor.actorId : (actor as any).id;
+  await ensureStaffUserRecord(tx, actor);
+
+  const cleanInput = boxTagOrId.trim();
+  const normUid = cleanInput.replace(/[\s:-]/g, "").toUpperCase();
+
+  // 1. Resolve package by code, id, or tag binding
+  let pkg = await tx.packages.findFirst({
+    where: {
+      OR: [
+        ...(isValidUuid(cleanInput) ? [{ id: cleanInput }] : []),
+        { code: cleanInput },
+      ],
+    },
+    include: {
+      package_items: {
+        where: { removed_at: null },
+        include: {
+          garments: {
+            include: {
+              garment_holds: { where: { released_at: null } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!pkg) {
+    // Check if tag UID is bound to a garment inside a package
+    const binding = await tx.rfid_tag_bindings.findFirst({
+      where: { tag_uid: normUid, unbound_at: null },
+      include: {
+        garments: {
+          include: {
+            package_items: {
+              include: {
+                packages: {
+                  include: {
+                    package_items: {
+                      where: { removed_at: null },
+                      include: {
+                        garments: {
+                          include: {
+                            garment_holds: { where: { released_at: null } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (binding?.garments?.package_items?.packages) {
+      pkg = binding.garments.package_items.packages;
+    }
+  }
+
+  // Check 1: Is the Tag registered as a valid Box?
+  if (!pkg) {
+    return {
+      scanId: crypto.randomUUID(),
+      uid: normUid,
+      resolution: "rejected_unknown_card" as const,
+      outcome: "rejected" as const,
+      rejectReason: `Unrecognised Box Tag: Tag UID '${cleanInput}' is not registered to any box or carton.`,
+      at: new Date().toISOString(),
+    };
+  }
+
+  // Check 2: Does the Box contain linked products (> 0)?
+  if (!pkg.package_items || pkg.package_items.length === 0) {
+    return {
+      scanId: crypto.randomUUID(),
+      uid: normUid,
+      resolution: "rejected_business_rule" as const,
+      outcome: "rejected" as const,
+      subjectId: pkg.code,
+      garmentCode: pkg.code,
+      rejectReason: `Cannot dispatch empty box — 0 products linked to ${pkg.code}.`,
+      at: new Date().toISOString(),
+    };
+  }
+
+  // Check 3: Has this Box already been dispatched?
+  if (pkg.status === "dispatched") {
+    return {
+      scanId: crypto.randomUUID(),
+      uid: normUid,
+      resolution: "rejected_business_rule" as const,
+      outcome: "rejected" as const,
+      subjectId: pkg.code,
+      garmentCode: pkg.code,
+      rejectReason: `Box Already Dispatched: Box ${pkg.code} has already been dispatched.`,
+      at: new Date().toISOString(),
+    };
+  }
+
+  // Check 4: Do ANY linked garments have an active Hold?
+  const holdItem = pkg.package_items.find(
+    (item) => item.garments.garment_holds.length > 0,
+  );
+  if (holdItem) {
+    const reason = holdItem.garments.garment_holds[0]?.reason
+      ? ` ("${holdItem.garments.garment_holds[0].reason}")`
+      : "";
+    return {
+      scanId: crypto.randomUUID(),
+      uid: normUid,
+      resolution: "rejected_business_rule" as const,
+      outcome: "rejected" as const,
+      subjectId: pkg.code,
+      garmentCode: pkg.code,
+      rejectReason: `Blocked: Garment ${holdItem.garments.code} inside Box ${pkg.code} has an active Quality Hold${reason}. Release hold before dispatching.`,
+      at: new Date().toISOString(),
+    };
+  }
+
+  // All Passed: Instant Atomic Status Advancement
+  const now = new Date();
+
+  // Update Package to dispatched
+  await tx.packages.update({
+    where: { id: pkg.id },
+    data: {
+      status: "dispatched",
+      revision: { increment: 1 },
+    },
+  });
+
+  // Update all linked garments to dispatched
+  for (const item of pkg.package_items) {
+    const g = item.garments;
+    await tx.garments.update({
+      where: { id: g.id },
+      data: {
+        stage: "dispatched",
+        revision: { increment: 1 },
+      },
+    });
+
+    const ev = await tx.trace_events.create({
+      data: {
+        event_type: "shipment_dispatched",
+        subject_revision: 1,
+        garment_id: g.id,
+        package_id: pkg.id,
+        actor_id: staffUserId,
+        details: { stage: "dispatched", container: pkg.code, shipmentId },
+        occurred_at: now,
+        recorded_at: now,
+      },
+    });
+
+    try {
+      await createInternalCommitment(
+        {
+          traceEventId: ev.id,
+          payload: {
+            eventType: "shipment_dispatched",
+            garmentId: g.id,
+            garmentCode: g.code,
+            packageCode: pkg.code,
+            shipmentId,
+            dispatchedAt: now.toISOString(),
+          },
+        },
+        tx,
+      );
+    } catch (commErr) {
+      console.warn(`[DISPATCH_WARN] Ledger commitment skipped for traceEvent ${ev.id}:`, commErr);
+    }
+
+    try {
+      await publishPublicGarmentPayload(tx, g.id, staffUserId);
+    } catch (pubErr) {
+      console.warn(`[DISPATCH_WARN] Public payload publication skipped for garment ${g.id}:`, pubErr);
+    }
+  }
+
+  // Link shipment and advance status if shipmentId provided
+  if (shipmentId) {
+    try {
+      const shp = await tx.shipments.findFirst({
+        where: {
+          OR: [
+            ...(isValidUuid(shipmentId) ? [{ id: shipmentId }] : []),
+            { code: shipmentId },
+          ],
+        },
+      });
+      if (shp) {
+        const existingSp = await tx.shipment_packages.findFirst({
+          where: {
+            shipment_id: shp.id,
+            package_id: pkg.id,
+            deallocated_at: null,
+          },
+        });
+        if (!existingSp) {
+          await tx.shipment_packages.create({
+            data: {
+              shipment_id: shp.id,
+              package_id: pkg.id,
+              allocated_by: staffUserId,
+              allocated_at: now,
+            },
+          });
+        }
+        if (shp.status === "draft") {
+          await tx.shipments.update({
+            where: { id: shp.id },
+            data: {
+              status: "approved",
+              revision: { increment: 1 },
+            },
+          });
+        }
+      }
+    } catch (shpErr) {
+      console.warn("[DISPATCH_WARN] Shipment package link update skipped:", shpErr);
+    }
+  }
+
+  // Close work tasks for this carton if any
+  try {
+    await tx.work_tasks.updateMany({
+      where: {
+        package_id: pkg.id,
+        department_code: "dispatch",
+        status: { in: ["queued", "assigned", "claimed", "in_progress"] },
+      },
+      data: {
+        status: "completed",
+        assignee_id: staffUserId,
+        completed_at: now,
+      },
+    });
+  } catch (_e) {
+    // optional task closure
+  }
+
+  return {
+    scanId: crypto.randomUUID(),
+    uid: normUid,
+    resolution: "accepted" as const,
+    outcome: "accepted" as const,
+    subjectId: pkg.code,
+    garmentCode: pkg.code,
+    productName: `${pkg.package_items.length} Linked Units Dispatched`,
+    at: now.toISOString(),
+    details: {
+      boxId: pkg.code,
+      units: pkg.package_items.length,
+      shipmentId,
+      message: `Box Scanned → All ${pkg.package_items.length} linked garments updated to 'dispatched'`,
+    },
+  };
 }

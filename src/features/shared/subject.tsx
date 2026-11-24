@@ -17,16 +17,19 @@ export function SubjectLink({
   user,
   type,
   id,
+  label,
 }: {
   user: StaffUser;
   type: Task["subjectType"];
   id: string;
+  label?: string | null | undefined;
 }) {
   const m = map[type];
+  const display = label || id;
   return canAccessRoute(user, m.key) ? (
-    <IdLink href={m.href(id)} id={id} />
+    <IdLink href={m.href(id)} id={id} label={display} />
   ) : (
-    <span className="wt-id">{id}</span>
+    <span className="wt-id">{display}</span>
   );
 }
 

@@ -28,7 +28,8 @@
     "hardware:session": "tsx scripts/manage-reader-session.ts",
     "bootstrap:staff": "tsx scripts/bootstrap-staff.ts",
     "bootstrap:simulator": "tsx scripts/bootstrap-simulator.ts",
-    "simulate:scan": "tsx scripts/simulate-scan.ts"
+    "simulate:scan": "tsx scripts/simulate-scan.ts",
+    "db:reset:tags": "tsx scripts/reset-tags-and-blockchain.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"

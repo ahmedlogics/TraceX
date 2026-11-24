@@ -31,6 +31,8 @@ async function runSimulator(): Promise<void> {
   const actionContextArg = args.find((a) => a.startsWith("--action-context="))?.split("=")[1] ?? null;
   const urlArg = args.find((a) => a.startsWith("--url="))?.split("=")[1] ?? process.env["WEARTRAIL_API_URL"] ?? "http://localhost:4000";
   const readerArg = args.find((a) => a.startsWith("--reader="))?.split("=")[1];
+  const versionArg = args.find((a) => a.startsWith("--mapping-version="))?.split("=")[1];
+  const mappingVersion = versionArg !== undefined ? parseInt(versionArg, 10) : 2;
 
   const readerIndex = readerArg !== undefined ? parseInt(readerArg, 10) : (STATION_READER_INDEX[stationArg.toLowerCase()] ?? 3);
 
@@ -39,6 +41,7 @@ async function runSimulator(): Promise<void> {
   console.log("==================================================");
   console.log(`Target URL:     ${urlArg}`);
   console.log(`Station:        ${stationArg} (reader index ${readerIndex})`);
+  console.log(`Mapping Ver:    ${mappingVersion}`);
   console.log(`Tag UID:        ${uidArg}`);
   if (actionContextArg) {
     console.log(`Action Context: ${actionContextArg}`);
@@ -52,7 +55,7 @@ async function runSimulator(): Promise<void> {
     deviceSecret: testSecret,
     deviceId: testDeviceId,
     readerIndex,
-    mappingVersion: 1,
+    mappingVersion,
     tagUid: uidArg,
     actionContextId: actionContextArg,
   });

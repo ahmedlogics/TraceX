@@ -58,12 +58,12 @@ const TEST_SECRET_DIGEST = hashDeviceSecret(TEST_DEVICE_SECRET);
 const HARDWARE_PHYSICAL_MAPPINGS = [
   { readerIndex: 0, gpio: 27, stationCode: "fabric_receiving" as const },
   { readerIndex: 1, gpio: 12, stationCode: "fabric_issue" as const },
-  { readerIndex: 2, gpio: 15, stationCode: "final_qc" as const },
-  { readerIndex: 3, gpio: 2,  stationCode: "cutting" as const },
-  { readerIndex: 4, gpio: 4,  stationCode: "warehouse" as const },
-  { readerIndex: 5, gpio: 16, stationCode: "finishing" as const },
-  { readerIndex: 6, gpio: 5,  stationCode: "stitching" as const },
-  { readerIndex: 7, gpio: 17, stationCode: "packing" as const },
+  { readerIndex: 2, gpio: 15, stationCode: "cutting" as const },
+  { readerIndex: 3, gpio: 2,  stationCode: "stitching" as const },
+  { readerIndex: 4, gpio: 4,  stationCode: "finishing" as const },
+  { readerIndex: 5, gpio: 16, stationCode: "final_qc" as const },
+  { readerIndex: 6, gpio: 5,  stationCode: "packing" as const },
+  { readerIndex: 7, gpio: 17, stationCode: "warehouse" as const },
   { readerIndex: 8, gpio: 21, stationCode: "dispatch" as const },
 ];
 
@@ -93,14 +93,29 @@ function createHardwareMockDb() {
         activated_at: new Date("2026-11-01"),
         retired_at: null,
       },
+      {
+        device_id: TEST_DEVICE_ID,
+        version: 2,
+        activated_at: new Date("2026-11-23"),
+        retired_at: null,
+      },
     ] as any[],
-    device_reader_mappings: HARDWARE_PHYSICAL_MAPPINGS.map((m) => ({
-      device_id: TEST_DEVICE_ID,
-      mapping_version: 1,
-      reader_index: m.readerIndex,
-      station_code: m.stationCode,
-      physical_label: `GPIO ${m.gpio}`,
-    })) as any[],
+    device_reader_mappings: [
+      ...HARDWARE_PHYSICAL_MAPPINGS.map((m) => ({
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 1,
+        reader_index: m.readerIndex,
+        station_code: m.stationCode,
+        physical_label: `GPIO ${m.gpio}`,
+      })),
+      ...HARDWARE_PHYSICAL_MAPPINGS.map((m) => ({
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 2,
+        reader_index: m.readerIndex,
+        station_code: m.stationCode,
+        physical_label: `GPIO ${m.gpio}`,
+      })),
+    ] as any[],
     reader_sessions: [] as any[],
     staff_users: [
       { id: "u-admin", username: "admin.demo", role: "admin", department: "management", status: "active", suspended_at: null },
@@ -418,6 +433,27 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
       }
     });
 
+    it("resolves Reader 2 to cutting station under active mapping version 2", async () => {
+      const op = mockDb._store.staff_users.find((u: any) => u.username === "cutting.demo");
+      mockDb._store.reader_sessions.push({
+        id: "sess-cutting-v2",
+        device_id: TEST_DEVICE_ID,
+        mapping_version: 2,
+        reader_index: 2,
+        station_code: "cutting",
+        operator_id: op.id,
+        staff_users: op,
+        opened_at: new Date(),
+        expires_at: new Date(Date.now() + 3600000),
+        closed_at: null,
+      });
+
+      const resolved = await resolveReaderSession(TEST_DEVICE_ID, 2, 2, mockDb);
+      expect(resolved.stationCode).toBe("cutting");
+      expect(resolved.session.readerIndex).toBe(2);
+      expect(resolved.session.mappingVersion).toBe(2);
+    });
+
     it("verifies explicit context requirements per station configuration", async () => {
       // Routine production stations do NOT require explicit action context
       expect(await stationRequiresContext("stitching", mockDb)).toBe(false);
@@ -484,13 +520,13 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
   // --------------------------------------------------------------------------
   describe("3. Station Context Handling & Automatic Session Resolution", () => {
     it("automatically resolves armed context when envelope.actionContextId is null", async () => {
-      // Station 2 (final_qc, readerIndex 2)
+      // Station 6 (final_qc, readerIndex 5)
       const op = mockDb._store.staff_users.find((u: any) => u.role === "quality");
       const session = {
         id: "sess-qc-01",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -539,7 +575,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-auto-01",
         bootId: "boot-hw-01",
         sequence: 1,
-        readerIndex: 2, // Physical antenna GPIO 15
+        readerIndex: 5, // Physical antenna GPIO 16
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -568,7 +604,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-qc-empty",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -583,7 +619,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-missing-ctx",
         bootId: "boot-hw-01",
         sequence: 2,
-        readerIndex: 2,
+        readerIndex: 5,
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -608,7 +644,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-qc-queued-race",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -643,7 +679,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-delayed-queue",
         bootId: "boot-hw-01",
         sequence: 77,
-        readerIndex: 2,
+        readerIndex: 5,
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -673,7 +709,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-qc-1s-4s-race",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -708,7 +744,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-1s-test",
         bootId: "boot-hw-01",
         sequence: 78,
-        readerIndex: 2,
+        readerIndex: 5,
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -742,7 +778,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-4s-test",
         bootId: "boot-hw-01",
         sequence: 79,
-        readerIndex: 2,
+        readerIndex: 5,
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -761,7 +797,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-qc-unsync-race",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -793,7 +829,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-unsync-01",
         bootId: "boot-hw-01",
         sequence: 80,
-        readerIndex: 2,
+        readerIndex: 5,
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -811,7 +847,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-qc-preserve-env",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 2,
+        reader_index: 5,
         station_code: "final_qc",
         operator_id: op.id,
         staff_users: op,
@@ -856,7 +892,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-qc-preserve-01",
         bootId: "boot-hw-01",
         sequence: 81,
-        readerIndex: 2,
+        readerIndex: 5,
         mappingVersion: 1,
         tagUid: "04A1B2C3D4E5F6",
         actionContextId: null,
@@ -895,13 +931,13 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
   // 4. Routine Production Scans (Stitching & Finishing)
   // --------------------------------------------------------------------------
   describe("4. Routine Progression (Stitching & Finishing)", () => {
-    it("advances garment stage at stitching (readerIndex 6) without explicit context", async () => {
+    it("advances garment stage at stitching (readerIndex 3) without explicit context", async () => {
       const op = mockDb._store.staff_users.find((u: any) => u.username === "stitching.demo");
       mockDb._store.reader_sessions.push({
         id: "sess-stitch",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 6, // SS GPIO 5
+        reader_index: 3, // SS GPIO 2
         station_code: "stitching",
         operator_id: op.id,
         staff_users: op,
@@ -930,7 +966,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-stitch-01",
         bootId: "boot-hw-01",
         sequence: 3,
-        readerIndex: 6,
+        readerIndex: 3,
         mappingVersion: 1,
         tagUid: "A1B2C3D4",
         actionContextId: null,
@@ -960,7 +996,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         id: "sess-stitch-2",
         device_id: TEST_DEVICE_ID,
         mapping_version: 1,
-        reader_index: 6,
+        reader_index: 3,
         station_code: "stitching",
         operator_id: op.id,
         staff_users: op,
@@ -988,7 +1024,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-idempotent-first",
         bootId: "boot-idem",
         sequence: 50,
-        readerIndex: 6,
+        readerIndex: 3,
         mappingVersion: 1,
         tagUid: "11223344",
         actionContextId: null,
@@ -1020,7 +1056,7 @@ describe("WearTrail Hardware Integration Compliance Suite", () => {
         scanId: "scan-conflict-test",
         bootId: "boot-conflict",
         sequence: 99,
-        readerIndex: 6,
+        readerIndex: 3,
         mappingVersion: 1,
         tagUid: "AAAA1111",
         timestamp: new Date().toISOString(),

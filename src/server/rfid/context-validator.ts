@@ -15,7 +15,7 @@ export async function stationRequiresContext(
   stationCode: RfidStationCode,
   db: PrismaClient | PrismaTransactionClient,
 ): Promise<boolean> {
-  if (stationCode === "final_qc" || stationCode === "cutting") {
+  if (stationCode === "final_qc") {
     return true;
   }
 

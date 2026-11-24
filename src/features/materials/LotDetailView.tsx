@@ -9,7 +9,7 @@ import { Field, FormDialog, NativeSelect, ScopeNote } from "@/components/wt/form
 import { fmt, IdLink, KeyValue, PageHeader, Section, Timeline } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type { MaterialLot, ProductionOrder } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { UserName } from "@/features/shared/directory";
@@ -49,9 +49,9 @@ function IssueDialog({ lot, orders }: { lot: MaterialLot; orders: ProductionOrde
         <Input
           id="iss-qty"
           type="number"
-          min="0.1"
+          min="0.01"
           max={lot.balanceQty}
-          step="0.1"
+          step="any"
           value={qty}
           onChange={(e) => setQty(e.target.value)}
         />
@@ -78,11 +78,6 @@ export function LotDetailView({ lotId }: { lotId: string }) {
             <PageHeader
               title={<span className="wt-id text-2xl font-bold">{lot.id}</span>}
               description={lot.material}
-              crumbs={[
-                { label: "Staff", href: paths.home },
-                { label: "Material lots", href: paths.lots },
-                { label: lot.id },
-              ]}
               meta={
                 <div className="flex items-center gap-2">
                   <StatusBadge status={lot.status} label="Incoming QC" />
@@ -90,9 +85,16 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                     <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
                       <Radio className="size-3" /> {lot.rfidUid}
                     </span>
+                  ) : lot.status === "accepted" ? (
+                    <span
+                      className="text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded"
+                      title="Accepted via Dashboard QC · Hardware RFID card unassigned"
+                    >
+                      Unassigned (Dashboard Verified)
+                    </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
-                      No card assigned
+                    <span className="text-xs font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                      Card Pending (Station 1)
                     </span>
                   )}
                 </div>
@@ -100,11 +102,30 @@ export function LotDetailView({ lotId }: { lotId: string }) {
               actions={
                 <div className="flex flex-wrap gap-2">
                   {can.issueMaterial(me) && <IssueDialog lot={lot} orders={orders} />}
-                  <Button asChild variant="outline" size="sm">
-                    <AppLink href={paths.workstation}>
-                      Station Panel <ArrowRight className="size-3.5 ml-1" />
-                    </AppLink>
-                  </Button>
+                  {lot.status === "awaiting-inspection" && (me.role === "Q" || me.role === "M" || me.role === "A") && (
+                    lot.rfidUid ? (
+                      <Button asChild size="sm" className="bg-primary">
+                        <AppLink href={paths.home}>
+                          Evaluate at QC Gate <ArrowRight className="size-3.5 ml-1" />
+                        </AppLink>
+                      </Button>
+                    ) : (
+                      canAccessRoute(me, "workstation") && (
+                        <Button asChild size="sm" variant="outline" className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                          <AppLink href={paths.workstation}>
+                            Assign Card at Station 1 <ArrowRight className="size-3.5 ml-1" />
+                          </AppLink>
+                        </Button>
+                      )
+                    )
+                  )}
+                  {canAccessRoute(me, "workstation") && (
+                    <Button asChild variant="outline" size="sm">
+                      <AppLink href={paths.workstation}>
+                        Station Panel <ArrowRight className="size-3.5 ml-1" />
+                      </AppLink>
+                    </Button>
+                  )}
                 </div>
               }
             />
@@ -162,8 +183,10 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       label: "Active Bundle RFID Card",
                       value: lot.rfidUid ? (
                         <span className="font-mono font-bold text-success">{lot.rfidUid}</span>
+                      ) : lot.status === "accepted" ? (
+                        <span className="text-muted-foreground italic">Unassigned (Dashboard Verified)</span>
                       ) : (
-                        <span className="text-muted-foreground italic">None (bind at Station 1)</span>
+                        <span className="text-amber-600 font-medium">None (bind at Station 1)</span>
                       ),
                     },
                     {
@@ -190,8 +213,10 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                           />
                           <StatusBadge status={inspection.status} />
                         </span>
+                      ) : lot.status === "awaiting-inspection" && (!lot.rfidUid || lot.rfidUid === "unassigned") ? (
+                        <span className="text-amber-600 font-medium">Awaiting Station 1 Receiving Scan</span>
                       ) : (
-                        <span className="text-warning font-medium">Pending QC Inspection</span>
+                        <span className="text-warning font-medium">Ready for Incoming QC Inspection</span>
                       ),
                     },
                     {

@@ -23,7 +23,7 @@ const BACKEND_URL = process.env["WEARTRAIL_API_URL"] || "http://localhost:4000";
 const DEVICE_CODE = "DEV-TEXTRACER-01";
 const DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
 const DEVICE_SECRET = "wt_dev_secret_692d5e130930316e16edaa39ac2bd5fa";
-const READER_INDEX = 2; // Antenna 2 (GPIO 15 - Final QA Gate)
+const READER_INDEX = 5; // Antenna 5 (GPIO 16 - Final QA Gate)
 const STATION_CODE = "final_qc";
 const TEST_TAG_UID = "04A1B2C3D4E5F6";
 
@@ -98,7 +98,7 @@ async function runLiveVerification(): Promise<void> {
     session = await prisma.reader_sessions.create({
       data: {
         device_id: device.id,
-        mapping_version: 1,
+        mapping_version: activeMapping.mapping_version,
         reader_index: READER_INDEX,
         station_code: STATION_CODE,
         staff_session_id: staffSession.id,
@@ -214,7 +214,7 @@ async function runLiveVerification(): Promise<void> {
     bootId: `boot-esp32-live-${Date.now().toString(36)}`,
     sequence: 1,
     readerIndex: READER_INDEX,
-    mappingVersion: 1,
+    mappingVersion: activeMapping.mapping_version,
     tagUid: TEST_TAG_UID,
     actionContextId: actionContext.id,
     deviceUptimeMs: 45000,

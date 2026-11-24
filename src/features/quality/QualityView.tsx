@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Boxes,
   CheckCircle2,
   ClipboardCheck,
@@ -25,7 +26,7 @@ import { Field, FormDialog, NativeSelect } from "@/components/wt/forms";
 import { fmt, IdLink, KeyValue, PageHeader, Section } from "@/components/wt/layout";
 import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
-import { can } from "@/domain/permissions";
+import { can, canAccessRoute } from "@/domain/permissions";
 import type {
   ChecklistItem,
   Inspection,
@@ -77,11 +78,11 @@ function IncomingQcDialog({
   const totalQty = lot?.receivedQty ?? 20;
   const isInitiallyAccepted = lot?.status === "accepted";
   const isInitiallyRejected = lot?.status === "rejected";
-  const [acceptedQty, setAcceptedQty] = useState(
-    isInitiallyAccepted ? (lot?.balanceQty || totalQty) : totalQty,
+  const [acceptedQty, setAcceptedQty] = useState<number | string>(
+    isInitiallyAccepted ? (lot?.balanceQty ?? totalQty) : totalQty,
   );
-  const [heldQty, setHeldQty] = useState(lot?.heldQty ?? 0);
-  const [rejectedQty, setRejectedQty] = useState(
+  const [heldQty, setHeldQty] = useState<number | string>(lot?.heldQty ?? 0);
+  const [rejectedQty, setRejectedQty] = useState<number | string>(
     isInitiallyRejected ? totalQty : (lot?.rejectedQty ?? 0),
   );
   const [result, setResult] = useState<"pass" | "fail">(
@@ -99,11 +100,14 @@ function IncomingQcDialog({
     }));
   });
 
-  const totalCalculated = Number(acceptedQty) + Number(heldQty) + Number(rejectedQty);
-  const isBalanced = totalCalculated === totalQty;
+  const parsedAccepted = Number(acceptedQty) || 0;
+  const parsedHeld = Number(heldQty) || 0;
+  const parsedRejected = Number(rejectedQty) || 0;
+  const totalCalculated = Math.round((parsedAccepted + parsedHeld + parsedRejected) * 1000) / 1000;
+  const isBalanced = Math.abs(totalCalculated - totalQty) < 1e-3;
   const allChecked = checklist.every((c) => c.checked);
   const canSubmit =
-    isBalanced && (result === "pass" ? allChecked && acceptedQty > 0 : !!defectReason.trim());
+    isBalanced && (result === "pass" ? allChecked && parsedAccepted > 0 : !!defectReason.trim());
 
   const handleSelectDecision = (newDecision: "pass" | "fail") => {
     setResult(newDecision);
@@ -113,7 +117,7 @@ function IncomingQcDialog({
       setRejectedQty(0);
       setChecklist((prev) => prev.map((c) => ({ ...c, checked: true })));
     } else {
-      if (acceptedQty === totalQty && heldQty === 0 && rejectedQty === 0) {
+      if (parsedAccepted === totalQty && parsedHeld === 0 && parsedRejected === 0) {
         setAcceptedQty(0);
         setHeldQty(0);
         setRejectedQty(totalQty);
@@ -128,24 +132,24 @@ function IncomingQcDialog({
       title={`Incoming Lot Evaluation & Spec Sign-Off: ${inspection.id}`}
       description={`Lot: ${lot?.id ?? inspection.subjectId} (${lot?.material ?? "Fabric"}) · Total: ${totalQty} ${lot?.unit ?? "m"}`}
       submitLabel="Submit Inspection Decision"
-      disabled={!canSubmit}
+      submitDisabled={!canSubmit}
       onSubmit={async () =>
         !!(await run(
           (c) =>
             c.submitIncomingQc({
               lotId: lot?.id ?? inspection.subjectId,
               inspectionId: inspection.id,
-              acceptedQty: Number(acceptedQty),
-              heldQty: Number(heldQty),
-              rejectedQty: Number(rejectedQty),
+              acceptedQty: parsedAccepted,
+              heldQty: parsedHeld,
+              rejectedQty: parsedRejected,
               checklist,
               notes,
               result,
               defectReason: result === "fail" ? defectReason : undefined,
             }),
           result === "pass"
-            ? `Incoming QC approved: ${acceptedQty}${lot?.unit ?? "m"} accepted for ${lot?.id ?? inspection.subjectId}. Usable balance released to Raw Store & Cutting.`
-            : `Incoming QC rejected / held: ${rejectedQty}${lot?.unit ?? "m"} rejected for ${lot?.id ?? inspection.subjectId}. Defective fabric locked from production.`,
+            ? `Incoming QC approved: ${parsedAccepted}${lot?.unit ?? "m"} accepted for ${lot?.id ?? inspection.subjectId}. Usable balance released to Raw Store & Cutting.`
+            : `Incoming QC rejected / held: ${parsedRejected}${lot?.unit ?? "m"} rejected for ${lot?.id ?? inspection.subjectId}. Defective fabric locked from production.`,
         ))
       }
     >
@@ -226,30 +230,33 @@ function IncomingQcDialog({
               <Input
                 id="in-acc"
                 type="number"
+                step="any"
                 min={0}
                 max={totalQty}
                 value={acceptedQty}
-                onChange={(e) => setAcceptedQty(Number(e.target.value))}
+                onChange={(e) => setAcceptedQty(e.target.value)}
               />
             </Field>
             <Field label="Held (Quarantine)" htmlFor="in-held">
               <Input
                 id="in-held"
                 type="number"
+                step="any"
                 min={0}
                 max={totalQty}
                 value={heldQty}
-                onChange={(e) => setHeldQty(Number(e.target.value))}
+                onChange={(e) => setHeldQty(e.target.value)}
               />
             </Field>
             <Field label="Rejected" htmlFor="in-rej">
               <Input
                 id="in-rej"
                 type="number"
+                step="any"
                 min={0}
                 max={totalQty}
                 value={rejectedQty}
-                onChange={(e) => setRejectedQty(Number(e.target.value))}
+                onChange={(e) => setRejectedQty(e.target.value)}
               />
             </Field>
           </div>
@@ -321,9 +328,19 @@ function IncomingLotsTable({
       {(allLots) => {
         const filteredLots = allLots
           .filter((l) => {
+            const isReadyForQc =
+              l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned";
+            const isAwaitingReceiving =
+              l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned");
+            const isPassed = l.status === "accepted";
+            const isFailed = l.status === "rejected";
+
+            if (statusFilter === "ready" && !isReadyForQc) return false;
+            if (statusFilter === "awaiting_receiving" && !isAwaitingReceiving) return false;
             if (statusFilter === "open" && l.status !== "awaiting-inspection") return false;
-            if (statusFilter === "passed" && l.status !== "accepted") return false;
-            if (statusFilter === "failed" && l.status !== "rejected") return false;
+            if (statusFilter === "passed" && !isPassed) return false;
+            if (statusFilter === "failed" && !isFailed) return false;
+
             if (search.trim()) {
               const s = search.toLowerCase();
               const matchId = l.id.toLowerCase().includes(s);
@@ -335,9 +352,20 @@ function IncomingLotsTable({
             return true;
           })
           .sort((a, b) => {
-            const aOpen = a.status === "awaiting-inspection" ? 0 : 1;
-            const bOpen = b.status === "awaiting-inspection" ? 0 : 1;
-            if (aOpen !== bOpen) return aOpen - bOpen;
+            // Sort: ready for QC first, then awaiting receiving, then passed/failed
+            const aReady =
+              a.status === "awaiting-inspection" && Boolean(a.rfidUid) && a.rfidUid !== "unassigned"
+                ? 0
+                : a.status === "awaiting-inspection"
+                  ? 1
+                  : 2;
+            const bReady =
+              b.status === "awaiting-inspection" && Boolean(b.rfidUid) && b.rfidUid !== "unassigned"
+                ? 0
+                : b.status === "awaiting-inspection"
+                  ? 1
+                  : 2;
+            if (aReady !== bReady) return aReady - bReady;
             return (b.receivedAt ?? "").localeCompare(a.receivedAt ?? "");
           });
 
@@ -377,16 +405,27 @@ function IncomingLotsTable({
               },
               {
                 header: "Bundle Card (Station 1)",
-                cell: (l) =>
-                  l.rfidUid ? (
-                    <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
-                      <Radio className="size-3" /> {l.rfidUid}
+                cell: (l) => {
+                  if (l.rfidUid && l.rfidUid !== "unassigned") {
+                    return (
+                      <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
+                        <Radio className="size-3" /> {l.rfidUid}
+                      </span>
+                    );
+                  }
+                  if (l.status === "accepted") {
+                    return (
+                      <span className="inline-flex items-center text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
+                        Unassigned (Dashboard Verified)
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      Card Pending (Station 1)
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center text-xs text-muted-foreground italic bg-muted px-2 py-0.5 rounded">
-                      Unassigned
-                    </span>
-                  ),
+                  );
+                },
               },
               {
                 header: "Incoming QC",
@@ -396,6 +435,11 @@ function IncomingLotsTable({
                       i.kind === "incoming" &&
                       (i.subjectId === l.id || (l as any).code === i.subjectId),
                   );
+                  const isReadyForQc =
+                    l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned";
+                  const isAwaitingReceiving =
+                    l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned");
+
                   return (
                     <div className="flex flex-col gap-0.5">
                       <StatusBadge status={l.status} />
@@ -404,9 +448,14 @@ function IncomingLotsTable({
                           Approved for Step 3
                         </span>
                       )}
-                      {l.status === "awaiting-inspection" && (
-                        <span className="text-[11px] font-medium text-warning">
-                          Awaiting Inspection
+                      {isReadyForQc && (
+                        <span className="text-[11px] font-semibold text-warning">
+                          Ready for QC Sign-Off
+                        </span>
+                      )}
+                      {isAwaitingReceiving && (
+                        <span className="text-[11px] font-medium text-amber-600">
+                          Awaiting Station 1 Scan
                         </span>
                       )}
                       {l.status === "rejected" && (
@@ -415,7 +464,10 @@ function IncomingLotsTable({
                         </span>
                       )}
                       {matchingInsp?.defectReason && (
-                        <span className="text-[11px] text-destructive truncate max-w-[200px]">
+                        <span
+                          className="text-[11px] text-destructive truncate max-w-[200px]"
+                          title={matchingInsp.defectReason}
+                        >
                           {matchingInsp.defectReason}
                         </span>
                       )}
@@ -450,7 +502,12 @@ function IncomingLotsTable({
                     createdAt: l.receivedAt,
                   };
 
-                  if (l.status === "awaiting-inspection") {
+                  const isReadyForQc =
+                    l.status === "awaiting-inspection" && Boolean(l.rfidUid) && l.rfidUid !== "unassigned";
+                  const isAwaitingReceiving =
+                    l.status === "awaiting-inspection" && (!l.rfidUid || l.rfidUid === "unassigned");
+
+                  if (isReadyForQc) {
                     return canEvaluate ? (
                       <IncomingQcDialog
                         inspection={inspObj}
@@ -461,6 +518,23 @@ function IncomingLotsTable({
                       <Button asChild size="sm" variant="outline" className="h-7 text-xs">
                         <AppLink href={paths.lot(l.id)}>View Lot</AppLink>
                       </Button>
+                    );
+                  }
+
+                  if (isAwaitingReceiving) {
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        {canAccessRoute(me, "workstation") && (
+                          <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                            <AppLink href={paths.workstation}>
+                              Station 1 <ArrowRight className="size-3" />
+                            </AppLink>
+                          </Button>
+                        )}
+                        <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
+                          <AppLink href={paths.lot(l.id)}>View</AppLink>
+                        </Button>
+                      </div>
                     );
                   }
 
@@ -497,11 +571,7 @@ export function QualityView() {
     c.getRfidStationData("final_qc"),
   );
 
-  const isIncomingQC =
-    me.username?.toLowerCase() === "qc.incoming" ||
-    me.department?.toLowerCase() === "receiving" ||
-    me.department?.toLowerCase() === "raw-store" ||
-    (me.department as string)?.toLowerCase() === "raw_store";
+  const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
 
   const [incomingMode, setIncomingMode] = useState<"queue" | "quarantine">("queue");
 
@@ -548,18 +618,22 @@ export function QualityView() {
   if (isIncomingQC) {
     return (
       <>
-        <PageHeader
-          title="Incoming Material Quality Assurance (qc.incoming)"
-          description="Dedicated inspection workstation at factory receiving dock & quarantine zone. Physical roll sampling, 4-point defect scoring, and quantity reconciliation (Zero scanner required)."
-          crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality (Incoming QC)" }]}
-        />
+        <PageHeader title="Incoming Material Quality Assurance" />
 
         <div className="space-y-6">
           {/* Key Metric Counters */}
           <Loadable query={insp}>
             {() => {
-              const awaitingLotsCount = (lots.data ?? []).filter(
-                (l) => l.status === "awaiting-inspection",
+              const readyLotsCount = (lots.data ?? []).filter(
+                (l) =>
+                  l.status === "awaiting-inspection" &&
+                  Boolean(l.rfidUid) &&
+                  l.rfidUid !== "unassigned",
+              ).length;
+              const awaitingReceivingCount = (lots.data ?? []).filter(
+                (l) =>
+                  l.status === "awaiting-inspection" &&
+                  (!l.rfidUid || l.rfidUid === "unassigned"),
               ).length;
               const quarantinedLots = (lots.data ?? []).filter(
                 (l) => l.status === "rejected" || (l.heldQty ?? 0) > 0,
@@ -571,32 +645,38 @@ export function QualityView() {
               );
 
               return (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span className="text-xs font-semibold uppercase tracking-wider">
-                        Incoming Lots Pending
+                        Ready for QC
                       </span>
                       <Sparkles className="size-4 text-warning" />
                     </div>
-                    <p className="mt-2 text-2xl font-bold">{awaitingLotsCount}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Arriving fabric lots awaiting dock sign-off
+                    <p className="mt-2 text-2xl font-bold">{readyLotsCount}</p>
+                  </div>
+
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-semibold uppercase tracking-wider">
+                        Awaiting Receiving
+                      </span>
+                      <Radio className="size-4 text-amber-500" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-amber-600">
+                      {awaitingReceivingCount}
                     </p>
                   </div>
 
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span className="text-xs font-semibold uppercase tracking-wider">
-                        Active Quarantine / Lot Holds
+                        Quarantine / Holds
                       </span>
                       <ShieldAlert className="size-4 text-destructive" />
                     </div>
                     <p className="mt-2 text-2xl font-bold text-destructive">
                       {quarantinedLots.length}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Fabric rolls blocked from production
                     </p>
                   </div>
 
@@ -609,9 +689,6 @@ export function QualityView() {
                     </div>
                     <p className="mt-2 text-2xl font-bold text-success">
                       {Math.round(acceptedInventoryMeters)} m
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Cleared meterage for cutting issuance
                     </p>
                   </div>
                 </div>
@@ -631,9 +708,11 @@ export function QualityView() {
                     <span>Incoming QC Dashboard &amp; Queue</span>
                     <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold">
                       {
-                        (lots.data ?? []).filter((l) => l.status === "awaiting-inspection").length ||
-                        (insp.data ?? []).filter(
-                          (i) => i.kind === "incoming" && i.status === "open",
+                        (lots.data ?? []).filter(
+                          (l) =>
+                            l.status === "awaiting-inspection" &&
+                            Boolean(l.rfidUid) &&
+                            l.rfidUid !== "unassigned",
                         ).length
                       }
                     </span>
@@ -653,7 +732,7 @@ export function QualityView() {
 
               {/* Mode 1: Incoming Fabric Inspection Queue */}
               <TabsContent value="queue" className="mt-4 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="relative">
                     <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -663,15 +742,17 @@ export function QualityView() {
                       className="h-8 pl-8 text-xs w-[220px] sm:w-[260px]"
                     />
                   </div>
-                  <div className="w-[150px]">
+                  <div className="w-[180px]">
                     <NativeSelect
                       value={statusFilter}
                       onChange={setStatusFilter}
                       options={[
-                        { value: "all", label: "All Statuses" },
-                        { value: "open", label: "Open (Awaiting QC)" },
+                        { value: "all", label: "All Lots" },
+                        { value: "ready", label: "Ready for QC" },
+                        { value: "awaiting_receiving", label: "Awaiting Receiving" },
+                        { value: "open", label: "All Open Lots" },
                         { value: "passed", label: "Passed (Accepted)" },
-                        { value: "failed", label: "Failed (Rejected)" },
+                        { value: "failed", label: "Failed (Quarantined)" },
                       ]}
                     />
                   </div>
@@ -687,18 +768,6 @@ export function QualityView() {
 
               {/* Mode 2: Lot Rejection & Quarantine Handling */}
               <TabsContent value="quarantine" className="mt-4 space-y-4">
-                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm flex items-start gap-3">
-                  <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-destructive">
-                      Active Raw Material Quarantine Zone
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Managing failed fabric rolls and logging mill defect reasons. Unapproved rolls are locked with usable balance = 0 m. Downstream production guards strictly prevent Raw Store from issuing these rolls and prevent Cutting from starting orders on this material.
-                    </p>
-                  </div>
-                </div>
-
                 <Loadable query={lots}>
                   {(allLots) => {
                     const quarantinedLots = allLots.filter(
@@ -816,7 +885,6 @@ export function QualityView() {
             ? "Managerial quality oversight. Only certified inspectors record operational decisions."
             : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
         }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Quality" }]}
       />
 
       <div className="space-y-6">
@@ -918,10 +986,16 @@ export function QualityView() {
         {/* Workstation RFID Station Panel (Station 6 Final QA only) */}
         {qRfidStation.data && (
           <Section
-            title="Station 6: RFID Final Inspection Reader (Result-First)"
-            description="Examine shirt, select Pass or Fail (with defect code) to arm context, then scan card. Identity resolves automatically."
+            title="Station 6: Final Quality Inspection Console"
+            description="Examine shirt physically, select Pass or Fail, click Submit, then scan tag at Scanner 6 hardware."
           >
-            <QAPanel stationData={qRfidStation.data} />
+            <QAPanel
+              stationData={qRfidStation.data}
+              onScanComplete={() => {
+                void insp.refetch();
+                void garments.refetch();
+              }}
+            />
           </Section>
         )}
 

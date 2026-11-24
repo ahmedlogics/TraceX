@@ -44,3 +44,8 @@ firmware/**/reader_keys.h
 *.njsproj
 *.sln
 *.sw?
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+scratch/

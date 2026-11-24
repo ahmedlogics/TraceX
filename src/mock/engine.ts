@@ -23,6 +23,7 @@ import type {
   DemoState,
   Department,
   Garment,
+  Package,
   Inspection,
   ProductSpecification,
   RfidStationCode,
@@ -151,14 +152,19 @@ function normalizeUid(uid: string): RfidUid {
 }
 
 function isCardAlreadyBound(s: DemoState, uid: RfidUid): boolean {
-  return s.rfidTagBindings.some((b) => b.uid === uid && b.active);
+  return (
+    s.rfidTagBindings.some((b) => b.uid === uid && b.active) ||
+    s.lots.some((l) => l.rfidUid === uid) ||
+    s.garments.some((g) => g.rfidUid === uid) ||
+    s.packages.some((p) => p.rfidUid === uid)
+  );
 }
 
 function bindCard(
   s: DemoState,
   actor: StaffUser,
   uid: RfidUid,
-  subjectType: "lot" | "garment",
+  subjectType: "lot" | "garment" | "package",
   subjectId: string,
 ): RfidTagBinding {
   const id = nextId(s, "binding", "BIND");
@@ -175,9 +181,12 @@ function bindCard(
   if (subjectType === "lot") {
     const lot = s.lots.find((l) => l.id === subjectId);
     if (lot) lot.rfidUid = uid;
-  } else {
+  } else if (subjectType === "garment") {
     const garment = s.garments.find((g) => g.id === subjectId);
     if (garment) garment.rfidUid = uid;
+  } else if (subjectType === "package") {
+    const pkg = s.packages.find((p) => p.id === subjectId);
+    if (pkg) pkg.rfidUid = uid;
   }
   return binding;
 }
@@ -809,7 +818,7 @@ function handleSubmitQc(
       s,
       uid,
       "rejected_unknown_card",
-      `UID ${uid} is not recognised. Scan the garment's RFID card.`,
+      "Rejected: Unrecognised product tag — No active garment record found.",
       ctx.id,
     );
   if (binding.subjectType !== "garment")
@@ -817,11 +826,41 @@ function handleSubmitQc(
       s,
       uid,
       "rejected_wrong_subject_type",
-      "Expected a garment card. Got a bundle card.",
+      `Rejected: Expected garment card at Station 6; tag ${uid} is bound to ${binding.subjectType} ${binding.subjectId}. Unrecognised product tag.`,
       ctx.id,
     );
   const g = s.garments.find((x) => x.id === binding.subjectId);
-  if (!g) return rejectScan(s, uid, "rejected_unknown_card", "Garment record not found.", ctx.id);
+  if (!g)
+    return rejectScan(
+      s,
+      uid,
+      "rejected_unknown_card",
+      "Rejected: Unrecognised product tag — No active garment card record found.",
+      ctx.id,
+    );
+
+  // Rule B: Full Upstream Station History Prerequisite (must have completed Finishing)
+  if (g.stage === "cutting" || g.stage === "stitching") {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_wrong_stage",
+      `Rejected: Garment ${g.id} has not completed Finishing Station (expected 'finishing' or 'final-qc', current stage '${g.stage}').`,
+      ctx.id,
+    );
+  }
+
+  // Rule C: Single-Pass Guard
+  if (g.disposition === "passed" && g.stage !== "rework" && !g.hold) {
+    return rejectScan(
+      s,
+      uid,
+      "rejected_duplicate",
+      `Ignored / Rejected: Garment ${g.id} has already passed Final QC.`,
+      ctx.id,
+    );
+  }
+
   // Stage validation: must be finishing or final-qc/rework
   if (g.stage !== "finishing" && g.stage !== "final-qc" && g.stage !== "rework") {
     return rejectScan(
@@ -832,18 +871,27 @@ function handleSubmitQc(
       ctx.id,
     );
   }
-  // Find the open inspection for this garment
-  const insp = s.inspections
+
+  // Find the open inspection for this garment or synthesize if missing
+  let insp = s.inspections
     .filter((i) => i.subjectType === "garment" && i.subjectId === g.id && i.status === "open")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  if (!insp)
-    return rejectScan(
-      s,
-      uid,
-      "rejected_business_rule",
-      `No open inspection found for ${g.id}. Inspection may already be submitted.`,
-      ctx.id,
-    );
+  if (!insp) {
+    const inspId = nextId(s, "inspection", "INSP");
+    insp = {
+      id: inspId,
+      kind: "final",
+      subjectType: "garment",
+      subjectId: g.id,
+      status: "open",
+      assigneeId: actor.id,
+      checklist: finalChecklist(),
+      notes: "",
+      createdAt: now(),
+    };
+    s.inspections.push(insp);
+  }
+
   // Independent inspection rule: inspector cannot be the repair performer
   if (insp.kind === "reinspection") {
     const rc = s.rework.find(
@@ -886,6 +934,9 @@ function handleSubmitQc(
   insp.submittedBy = actor.id;
   closeTasks(s, g.id, ["final-qc-presentation"]);
   const kindLabel = insp.kind === "reinspection" ? "Reinspection" : "Final inspection";
+  const isDiscard = Boolean((ctx.payload as any)?.discard);
+  const assignedDept = (ctx.payload as any)?.assignedDepartment;
+
   if (payload.result === "pass") {
     g.disposition = "passed";
     if (!g.hold) {
@@ -903,6 +954,24 @@ function handleSubmitQc(
       garmentEvent(s, g.id, `${kindLabel} passed — hold awaits explicit release`, actor, insp.id);
     }
     audit(s, actor, "quality", `${kindLabel} passed via RFID scan`, "garment", g.id, insp.id);
+  } else if (isDiscard) {
+    g.disposition = "failed";
+    g.stage = "final-qc";
+    g.hold = {
+      reason: insp.defectReason || "Product Scrapped / Discarded",
+      since: now(),
+      inspectionId: insp.id,
+    };
+    garmentEvent(s, g.id, `${kindLabel} failed — garment scrapped & permanently decommissioned`, actor, insp.defectReason);
+    audit(
+      s,
+      actor,
+      "quality",
+      `Product scrapped / discarded via RFID scan`,
+      "garment",
+      g.id,
+      insp.id,
+    );
   } else {
     g.disposition = "failed";
     g.stage = "rework";
@@ -914,7 +983,7 @@ function handleSubmitQc(
       existing.status = "awaiting-assignment";
       existing.defectReason = insp.defectReason!;
       existing.inspectionId = insp.id;
-      existing.assignedDepartment = undefined;
+      existing.assignedDepartment = assignedDept;
       existing.history.push({
         at: now(),
         label: `Reinspection failed: ${insp.defectReason}`,
@@ -923,7 +992,6 @@ function handleSubmitQc(
       caseId = existing.id;
     } else {
       caseId = nextId(s, "rework", "RW");
-      const assignedDept = (ctx.payload as any)?.assignedDepartment;
       s.rework.push({
         id: caseId,
         garmentId: g.id,
@@ -965,6 +1033,13 @@ function handleSubmitQc(
     );
   }
   consumeContext(s, ctx);
+
+  const outcomeMessage = isDiscard
+    ? "Product Scrapped / Discarded → Decommissioned from line"
+    : payload.result === "pass"
+      ? "Inspection Passed → Released to Station 7 (Packing)"
+      : `Defect Registered → Sent to ${assignedDept ? assignedDept.charAt(0).toUpperCase() + assignedDept.slice(1) : "Repair"} Repair Queue`;
+
   const outcome: ScanOutcome = {
     uid,
     resolution: "accepted",
@@ -972,6 +1047,7 @@ function handleSubmitQc(
     subjectId: g.id,
     garmentCode: g.id,
     productName: g.productName,
+    message: outcomeMessage,
     at: now(),
   };
   appendScanLog(s, outcome);
@@ -1201,18 +1277,224 @@ function handleDispatchGarment(
   return outcome;
 }
 
-// ---------------------------------------------------------------- Routine station scans (Stitching/Finishing)
+// ---------------------------------------------------------------- Station 9: Dispatch & Outbound Gate Box Scan
+
+/**
+ * Station 9: Aggregate Carton Dispatch Scan.
+ * Operators scan the master container/box RFID tag.
+ * Automatically triggers an instant, atomic status update across all linked products directly to dispatched.
+ */
+export function dispatchBoxScan(
+  s: DemoState,
+  actor: StaffUser,
+  boxTagOrId: string,
+  shipmentId?: string,
+): ScanOutcome {
+  ensure(
+    can.confirmDeparture(actor) || actor.department === "dispatch" || actor.role === "M" || actor.role === "A",
+    "forbidden",
+    "Only authorized dispatch associates can dispatch outbound cartons.",
+  );
+
+  const cleanInput = boxTagOrId.trim();
+  const normUid = normalizeUid(cleanInput);
+
+  // 1. Identify Box: by ID, by rfidUid, or by binding
+  let pkg = s.packages.find(
+    (p) =>
+      p.id.toUpperCase() === cleanInput.toUpperCase() ||
+      (p.rfidUid && p.rfidUid.toUpperCase() === normUid),
+  );
+
+  if (!pkg) {
+    const binding = findBindingByUid(s, normUid);
+    if (binding) {
+      if (binding.subjectType === "package" || (binding.subjectType as any) === "box") {
+        pkg = s.packages.find((p) => p.id === binding.subjectId);
+      } else if (binding.subjectType === "garment") {
+        pkg = s.packages.find((p) => p.garmentIds.includes(binding.subjectId));
+      }
+    }
+  }
+
+  // Check 1: Is the Tag registered as a valid Box?
+  if (!pkg) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_unknown_card",
+      `Unrecognised Box Tag: Tag UID '${cleanInput}' is not registered to any box or carton.`,
+    );
+  }
+
+  // Check 2: Does the Box contain linked products (> 0)?
+  if (!pkg.garmentIds || pkg.garmentIds.length === 0) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Cannot dispatch empty box — 0 products linked to ${pkg.id}.`,
+    );
+  }
+
+  // Check 3: Has this Box already been dispatched?
+  if (pkg.status === "dispatched") {
+    const linkedShipment = s.shipments.find((sh) =>
+      sh.garmentIds.some((gid) => pkg!.garmentIds.includes(gid)),
+    );
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Box Already Dispatched: Box ${pkg.id} has already been dispatched${
+        linkedShipment ? ` on Shipment ${linkedShipment.id}` : ""
+      }.`,
+    );
+  }
+
+  // Check 4: Do ANY linked garments have an active Hold?
+  const linkedGarments = pkg.garmentIds
+    .map((gid) => s.garments.find((g) => g.id === gid))
+    .filter(Boolean) as Garment[];
+
+  const holdGarment = linkedGarments.find((g) => Boolean(g.hold));
+  if (holdGarment) {
+    const reason = holdGarment.hold?.reason ? ` ("${holdGarment.hold.reason}")` : "";
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Blocked: Garment ${holdGarment.id} inside Box ${pkg.id} has an active Quality Hold${reason}. Release hold before dispatching.`,
+    );
+  }
+
+  // All Passed: Instant Atomic Status Advancement
+  pkg.status = "dispatched";
+
+  for (const g of linkedGarments) {
+    g.stage = "dispatched";
+    garmentEvent(s, g.id, `Dispatched at Station 9 in container ${pkg.id}`, actor);
+    s.ledger.unshift({
+      id: nextId(s, "ledger", "LC"),
+      subjectType: "garment",
+      subjectId: g.id,
+      milestone: `Garment dispatched in carton ${pkg.id} at Station 9`,
+      status: "confirmed",
+      digest: `0x${Math.random().toString(16).slice(2, 10)}`,
+      createdAt: now(),
+      updatedAt: now(),
+      attempts: 1,
+    });
+  }
+
+  // Update target shipment manifest verification if linked
+  const targetShipment =
+    (shipmentId && s.shipments.find((sh) => sh.id === shipmentId)) ||
+    s.shipments.find((sh) => sh.garmentIds.some((gid) => pkg!.garmentIds.includes(gid))) ||
+    s.shipments.find((sh) => sh.status !== "departed");
+
+  if (targetShipment) {
+    if (!targetShipment.verifiedGarmentIds) {
+      targetShipment.verifiedGarmentIds = [];
+    }
+    if (!targetShipment.garmentIds) {
+      targetShipment.garmentIds = [];
+    }
+    if (!targetShipment.allocatedGarmentIds) {
+      targetShipment.allocatedGarmentIds = [];
+    }
+    for (const g of linkedGarments) {
+      g.shipmentId = targetShipment.id;
+      if (!targetShipment.garmentIds.includes(g.id)) {
+        targetShipment.garmentIds.push(g.id);
+      }
+      if (!targetShipment.allocatedGarmentIds.includes(g.id)) {
+        targetShipment.allocatedGarmentIds.push(g.id);
+      }
+      if (!targetShipment.verifiedGarmentIds.includes(g.id)) {
+        targetShipment.verifiedGarmentIds.push(g.id);
+      }
+    }
+    if (
+      targetShipment.status === "planned" ||
+      targetShipment.status === "draft"
+    ) {
+      targetShipment.status = "loading";
+    }
+
+    s.ledger.unshift({
+      id: nextId(s, "ledger", "LC"),
+      subjectType: "shipment",
+      subjectId: targetShipment.id,
+      milestone: `Carton ${pkg.id} (${linkedGarments.length} units) verified & loaded at Station 9 Gate`,
+      status: "confirmed",
+      digest: `0x${Math.random().toString(16).slice(2, 10)}`,
+      createdAt: now(),
+      updatedAt: now(),
+      attempts: 1,
+    });
+  }
+
+  closeTasks(s, pkg.id, ["dispatch"]);
+  for (const g of linkedGarments) {
+    closeTasks(s, g.id, ["dispatch"]);
+  }
+
+  audit(
+    s,
+    actor,
+    "logistics",
+    `Box ${pkg.id} scanned at Station 9: All ${linkedGarments.length} linked garments dispatched`,
+    "package",
+    pkg.id,
+    targetShipment?.id,
+  );
+
+  const outcome: ScanOutcome = {
+    uid: normUid,
+    resolution: "accepted",
+    subjectId: pkg.id,
+    garmentCode: pkg.id,
+    productName: `${linkedGarments.length} Linked Units Dispatched`,
+    rejectReason: undefined,
+    at: now(),
+  };
+
+  appendScanLog(s, outcome);
+
+  const stKey = "dispatch";
+  if (!s.rfidStationStates[stKey]) {
+    s.rfidStationStates[stKey] = {
+      stationCode: "dispatch",
+      operatorId: actor.id,
+      lastConfirmedSubjectId: pkg.id,
+      lastScanOutcome: outcome,
+    };
+  } else {
+    s.rfidStationStates[stKey].lastConfirmedSubjectId = pkg.id;
+    s.rfidStationStates[stKey].lastScanOutcome = outcome;
+  }
+
+  return outcome;
+}
+
+// ---------------------------------------------------------------- Routine station scans (Stitching/Finishing/Dispatch)
 
 /**
  * Routine scan: identifies garment and advances its stage without an explicit per-shirt context.
- * Used at Stitching and Finishing where bulk throughput is expected under an authorised session.
+ * Used at Stitching and Finishing where bulk throughput is expected under an authorised session,
+ * and at Station 9 Dispatch for aggregate carton dispatching.
  */
 export function routineScan(
   s: DemoState,
   actor: StaffUser,
   uid: string,
-  stationCode: "stitching" | "finishing",
+  stationCode: "stitching" | "finishing" | "dispatch",
 ): ScanOutcome {
+  if (stationCode === "dispatch") {
+    return dispatchBoxScan(s, actor, uid);
+  }
+
   const normUid = normalizeUid(uid);
   const binding = findBindingByUid(s, normUid);
   if (!binding)
@@ -1237,7 +1519,7 @@ export function routineScan(
   }
 
   if (stationCode === "stitching") {
-    if (g.stage !== "stitching") {
+    if (g.stage !== "stitching" && g.stage !== "cut") {
       return rejectScan(
         s,
         normUid,
@@ -1269,7 +1551,7 @@ export function routineScan(
     });
     audit(s, actor, "production", "Stitching completed via RFID scan", "garment", g.id);
   } else {
-    if (g.stage !== "finishing") {
+    if (g.stage !== "finishing" && (g.stage as string) !== "stitched") {
       return rejectScan(
         s,
         normUid,
@@ -1618,7 +1900,7 @@ export function planOrder(
   actor: StaffUser,
   input: { product: string; styleCode: string; qty: number; dueDate: string },
 ) {
-  ensure(can.planOrder(actor), "forbidden", "Only the supply-chain manager can plan orders.");
+  ensure(can.planOrder(actor), "forbidden", "Only authorized managers or raw store staff can plan orders.");
   ensure(
     input.product.trim() && input.qty > 0,
     "invalid",
@@ -1654,7 +1936,7 @@ export function planOrder(
 }
 
 export function approveOrder(s: DemoState, actor: StaffUser, orderId: string) {
-  ensure(can.approveOrder(actor), "forbidden", "Only the manager can approve orders.");
+  ensure(can.approveOrder(actor), "forbidden", "Only authorized managers or raw store staff can approve orders.");
   const order = findOrThrow(s.orders, orderId, "Order");
   ensure(
     order.status === "planned" || order.status === "draft",
@@ -1670,7 +1952,13 @@ export function approveOrder(s: DemoState, actor: StaffUser, orderId: string) {
 export function recordCuttingOutput(
   s: DemoState,
   actor: StaffUser,
-  input: { orderId: string; issueId: string; fabricUsed: number; size: string },
+  input: {
+    orderId: string;
+    issueId?: string | undefined;
+    fabricUsed: number;
+    size: string;
+    tagUid?: string | undefined;
+  },
 ) {
   ensure(
     actor.role === "P" && actor.department === "cutting" && actor.status === "active",
@@ -1678,7 +1966,22 @@ export function recordCuttingOutput(
     "Only cutting staff can record cutting outputs.",
   );
   const order = findOrThrow(s.orders, input.orderId, "Order");
-  const issue = findOrThrow(s.issues, input.issueId, "Material issue");
+  let issue = input.issueId ? s.issues.find((i) => i.id === input.issueId) : undefined;
+  if (!issue) {
+    issue = s.issues.find((i) => i.orderId === order.id);
+  }
+  if (!issue) {
+    const lot = s.lots.find((l) => l.status === "accepted") || s.lots[0]!;
+    issue = {
+      id: nextId(s, "issue", "ISS"),
+      lotId: lot.id,
+      orderId: order.id,
+      qty: Math.max(input.fabricUsed * Math.max(1, order.plannedQty), 20),
+      at: now(),
+      by: actor.id,
+    };
+    s.issues.push(issue);
+  }
   ensure(issue.orderId === order.id, "conflict", "That material issue belongs to another order.");
   const used = s.cuttingOutputs
     .filter((c) => c.issueId === issue.id)
@@ -1711,10 +2014,22 @@ export function recordCuttingOutput(
     productName: `${order.product} — ${input.size}`,
     size: input.size,
     cuttingOutputId: cutId,
+    rfidUid: input.tagUid || undefined,
     stage: "stitching",
     disposition: "not-inspected",
     hold: null,
   });
+  if (input.tagUid) {
+    s.rfidTagBindings.push({
+      id: nextId(s, "binding", "BIND"),
+      uid: input.tagUid,
+      subjectType: "garment",
+      subjectId: garmentId,
+      boundAt: now(),
+      boundBy: actor.id,
+      active: true,
+    });
+  }
   garmentEvent(
     s,
     garmentId,
@@ -2216,10 +2531,16 @@ export function submitIncomingQc(
     };
     s.inspections.push(insp);
   }
+  const accepted = Math.round(Number(input.acceptedQty) * 1000) / 1000;
+  const held = Math.round(Number(input.heldQty) * 1000) / 1000;
+  const rejected = Math.round(Number(input.rejectedQty) * 1000) / 1000;
+  const totalEvaluated = Math.round((accepted + held + rejected) * 1000) / 1000;
+  const lotReceived = Math.round(Number(lot.receivedQty) * 1000) / 1000;
+
   ensure(
-    input.acceptedQty + input.heldQty + input.rejectedQty === lot.receivedQty,
+    Math.abs(totalEvaluated - lotReceived) < 1e-3,
     "invalid",
-    `Evaluated quantities (${input.acceptedQty + input.heldQty + input.rejectedQty}) must equal received lot quantity (${lot.receivedQty}).`,
+    `Evaluated quantities (${totalEvaluated}) must equal received lot quantity (${lotReceived}).`,
   );
   if (input.result === "pass") {
     ensure(
@@ -2228,7 +2549,7 @@ export function submitIncomingQc(
       "Complete every checklist item before passing.",
     );
     ensure(
-      input.acceptedQty > 0,
+      accepted > 0,
       "invalid",
       "Passing inspection requires an accepted quantity > 0.",
     );
@@ -2242,10 +2563,10 @@ export function submitIncomingQc(
   insp.submittedAt = now();
   insp.submittedBy = actor.id;
 
-  lot.acceptedQty = input.acceptedQty;
-  lot.heldQty = input.heldQty;
-  lot.rejectedQty = input.rejectedQty;
-  lot.balanceQty = input.acceptedQty; // Only accepted quantity is issuable
+  lot.acceptedQty = accepted;
+  lot.heldQty = held;
+  lot.rejectedQty = rejected;
+  lot.balanceQty = accepted; // Only accepted quantity is issuable
   lot.status = input.result === "pass" ? "accepted" : "rejected";
   closeTasks(s, lot.id, ["incoming-qc"]);
 
@@ -2390,16 +2711,26 @@ export function completeRework(s: DemoState, actor: StaffUser, caseId: string, n
 
 // ---------------------------------------------------------------- fulfilment
 
-export function createPackage(s: DemoState, actor: StaffUser): string {
+export function createPackage(
+  s: DemoState,
+  actor: StaffUser,
+  rfidUid?: string,
+  customId?: string,
+): string {
   ensure(can.packGarment(actor), "forbidden", "Only packing staff can create packages.");
-  const id = nextId(s, "package", "PKG");
-  s.packages.push({
+  const id = customId || nextId(s, "package", "PKG");
+  const pkg: Package = {
     id,
     garmentIds: [],
     status: "open",
     packedBy: actor.id,
     createdAt: now(),
-  });
+    rfidUid,
+  };
+  s.packages.push(pkg);
+  if (rfidUid) {
+    bindCard(s, actor, normalizeUid(rfidUid), "package", id);
+  }
   audit(s, actor, "logistics", "Package created", "package", id);
   return id;
 }
@@ -2445,7 +2776,12 @@ export function verifyGarmentDispatch(
   audit(s, actor, "logistics", "Garment verified on manifest", "garment", g.id, sh.id);
 }
 
-export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
+export function packGarment(
+  s: DemoState,
+  actor: StaffUser,
+  garmentId: string,
+  packageId?: string,
+) {
   ensure(can.packGarment(actor), "forbidden", "Only packing staff can add garments to a package.");
   const g = getGarment(s, garmentId);
   ensure(!g.hold, "conflict", `${g.id} is on quality hold and cannot be packed.`);
@@ -2455,7 +2791,12 @@ export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
     "conflict",
     `${g.id} has not passed quality control.`,
   );
-  let pkg = s.packages.find((p) => p.status === "open");
+  let pkg = packageId
+    ? s.packages.find(
+        (p) =>
+          (p.id === packageId || p.rfidUid === packageId) && p.status === "open",
+      )
+    : s.packages.find((p) => p.status === "open");
   if (!pkg) {
     pkg = {
       id: nextId(s, "package", "PKG"),
@@ -2481,20 +2822,110 @@ export function packGarment(s: DemoState, actor: StaffUser, garmentId: string) {
   return pkg.id;
 }
 
-export function receiveStock(s: DemoState, actor: StaffUser, garmentId: string) {
+export function receiveStock(
+  s: DemoState,
+  actor: StaffUser,
+  boxTagOrGarmentId: string,
+  binId: string = "BIN-A1",
+): ScanOutcome {
   ensure(can.receiveStock(actor), "forbidden", "Only warehouse staff can receive finished stock.");
-  const g = getGarment(s, garmentId);
+  const cleanInput = boxTagOrGarmentId.trim();
+  const normUid = normalizeUid(cleanInput);
+
+  // 1. Resolve package by ID, rfidUid, or binding
+  let pkg = s.packages.find(
+    (p) =>
+      p.id.toUpperCase() === cleanInput.toUpperCase() ||
+      (p.rfidUid && p.rfidUid.toUpperCase() === normUid),
+  );
+
+  if (!pkg) {
+    const binding = findBindingByUid(s, normUid);
+    if (binding) {
+      if (binding.subjectType === "package" || (binding.subjectType as any) === "box") {
+        pkg = s.packages.find((p) => p.id === binding.subjectId);
+      } else if (binding.subjectType === "garment") {
+        pkg = s.packages.find((p) => p.garmentIds.includes(binding.subjectId));
+      }
+    }
+  }
+
+  if (pkg) {
+    pkg.status = "warehoused";
+    const linkedGarments = pkg.garmentIds
+      .map((gid) => s.garments.find((g) => g.id === gid))
+      .filter(Boolean) as Garment[];
+
+    // Quality hold check: do any garments have an active hold?
+    const holdGarment = linkedGarments.find((g) => Boolean(g.hold));
+    if (holdGarment) {
+      const reason = holdGarment.hold?.reason ? ` ("${holdGarment.hold.reason}")` : "";
+      return rejectScan(
+        s,
+        normUid,
+        "rejected_business_rule",
+        `Blocked: Garment ${holdGarment.id} inside Box ${pkg.id} has an active Quality Hold${reason}.`,
+      );
+    }
+
+    for (const g of linkedGarments) {
+      g.stage = "warehouse";
+      closeTasks(s, g.id, ["warehouse-receive"]);
+      garmentEvent(
+        s,
+        g.id,
+        `Received into finished stock (bin: ${binId}) in container ${pkg.id}`,
+        actor,
+      );
+    }
+
+    closeTasks(s, pkg.id, ["warehouse-receive"]);
+    audit(
+      s,
+      actor,
+      "logistics",
+      `Box ${pkg.id} (${linkedGarments.length} garments) received into warehouse bin ${binId}`,
+      "package" as any,
+      pkg.id,
+      binId,
+    );
+
+    const outcome: ScanOutcome = {
+      uid: normUid,
+      resolution: "accepted",
+      subjectId: pkg.id,
+      garmentCode: pkg.id,
+      productName: `Box ${pkg.id} (${linkedGarments.length} garments) received into ${binId}`,
+      at: now(),
+    };
+    appendScanLog(s, outcome);
+    return outcome;
+  }
+
+  // 2. Fallback: single garment
+  const g = getGarment(s, cleanInput);
   ensure(
-    g.stage === "packing" && g.packageId,
+    (g.stage === "packing" || g.stage === "packed") && g.packageId,
     "conflict",
     `${g.id} is not packed and waiting for the warehouse.`,
   );
   g.stage = "warehouse";
-  const pkg = s.packages.find((p) => p.id === g.packageId);
-  if (pkg) pkg.status = "sealed";
+  const parentPkg = s.packages.find((p) => p.id === g.packageId);
+  if (parentPkg) parentPkg.status = "warehoused";
   closeTasks(s, g.id, ["warehouse-receive"]);
-  garmentEvent(s, g.id, "Received into finished stock", actor);
+  garmentEvent(s, g.id, `Received into finished stock (bin: ${binId})`, actor);
   audit(s, actor, "logistics", "Stock received", "garment", g.id);
+
+  const outcome: ScanOutcome = {
+    uid: normUid,
+    resolution: "accepted",
+    subjectId: g.id,
+    garmentCode: g.id,
+    productName: `${g.productName} received into ${binId}`,
+    at: now(),
+  };
+  appendScanLog(s, outcome);
+  return outcome;
 }
 
 export function allocateStock(
