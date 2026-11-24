@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   CheckCircle2,
   Clock,
@@ -279,46 +278,40 @@ export function IssuePanel({
                 )}
 
                 {/* Active Production Orders Queue */}
-                    <Section
-                      title="Production Orders Queue"
-                      actions={
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => setQueueTab("pending")}
-                              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                                queueTab === "pending"
-                                  ? "bg-card text-foreground shadow-xs font-semibold"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              Pending Fabric ({pendingOrders.length})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setQueueTab("issued")}
-                              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                                queueTab === "issued"
-                                  ? "bg-card text-foreground shadow-xs font-semibold"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              Already Issued ({issuedOrders.length})
-                            </button>
-                          </div>
-                          <PlanOrderDialog
-                            triggerLabel="+ New Order"
-                            onSuccess={handleOrderCreated}
-                          />
-                          <Button asChild size="sm" variant="ghost" className="h-7 text-xs gap-1">
-                            <AppLink href={paths.orders}>
-                              Manage in Orders <ArrowRight className="size-3" />
-                            </AppLink>
-                          </Button>
-                        </div>
-                      }
-                    >
+                <Section
+                  title={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setQueueTab("pending")}
+                          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                            queueTab === "pending"
+                              ? "bg-card text-foreground shadow-xs font-semibold"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Pending Fabric ({pendingOrders.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQueueTab("issued")}
+                          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                            queueTab === "issued"
+                              ? "bg-card text-foreground shadow-xs font-semibold"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Already Issued ({issuedOrders.length})
+                        </button>
+                      </div>
+                      <PlanOrderDialog
+                        triggerLabel="+ New Order"
+                        onSuccess={handleOrderCreated}
+                      />
+                    </div>
+                  }
+                >
                       {displayedOrders.length === 0 ? (
                         <EmptyState
                           title={
