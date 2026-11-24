@@ -90,10 +90,6 @@ export function IssuePanel({
             const targetOrder = orders.find((o) => o.id === targetOrderId);
             const targetRequiredFabric = targetOrder ? getRequiredFabric(targetOrder) : 8.0;
 
-            const acceptedLots = lots.filter((l) => l.status === "accepted" && l.balanceQty > 0);
-            const totalAcceptedMeters = acceptedLots.reduce((sum, l) => sum + (Number(l.balanceQty) || 0), 0);
-            const unapprovedLots = lots.filter((l) => l.status !== "accepted" || l.balanceQty <= 0);
-
             // Handle target order selection and arm context
             const handleSelectOrder = (order: ProductionOrder) => {
               setSelectedOrderId(order.id);
@@ -462,192 +458,107 @@ export function IssuePanel({
                     </Section>
 
                     {/* Scanner 2 Interactive Card Tap & Fast RFID Interface */}
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      <Section
-                        title="Station 2 Scanner Simulation & Tap"
-                        description="Present physical fabric bundle RFID tag to Scanner 2 to automatically validate and link it to the selected order."
-                      >
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Field
-                              label="Bundle Card Tag UID"
-                              htmlFor="s2-uid"
-                              hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID to test manually."
+                    <Section
+                      title="Station 2 Scanner Simulation & Tap"
+                      description="Present physical fabric bundle RFID tag to Scanner 2 to automatically validate and link it to the selected order."
+                    >
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Field
+                            label="Bundle Card Tag UID"
+                            htmlFor="s2-uid"
+                            hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID to test manually."
+                          >
+                            <Input
+                              id="s2-uid"
+                              value={scanUid}
+                              onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                              placeholder="e.g. BB4A0003 or tap physical card"
+                              className="font-mono bg-card"
+                            />
+                          </Field>
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <Button
+                              disabled={pending}
+                              onClick={() => handleScan()}
+                              className="gap-1.5"
                             >
-                              <Input
-                                id="s2-uid"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                placeholder="e.g. BB4A0003 or tap physical card"
-                                className="font-mono bg-card"
-                              />
-                            </Field>
-                            <div className="flex flex-wrap items-center gap-2 pt-1">
-                              <Button
-                                disabled={pending}
-                                onClick={() => handleScan()}
-                                className="gap-1.5"
-                              >
-                                {pending ? (
-                                  <>
-                                    <span className="relative flex h-2.5 w-2.5 mr-2">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                                    </span>
-                                    Awaiting Hardware Card Tap (Scanner 2)...
-                                  </>
-                                ) : scanUid.trim() ? (
-                                  <>
-                                    <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
-                                  </>
-                                ) : (
-                                  <>
-                                    <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
-                                  </>
-                                )}
-                              </Button>
-                              {scanUid && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={pending}
-                                  onClick={() => setScanUid("")}
-                                >
-                                  Clear
-                                </Button>
+                              {pending ? (
+                                <>
+                                  <span className="relative flex h-2.5 w-2.5 mr-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                  </span>
+                                  Awaiting Hardware Card Tap (Scanner 2)...
+                                </>
+                              ) : scanUid.trim() ? (
+                                <>
+                                  <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
+                                </>
+                              ) : (
+                                <>
+                                  <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
+                                </>
                               )}
-                            </div>
-                          </div>
-
-                          {/* Quick Pre-fill Test Chips for Demonstration */}
-                          <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                              One-Click Test Cards:
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {lots.map((l) => (
-                                <Button
-                                  key={l.id}
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-7 text-xs font-mono"
-                                  disabled={pending || !l.rfidUid}
-                                  onClick={() => {
-                                    if (l.rfidUid) {
-                                      setScanUid(l.rfidUid);
-                                      handleScan(l.rfidUid);
-                                    }
-                                  }}
-                                  title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
-                                >
-                                  {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
-                                </Button>
-                              ))}
+                            </Button>
+                            {scanUid && (
                               <Button
-                                type="button"
                                 variant="outline"
                                 size="sm"
-                                className="h-7 text-xs font-mono text-destructive border-destructive/30"
-                                onClick={() => {
-                                  setScanUid("04999999");
-                                  handleScan("04999999");
-                                }}
-                                title="Unrecognised Card test"
+                                disabled={pending}
+                                onClick={() => setScanUid("")}
                               >
-                                04999999 (Unbound Card)
+                                Clear
                               </Button>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                              Clicking a card immediately sends it to Scanner 2 to test validation, duplicate prevention, and QC clearance guards.
-                            </p>
+                            )}
                           </div>
                         </div>
-                      </Section>
 
-                      {/* Available Inspected Bundles (Reference Panel) */}
-                      <Section
-                        title="Available Inspected Bundles (Reference Panel)"
-                        description="Read-only warehouse fabric inventory. Only rolls inspected and accepted by Incoming QC are issuable."
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground border-b pb-2">
-                            <span>Total Usable Stock: <strong className="text-foreground">{totalAcceptedMeters.toFixed(1)} m</strong></span>
-                            <span>{acceptedLots.length} passed rolls</span>
+                        {/* Quick Pre-fill Test Chips for Demonstration */}
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                            One-Click Test Cards:
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {lots.map((l) => (
+                              <Button
+                                key={l.id}
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-7 text-xs font-mono"
+                                disabled={pending || !l.rfidUid}
+                                onClick={() => {
+                                  if (l.rfidUid) {
+                                    setScanUid(l.rfidUid);
+                                    handleScan(l.rfidUid);
+                                  }
+                                }}
+                                title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
+                              >
+                                {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
+                              </Button>
+                            ))}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs font-mono text-destructive border-destructive/30"
+                              onClick={() => {
+                                setScanUid("04999999");
+                                handleScan("04999999");
+                              }}
+                              title="Unrecognised Card test"
+                            >
+                              04999999 (Unbound Card)
+                            </Button>
                           </div>
-
-                          {acceptedLots.length > 0 ? (
-                            <div className="divide-y rounded-lg border bg-card max-h-[320px] overflow-y-auto">
-                              {acceptedLots.map((l) => (
-                                <div
-                                  key={l.id}
-                                  className="flex items-center justify-between p-3 text-xs hover:bg-muted/30 transition-colors"
-                                >
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-bold wt-id">{l.id}</span>
-                                      <span className="font-mono text-[11px] rounded bg-muted px-1.5 py-0.5">
-                                        {l.rfidUid ?? "Unbound"}
-                                      </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
-                                        <Check className="size-2.5" /> QC Passed
-                                      </span>
-                                    </div>
-                                    <p className="text-muted-foreground line-clamp-1">{l.material}</p>
-                                    <p className="text-[11px] text-foreground">
-                                      Remaining:{" "}
-                                      <strong className="text-emerald-600 font-bold">
-                                        {l.balanceQty} {l.unit ?? "m"}
-                                      </strong>{" "}
-                                      / {l.receivedQty} {l.unit ?? "m"}
-                                    </p>
-                                  </div>
-
-                                  {l.rfidUid ? (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs text-primary gap-1"
-                                      onClick={() => {
-                                        setScanUid(l.rfidUid!);
-                                        handleScan(l.rfidUid!);
-                                      }}
-                                    >
-                                      Tap <ArrowRight className="size-3" />
-                                    </Button>
-                                  ) : (
-                                    <span className="text-[10px] text-muted-foreground italic">
-                                      Unassigned
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-lg border border-dashed p-4 text-center space-y-1 bg-muted/20">
-                              <p className="text-xs font-semibold text-foreground">0 QC-Cleared Fabric Rolls Available</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                No rolls currently have cleared stock balance. {unapprovedLots.length} roll(s) in quarantine awaiting Incoming QC evaluation.
-                              </p>
-                            </div>
-                          )}
-
-                          {unapprovedLots.length > 0 && (
-                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs space-y-1">
-                              <div className="flex items-center justify-between font-semibold text-amber-800 dark:text-amber-300">
-                                <span>Quarantine / Awaiting QC ({unapprovedLots.length} rolls)</span>
-                                <AppLink href={paths.lots} className="text-[11px] underline text-amber-600 dark:text-amber-400">
-                                  View in Lots
-                                </AppLink>
-                              </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Rolls {unapprovedLots.map((l) => l.id).join(", ")} are in quarantine awaiting Incoming QC inspection before balance becomes issuable.
-                              </p>
-                            </div>
-                          )}
+                          <p className="text-[11px] text-muted-foreground">
+                            Clicking a card immediately sends it to Scanner 2 to test validation, duplicate prevention, and QC clearance guards.
+                          </p>
                         </div>
-                      </Section>
-                    </div>
+                      </div>
+                    </Section>
                   </div>
             );
           }}
