@@ -525,16 +525,13 @@ function StitchingDashboard() {
   const me = useMe();
   const { run, pending } = useWtAction();
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 3000 });
-  const qRework = useWtQuery(["rework"], (c) => c.listRework(), { refetchInterval: 3000 });
   const qStation = useWtQuery(["rfid-station", "stitching"], (c) => c.getRfidStationData("stitching"), {
     refetchInterval: 1200,
   });
 
-  const [activeTab, setActiveTab] = useState<"queue" | "rework" | "completed">("queue");
+  const [activeTab, setActiveTab] = useState<"queue" | "completed">("queue");
   const [search, setSearch] = useState("");
-  const [scanInput, setScanInput] = useState("");
   const [completedIds, setCompletedIds] = useState<Record<string, { at: string; uid?: string }>>({});
-  const [repairedIds, setRepairedIds] = useState<Record<string, string>>({});
   const [lastOutcome, setLastOutcome] = useState<ScanOutcome | null>(null);
 
   // Auto-detect scans arriving via MQTT / backend hardware reader (Scanner 4)
@@ -565,7 +562,7 @@ function StitchingDashboard() {
   }, [qStation.data?.lastScanOutcome, qGarments]);
 
   const handleScan = (garment: Garment) => {
-    const uid = garment.rfidUid || scanInput.trim();
+    const uid = garment.rfidUid;
     if (!uid) {
       toast.error("No RFID card linked to this garment.");
       return;
@@ -587,44 +584,6 @@ function StitchingDashboard() {
     );
   };
 
-  const handleManualScan = () => {
-    const uid = scanInput.trim();
-    if (!uid) return;
-    void run(
-      (c) => c.routineScan(uid, "stitching"),
-      (outcome) => {
-        setScanInput("");
-        setLastOutcome(outcome);
-        if (outcome.resolution === "accepted") {
-          const matchedGarment = qGarments.data?.find(
-            (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
-          );
-          const gId = matchedGarment?.id || outcome.subjectId;
-          if (gId) {
-            setCompletedIds((prev) => ({
-              ...prev,
-              [gId]: { at: outcome.at || new Date().toISOString(), uid: outcome.uid },
-            }));
-          }
-          void qGarments.refetch();
-          return `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? ""} Stitching complete! Advanced to Finishing.`;
-        }
-        return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
-      }
-    );
-  };
-
-  const handleRepair = (rc: ReworkCase) => {
-    void run(
-      (c) => c.completeRework(rc.id, "Stitching repair completed and verified."),
-      () => {
-        setRepairedIds((prev) => ({ ...prev, [rc.id]: new Date().toISOString() }));
-        void qRework.refetch();
-        return `✓ Rework ${rc.id} repaired! Garment returned to QC for reinspection.`;
-      }
-    );
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -642,66 +601,48 @@ function StitchingDashboard() {
       />
 
       <Loadable query={qGarments}>
-        {(garments) => (
-          <Loadable query={qRework}>
-            {(reworkCases) => {
-              // Only garments cut and scanned by Station 3 Cutting (stage 'cut' or 'stitching', with bound RFID tag)
-              const readyQueue = garments.filter(
-                (g) =>
-                  ((g.stage as string) === "cut" || g.stage === "stitching") &&
-                  Boolean(g.rfidUid) &&
-                  !g.hold &&
-                  !completedIds[g.id]
-              );
+        {(garments) => {
+          // Only garments cut and scanned by Station 3 Cutting (stage 'cut' or 'stitching', with bound RFID tag)
+          const readyQueue = garments.filter(
+            (g) =>
+              ((g.stage as string) === "cut" || g.stage === "stitching") &&
+              Boolean(g.rfidUid) &&
+              !g.hold &&
+              !completedIds[g.id]
+          );
 
-              // Garments completed stitching (in DB or completed on runtime)
-              const completedQueue = garments.filter(
-                (g) =>
-                  g.stage === "stitched" ||
-                  g.stage === "finishing" ||
-                  Boolean(completedIds[g.id])
-              );
+          // Garments completed stitching (in DB or completed on runtime)
+          const completedQueue = garments.filter(
+            (g) =>
+              g.stage === "stitched" ||
+              g.stage === "finishing" ||
+              Boolean(completedIds[g.id])
+          );
 
-              // Rework cases: strictly QC-failed orders assigned to Stitching
-              const stitchingRework = reworkCases.filter(
-                (rc) =>
-                  rc.assignedDepartment === "stitching" &&
-                  rc.status === "assigned" &&
-                  !repairedIds[rc.id]
-              );
+          const totalInAssembly = garments.filter(
+            (g) => (g.stage as string) === "cut" || g.stage === "stitching" || g.stage === "finishing"
+          ).length;
 
-              const totalInAssembly = garments.filter(
-                (g) => (g.stage as string) === "cut" || g.stage === "stitching" || g.stage === "finishing"
-              ).length;
+          const filteredReady = readyQueue.filter(
+            (g) =>
+              !search.trim() ||
+              `${g.id} ${g.orderId} ${g.productName} ${g.rfidUid ?? ""}`
+                .toLowerCase()
+                .includes(search.toLowerCase())
+          );
 
-              const filteredReady = readyQueue.filter(
-                (g) =>
-                  !search.trim() ||
-                  `${g.id} ${g.orderId} ${g.productName} ${g.rfidUid ?? ""}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase())
-              );
-
-              const filteredRework = stitchingRework.filter(
-                (rc) =>
-                  !search.trim() ||
-                  `${rc.id} ${rc.garmentId} ${rc.defectReason}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase())
-              );
-
-              const filteredCompleted = completedQueue.filter(
-                (g) =>
-                  !search.trim() ||
-                  `${g.id} ${g.orderId} ${g.productName} ${g.rfidUid ?? ""}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase())
-              );
+          const filteredCompleted = completedQueue.filter(
+            (g) =>
+              !search.trim() ||
+              `${g.id} ${g.orderId} ${g.productName} ${g.rfidUid ?? ""}`
+                .toLowerCase()
+                .includes(search.toLowerCase())
+          );
 
               return (
                 <div className="space-y-6">
-                  {/* 4 Summary KPI Cards */}
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {/* 3 Summary KPI Cards */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-muted-foreground">READY FOR STITCHING</span>
@@ -734,21 +675,6 @@ function StitchingDashboard() {
 
                     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">QC REWORK / REPAIRS</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                          <Wrench className="size-3.5" />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-destructive">
-                        {stitchingRework.length}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Defects routed from QC Gate
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
-                      <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-muted-foreground">IN ASSEMBLY</span>
                         <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                           <Shirt className="size-3.5" />
@@ -763,7 +689,7 @@ function StitchingDashboard() {
                     </div>
                   </div>
 
-                  {/* Clean Tab Selector Pills */}
+                  {/* Clean Tab Selector Pills (Rework and Scan UID input removed per instruction) */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="inline-flex rounded-lg border bg-muted/60 p-1 text-xs">
                       <button
@@ -779,17 +705,6 @@ function StitchingDashboard() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setActiveTab("rework")}
-                        className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
-                          activeTab === "rework"
-                            ? "bg-background text-destructive shadow-xs"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <Wrench className="size-3.5" /> QC Rework &amp; Repairs ({stitchingRework.length})
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setActiveTab("completed")}
                         className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
                           activeTab === "completed"
@@ -799,38 +714,6 @@ function StitchingDashboard() {
                       >
                         <CheckCircle2 className="size-3.5" /> Completed ({completedQueue.length})
                       </button>
-                    </div>
-
-                    {/* Compact Live Hardware Scanner Bar */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                        <span className="relative flex size-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                        </span>
-                        <span>Scanner 4 Active</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Input
-                          value={scanInput}
-                          onChange={(e) => setScanInput(e.target.value.toUpperCase())}
-                          placeholder="Scan card UID..."
-                          className="h-8 w-36 font-mono text-xs bg-card"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleManualScan();
-                          }}
-                        />
-                        {scanInput.trim() && (
-                          <Button
-                            size="sm"
-                            className="h-8 text-xs font-semibold gap-1 bg-primary text-primary-foreground"
-                            disabled={pending}
-                            onClick={handleManualScan}
-                          >
-                            <ScanLine className="size-3.5" /> Scan
-                          </Button>
-                        )}
-                      </div>
                     </div>
                   </div>
 
@@ -905,67 +788,6 @@ function StitchingDashboard() {
                     </div>
                   )}
 
-                  {/* TAB CONTENT: QC REWORK & REPAIRS */}
-                  {activeTab === "rework" && (
-                    <div className="space-y-3">
-                      {filteredRework.length === 0 ? (
-                        <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                          <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            <CheckCircle2 className="size-4" />
-                          </div>
-                          <p className="text-sm font-medium text-foreground">
-                            No active stitching rework cases
-                          </p>
-                          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                            When QC rejects a garment and routes it to Stitching, it will appear here for repair.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="divide-y rounded-lg border bg-card overflow-hidden">
-                          {filteredRework.map((rc) => {
-                            const isRepaired = Boolean(repairedIds[rc.id]);
-                            return (
-                              <div
-                                key={rc.id}
-                                className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
-                              >
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-bold wt-id text-foreground">{rc.id}</span>
-                                    <span className="text-muted-foreground">·</span>
-                                    <span className="font-semibold text-foreground">Garment: {rc.garmentId}</span>
-                                    <span className="rounded bg-destructive/15 text-destructive px-2 py-0.5 text-[11px] font-bold">
-                                      QC Rejected
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-destructive font-medium">
-                                    Defect: {rc.defectReason}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {isRepaired ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                      <CheckCircle2 className="size-3" /> Repaired · Returned to QC
-                                    </span>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      className="h-8 text-xs gap-1.5 bg-primary font-semibold"
-                                      disabled={pending}
-                                      onClick={() => handleRepair(rc)}
-                                    >
-                                      <Wrench className="size-3.5" /> Complete Repair &amp; Return to QC
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* TAB CONTENT: COMPLETED */}
                   {activeTab === "completed" && (
                     <div className="space-y-3">
@@ -1002,9 +824,7 @@ function StitchingDashboard() {
               );
             }}
           </Loadable>
-        )}
-      </Loadable>
-    </div>
+        </div>
   );
 }
 
@@ -1017,11 +837,9 @@ function FinishingDashboard() {
     refetchInterval: 1200,
   });
 
-  const [activeTab, setActiveTab] = useState<"queue" | "rework" | "completed">("queue");
+  const [activeTab, setActiveTab] = useState<"queue" | "completed">("queue");
   const [search, setSearch] = useState("");
-  const [scanInput, setScanInput] = useState("");
   const [completedIds, setCompletedIds] = useState<Record<string, { at: string; uid?: string }>>({});
-  const [repairedIds, setRepairedIds] = useState<Record<string, string>>({});
   const [lastOutcome, setLastOutcome] = useState<ScanOutcome | null>(null);
 
   // Auto-detect scans arriving via MQTT / backend hardware reader (Scanner 5)
