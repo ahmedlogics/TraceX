@@ -9,7 +9,7 @@
  */
 import crypto from "node:crypto";
 import type { PrismaTransactionClient } from "../db/types";
-import type { Garment, Inspection, Package, Shipment, StaffUser } from "@/domain/types";
+import type { Garment, Inspection, Package, Shipment, StaffUser, ScanOutcome } from "@/domain/types";
 import {
   checkFulfilmentEligibility,
   type FulfilmentEligibilityResult,
@@ -482,12 +482,493 @@ export async function sealPackage(
 
 // ---------------------------------------------------------------- Persisted Warehouse Receipt
 
+export interface WarehouseCartonIntakeInput {
+  tagUid: string;
+  binId?: string;
+  isHardware?: boolean;
+}
+
+/**
+ * Authoritative Warehouse Carton Intake:
+ * 1. Resolves package/carton from Master Box RFID Tag UID
+ * 2. Validates carton registration
+ * 3. Validates carton is sealed at Packing (status: 'sealed')
+ * 4. Validates carton is not empty (contains garments)
+ * 5. Validates carton is not already received (duplicate scan check)
+ * 6. Validates that NO member garments have active quality holds
+ * 7. In one atomic transaction:
+ *    - Assigns storage bin
+ *    - Updates package status to 'warehoused'
+ *    - Upserts warehouse_stock
+ *    - Records warehouse_movements
+ *    - Updates all member garments to stage 'warehoused'
+ *    - Creates trace_events for each garment with monotonically increasing subject_revision
+ *    - Creates internal ledger commitments
+ *    - Creates audit_events record
+ */
+export async function executeWarehouseCartonIntake(
+  tx: PrismaTransactionClient,
+  actor: StaffUser | ActorContext,
+  input: WarehouseCartonIntakeInput,
+): Promise<ScanOutcome> {
+  const rawUid = input.tagUid ? input.tagUid.trim() : "";
+  const normalizedUid = rawUid ? normalizeTagUid(rawUid) : "";
+  const now = new Date();
+
+  const staffUserId = await ensureStaffUserRecord(tx, actor);
+
+  if (!rawUid) {
+    return {
+      uid: "",
+      resolution: "rejected_unknown_card",
+      rejectReason: "Master Box RFID Tag UID is required.",
+      at: now.toISOString(),
+      isHardware: Boolean(input.isHardware),
+    };
+  }
+
+  // 1. Resolve Package/Carton from Master Box RFID Tag UID
+  // Look up by package code or ID (or if UID bound to a garment inside a carton)
+  let pkg = await tx.packages.findFirst({
+    where: {
+      OR: [
+        ...(isValidUuid(rawUid) ? [{ id: rawUid }] : []),
+        { code: rawUid },
+        { code: normalizedUid },
+        { code: { equals: rawUid, mode: "insensitive" } },
+      ],
+    },
+    include: {
+      warehouse_stock: {
+        include: { warehouse_bins: true },
+      },
+      package_items: {
+        where: { removed_at: null },
+        include: {
+          garments: {
+            include: {
+              garment_holds: {
+                where: { released_at: null },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // If not found directly, check if a garment card was scanned by mistake
+  if (!pkg) {
+    const binding = await tx.rfid_tag_bindings.findFirst({
+      where: {
+        OR: [
+          { tag_uid: normalizedUid, unbound_at: null },
+          { tag_identifier: rawUid, unbound_at: null },
+        ],
+      },
+      include: {
+        garments: {
+          include: {
+            package_items: {
+              where: { removed_at: null },
+              include: {
+                packages: {
+                  include: {
+                    warehouse_stock: {
+                      include: { warehouse_bins: true },
+                    },
+                    package_items: {
+                      where: { removed_at: null },
+                      include: {
+                        garments: {
+                          include: {
+                            garment_holds: {
+                              where: { released_at: null },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (binding?.garments?.package_items?.packages) {
+      pkg = binding.garments.package_items.packages as any;
+    }
+  }
+
+  if (!pkg) {
+    return {
+      uid: rawUid,
+      resolution: "rejected_unknown_card",
+      rejectReason: `Master Box Tag '${rawUid}' is not recognised. No package/carton found.`,
+      at: now.toISOString(),
+      isHardware: Boolean(input.isHardware),
+    };
+  }
+
+  // 2. Validate carton status: must be sealed
+  if (pkg.status === "open") {
+    return {
+      uid: rawUid,
+      resolution: "rejected_business_rule",
+      rejectReason: `Carton '${pkg.code}' is unsealed (status: open). Cartons must be sealed at Packing before warehouse intake.`,
+      subjectId: pkg.id,
+      garmentCode: pkg.code,
+      at: now.toISOString(),
+      isHardware: Boolean(input.isHardware),
+    };
+  }
+
+  // 3. Validate carton is non-empty
+  if (!pkg.package_items || pkg.package_items.length === 0) {
+    return {
+      uid: rawUid,
+      resolution: "rejected_business_rule",
+      rejectReason: `Carton '${pkg.code}' contains no garments. Empty cartons cannot be received into warehouse stock.`,
+      subjectId: pkg.id,
+      garmentCode: pkg.code,
+      at: now.toISOString(),
+      isHardware: Boolean(input.isHardware),
+    };
+  }
+
+  // 4. Validate not already received (duplicate scan check)
+  if (pkg.status === "warehoused" || pkg.warehouse_stock) {
+    const currentBin = pkg.warehouse_stock?.warehouse_bins?.code || "warehouse stock";
+    return {
+      uid: rawUid,
+      resolution: "rejected_duplicate",
+      rejectReason: `Duplicate intake: Carton '${pkg.code}' has already been received into ${currentBin}.`,
+      subjectId: pkg.id,
+      garmentCode: pkg.code,
+      at: now.toISOString(),
+      isHardware: Boolean(input.isHardware),
+    };
+  }
+
+  // 5. Validate every linked garment has completed required manufacturing stages, passed QC, and has no unresolved quality holds
+  for (const item of pkg.package_items) {
+    const garment = item.garments;
+
+    // Check unresolved quality holds
+    const unresolvedHold = garment.garment_holds?.find((h: any) => !h.released_at);
+    if (unresolvedHold || garment.quality_disposition === "held") {
+      const holdReason = unresolvedHold?.reason || "Active quality hold in effect";
+      const failureReason = `Quality hold: ${holdReason}`;
+
+      // Flag carton in audit trail as On Hold / Warehouse Intake Blocked
+      await tx.audit_events.create({
+        data: {
+          actor_staff_id: staffUserId,
+          department_code: "warehouse",
+          action_code: "warehouse_intake_blocked",
+          target_type: "package",
+          target_reference: pkg.code,
+          details: {
+            packageId: pkg.id,
+            packageCode: pkg.code,
+            affectedGarmentId: garment.id,
+            affectedGarmentCode: garment.code,
+            failureReason,
+            status: "On Hold / Warehouse Intake Blocked",
+            timestamp: now.toISOString(),
+          },
+          recorded_at: now,
+        },
+      });
+
+      return {
+        uid: rawUid,
+        resolution: "rejected_business_rule",
+        subjectId: pkg.id,
+        garmentCode: pkg.code,
+        productName: "On Hold / Warehouse Intake Blocked",
+        rejectReason: `Carton ${pkg.code} On Hold / Warehouse Intake Blocked: ${failureReason} (Affected garment: ${garment.code})`,
+        at: now.toISOString(),
+        isHardware: Boolean(input.isHardware),
+        contextId: garment.code,
+      };
+    }
+
+    // Check QC approval
+    if (garment.quality_disposition !== "released") {
+      const failureReason = `QC disposition is '${garment.quality_disposition}' (must be released/approved)`;
+
+      // Flag garment/carton through hold workflow
+      await tx.garment_holds.create({
+        data: {
+          garment_id: garment.id,
+          kind: "operational",
+          reason: `Warehouse Intake Blocked: ${failureReason}`,
+          opened_by: staffUserId,
+          opened_at: now,
+        },
+      });
+      await tx.garments.update({
+        where: { id: garment.id },
+        data: { quality_disposition: "held" },
+      });
+
+      await tx.audit_events.create({
+        data: {
+          actor_staff_id: staffUserId,
+          department_code: "warehouse",
+          action_code: "warehouse_intake_blocked",
+          target_type: "package",
+          target_reference: pkg.code,
+          details: {
+            packageId: pkg.id,
+            packageCode: pkg.code,
+            affectedGarmentId: garment.id,
+            affectedGarmentCode: garment.code,
+            failureReason,
+            status: "On Hold / Warehouse Intake Blocked",
+            timestamp: now.toISOString(),
+          },
+          recorded_at: now,
+        },
+      });
+
+      return {
+        uid: rawUid,
+        resolution: "rejected_business_rule",
+        subjectId: pkg.id,
+        garmentCode: pkg.code,
+        productName: "On Hold / Warehouse Intake Blocked",
+        rejectReason: `Carton ${pkg.code} On Hold / Warehouse Intake Blocked: ${failureReason} (Affected garment: ${garment.code})`,
+        at: now.toISOString(),
+        isHardware: Boolean(input.isHardware),
+        contextId: garment.code,
+      };
+    }
+
+    // Check manufacturing stage completion (must have completed cutting, stitching, finishing and packing)
+    const validStages = ["finished", "packed", "warehoused"];
+    if (!validStages.includes(garment.stage)) {
+      const failureReason = `Garment is in stage '${garment.stage}' (must complete cutting, stitching, finishing and packing)`;
+
+      await tx.garment_holds.create({
+        data: {
+          garment_id: garment.id,
+          kind: "operational",
+          reason: `Warehouse Intake Blocked: ${failureReason}`,
+          opened_by: staffUserId,
+          opened_at: now,
+        },
+      });
+      await tx.garments.update({
+        where: { id: garment.id },
+        data: { quality_disposition: "held" },
+      });
+
+      await tx.audit_events.create({
+        data: {
+          actor_staff_id: staffUserId,
+          department_code: "warehouse",
+          action_code: "warehouse_intake_blocked",
+          target_type: "package",
+          target_reference: pkg.code,
+          details: {
+            packageId: pkg.id,
+            packageCode: pkg.code,
+            affectedGarmentId: garment.id,
+            affectedGarmentCode: garment.code,
+            failureReason,
+            status: "On Hold / Warehouse Intake Blocked",
+            timestamp: now.toISOString(),
+          },
+          recorded_at: now,
+        },
+      });
+
+      return {
+        uid: rawUid,
+        resolution: "rejected_business_rule",
+        subjectId: pkg.id,
+        garmentCode: pkg.code,
+        productName: "On Hold / Warehouse Intake Blocked",
+        rejectReason: `Carton ${pkg.code} On Hold / Warehouse Intake Blocked: ${failureReason} (Affected garment: ${garment.code})`,
+        at: now.toISOString(),
+        isHardware: Boolean(input.isHardware),
+        contextId: garment.code,
+      };
+    }
+  }
+
+  // 6. Resolve destination storage bin
+  const targetBinCode = (input.binId || "BIN-A1").trim();
+  let bin = await tx.warehouse_bins.findFirst({
+    where: {
+      OR: [
+        ...(isValidUuid(targetBinCode) ? [{ id: targetBinCode }] : []),
+        { code: targetBinCode },
+        { code: { equals: targetBinCode, mode: "insensitive" } },
+      ],
+    },
+  });
+
+  if (!bin) {
+    bin = await tx.warehouse_bins.create({
+      data: {
+        code: targetBinCode,
+        label: `Bin ${targetBinCode}`,
+        active: true,
+      },
+    });
+  }
+
+  // 7. Update package status to 'warehoused'
+  await tx.packages.update({
+    where: { id: pkg.id },
+    data: {
+      status: "warehoused",
+      revision: { increment: 1 },
+    },
+  });
+
+  // 8. Upsert warehouse stock
+  await tx.warehouse_stock.upsert({
+    where: { package_id: pkg.id },
+    create: {
+      package_id: pkg.id,
+      current_bin_id: bin.id,
+      updated_at: now,
+    },
+    update: {
+      current_bin_id: bin.id,
+      updated_at: now,
+      revision: { increment: 1 },
+    },
+  });
+
+  // 9. Record warehouse movement
+  await tx.warehouse_movements.create({
+    data: {
+      package_id: pkg.id,
+      to_bin_id: bin.id,
+      performed_by: staffUserId,
+      reason: input.isHardware
+        ? "Hardware RFID Master Box Scan (Station 8)"
+        : "Workstation Master Box Intake (Station 8)",
+    },
+  });
+
+  // 10. Update member garments to 'warehoused' and record trace events + ledger commitments
+  const deployment = await getActiveLedgerDeployment(tx).catch(() => null);
+  const garmentIds = pkg.package_items.map((pi: any) => pi.garments.id);
+
+  // Batch update all member garments in one atomic query
+  await tx.garments.updateMany({
+    where: { id: { in: garmentIds } },
+    data: {
+      stage: "warehoused",
+    },
+  });
+
+  // Query latest trace event revisions in one batch to guarantee uniqueness
+  const latestTraces = await tx.trace_events.findMany({
+    where: { garment_id: { in: garmentIds } },
+    distinct: ["garment_id"],
+    orderBy: { subject_revision: "desc" },
+    select: { garment_id: true, subject_revision: true },
+  });
+  const maxRevisionMap = new Map<string, number>();
+  for (const t of latestTraces) {
+    if (t.garment_id && !maxRevisionMap.has(t.garment_id)) {
+      maxRevisionMap.set(t.garment_id, t.subject_revision);
+    }
+  }
+
+  const updatedGarmentCodes: string[] = [];
+  for (const item of pkg.package_items) {
+    const garment = item.garments;
+    updatedGarmentCodes.push(garment.code);
+
+    const nextRevision = Math.max(garment.revision + 1, (maxRevisionMap.get(garment.id) ?? 0) + 1);
+
+    const traceEvent = await tx.trace_events.create({
+      data: {
+        event_type: "warehouse_intake",
+        subject_revision: nextRevision,
+        garment_id: garment.id,
+        actor_id: staffUserId,
+        details: {
+          location: "Finished Goods Warehouse",
+          binId: bin.id,
+          binCode: bin.code,
+          binLabel: bin.label,
+          packageId: pkg.id,
+          packageCode: pkg.code,
+          isHardware: Boolean(input.isHardware),
+        },
+        occurred_at: now,
+        recorded_at: now,
+      },
+    });
+
+    if (deployment) {
+      await createInternalCommitment(
+        {
+          deploymentId: deployment.id,
+          traceEventId: traceEvent.id,
+          payload: {
+            eventType: "warehouse_intake",
+            garmentId: garment.id,
+            packageCode: pkg.code,
+            binCode: bin.code,
+            timestamp: now.toISOString(),
+          },
+        },
+        tx,
+      );
+    }
+  }
+
+  // 11. Create audit event
+  await tx.audit_events.create({
+    data: {
+      actor_staff_id: staffUserId,
+      department_code: "warehouse",
+      action_code: "warehouse_carton_intake",
+      target_type: "package",
+      target_reference: pkg.code,
+      details: {
+        packageId: pkg.id,
+        packageCode: pkg.code,
+        binId: bin.id,
+        binCode: bin.code,
+        binLabel: bin.label,
+        garmentsReceived: updatedGarmentCodes,
+        garmentCount: updatedGarmentCodes.length,
+        isHardware: Boolean(input.isHardware),
+        timestamp: now.toISOString(),
+      },
+      recorded_at: now,
+    },
+  });
+
+  return {
+    uid: rawUid,
+    resolution: "accepted",
+    subjectId: pkg.id,
+    garmentCode: pkg.code,
+    productName: `Box Received Successfully — ${updatedGarmentCodes.length} Garment${updatedGarmentCodes.length === 1 ? "" : "s"} Moved to Warehouse.`,
+    message: `Received into storage bin ${bin.code}: ${updatedGarmentCodes.join(", ")}`,
+    at: now.toISOString(),
+    isHardware: Boolean(input.isHardware),
+  };
+}
+
 /**
  * Receives stock into a warehouse storage bin.
- * Enforces:
- *   - Storage bin must exist and be active
- *   - Updates warehouse_stock and logs warehouse_movements
- *   - Transitions package and its member garments to 'warehoused'
+ * Backward-compatible wrapper delegating to authoritative executeWarehouseCartonIntake.
  */
 export async function receiveWarehouseStock(
   tx: PrismaTransactionClient,
@@ -498,116 +979,21 @@ export async function receiveWarehouseStock(
     throw new Error("WT_ERR_FORBIDDEN: Only warehouse/logistics staff can receive stock.");
   }
 
-  const staffUserId = await ensureStaffUserRecord(tx, actor);
+  const outcome = await executeWarehouseCartonIntake(
+    tx,
+    actor,
+    { tagUid: input.garmentId, binId: input.binId, isHardware: false },
+  );
 
-  // 1. Resolve storage bin
-  let bin = await tx.warehouse_bins.findFirst({
-    where: {
-      OR: [
-        ...(isValidUuid(input.binId) ? [{ id: input.binId }] : []),
-        { code: input.binId },
-      ],
-    },
-  });
-
-  if (!bin) {
-    bin = await tx.warehouse_bins.create({
-      data: {
-        code: input.binId || "BIN-A1",
-        label: `Bin ${input.binId || "A1"}`,
-        active: true,
-      },
-    });
-  }
-
-  // 2. Resolve target package & garment
-  let targetPackageId: string | null = null;
-
-  const garment = await tx.garments.findFirst({
-    where: {
-      OR: [
-        ...(isValidUuid(input.garmentId) ? [{ id: input.garmentId }] : []),
-        { code: input.garmentId },
-      ],
-    },
-    include: {
-      package_items: {
-        where: { removed_at: null },
-      },
-    },
-  });
-
-  if (garment && garment.package_items) {
-    targetPackageId = garment.package_items.package_id;
-  } else {
-    const pkg = await tx.packages.findFirst({
-      where: {
-        OR: [
-          ...(isValidUuid(input.garmentId) ? [{ id: input.garmentId }] : []),
-          { code: input.garmentId },
-        ],
-      },
-    });
-    if (pkg) targetPackageId = pkg.id;
-  }
-
-  if (!targetPackageId) {
-    throw new Error(`WT_ERR_NOT_FOUND: No package found for item '${input.garmentId}'.`);
-  }
-
-  // 3. Upsert warehouse stock
-  await tx.warehouse_stock.upsert({
-    where: { package_id: targetPackageId },
-    create: {
-      package_id: targetPackageId,
-      current_bin_id: bin.id,
-      updated_at: new Date(),
-    },
-    update: {
-      current_bin_id: bin.id,
-      updated_at: new Date(),
-      revision: { increment: 1 },
-    },
-  });
-
-  // 4. Record warehouse movement
-  await tx.warehouse_movements.create({
-    data: {
-      package_id: targetPackageId,
-      to_bin_id: bin.id,
-      performed_by: staffUserId,
-      reason: "Warehouse binning scan",
-    },
-  });
-
-  // 5. Update package status to 'warehoused'
-  await tx.packages.update({
-    where: { id: targetPackageId },
-    data: {
-      status: "warehoused",
-      revision: { increment: 1 },
-    },
-  });
-
-  // 6. Transition all member garments to 'warehoused'
-  const items = await tx.package_items.findMany({
-    where: { package_id: targetPackageId, removed_at: null },
-  });
-
-  for (const item of items) {
-    await tx.garments.update({
-      where: { id: item.garment_id },
-      data: {
-        stage: "warehoused",
-        revision: { increment: 1 },
-      },
-    });
+  if (outcome.resolution !== "accepted") {
+    throw new Error(outcome.rejectReason || `Warehouse intake rejected: ${outcome.resolution}`);
   }
 
   return {
-    packageId: targetPackageId,
-    binId: bin.id,
-    garmentsUpdated: items.length,
+    packageId: outcome.subjectId,
+    binId: input.binId,
+    garmentsUpdated: outcome.garmentCode,
+    outcome,
   };
 }
 
@@ -901,10 +1287,15 @@ export async function listPackages(tx: PrismaTransactionClient, options?: { stat
     },
     include: {
       staff_users: { select: { id: true, username: true, display_name: true } },
+      warehouse_stock: {
+        include: { warehouse_bins: true },
+      },
       package_items: {
         where: { removed_at: null },
         include: {
-          garments: { select: { id: true, code: true, stage: true, quality_disposition: true } },
+          garments: {
+            select: { id: true, code: true, stage: true, quality_disposition: true, size_label: true },
+          },
         },
       },
     },

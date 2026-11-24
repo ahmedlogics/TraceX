@@ -912,7 +912,28 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     const garment = binding.garments;
     if (garment.stage !== "cut" && garment.stage !== "stitched") {
       throw ApiError.badRequest(
-        `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'.`,
+        `Garment ${garment.code} has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`,
+        { garmentId: garment.id, holdReason: reason },
+        "WT_ERR_ACTIVE_HOLD",
+      );
+    }
+
+    // Validate duplicate scans
+    const existingStitching = await tx.trace_events.findFirst({
+      where: { garment_id: garment.id, event_type: "stitching_completed" },
+    });
+    if (garment.stage === "stitched" || garment.stage === "finished" || existingStitching) {
+      throw ApiError.conflict(
+        `Duplicate scan: Garment ${garment.code} has already completed stitching and advanced to Finishing.`,
+        { garmentId: garment.id, stage: garment.stage },
+        "WT_ERR_DUPLICATE_SCAN",
+      );
+    }
+
+    // Validate cutting completion and current stage
+    if (garment.stage !== "cut") {
+      throw ApiError.badRequest(
+        `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'. Expected stage 'cut' (cutting completed).`,
         { garmentId: garment.id, stage: garment.stage },
         "WT_ERR_INVALID_STAGE",
       );
@@ -942,18 +963,49 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
       },
     });
 
-    // Record internal commitment
+    const actorStaffId =
+      context?.actor?.actorId ||
+      context?.session?.operatorId ||
+      "00000000-0000-0000-0000-000000000000";
+
+    // Record audit event
+    try {
+      await tx.audit_events.create({
+        data: {
+          actor_staff_id: actorStaffId,
+          department_code: "stitching",
+          action_code: "routine_stitching_scan",
+          target_type: "garment",
+          target_reference: subject.subjectCode,
+          details: {
+            garmentId: subject.subjectId,
+            code: subject.subjectCode,
+            tagUid: subject.tagUid,
+            fromStage: "cut",
+            toStage: "stitched",
+            station: "stitching",
+            isManual: false,
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    } catch {
+      // Allow fallback if audit log table is mocked
+    }
+
+    // Record internal commitment and trace event
     try {
       const traceEvent = await tx.trace_events.create({
         data: {
           event_type: "stitching_completed",
           garment_id: subject.subjectId,
           subject_revision: garment.revision,
-          actor_id: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
+          actor_id: actorStaffId,
           details: {
             garmentCode: subject.subjectCode,
             tagUid: subject.tagUid,
             station: "stitching",
+            isHardware: true,
           },
         },
       });

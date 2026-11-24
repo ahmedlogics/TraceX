@@ -827,6 +827,18 @@ export function createSeed(): DemoState {
         updatedAt: "2026-10-14T08:00:00Z",
         attempts: 0,
       },
+      {
+        id: "LC-006",
+        subjectType: "garment",
+        subjectId: "SHIRT-003",
+        milestone: "Quality verification failed",
+        status: "failed",
+        digest: "0xfa11…003f",
+        createdAt: "2026-11-20T11:15:00Z",
+        updatedAt: "2026-11-20T11:20:00Z",
+        attempts: 2,
+        lastError: "Specification tolerance check failed",
+      },
     ],
     audit: [
       {

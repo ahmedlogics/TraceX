@@ -243,6 +243,10 @@
   font-family: var(--font-serif);
 }
 
+.font-cormorant {
+  font-family: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+}
+
 .wt-purple-glass {
   background: rgba(26, 18, 38, 0.88);
   backdrop-filter: blur(20px);

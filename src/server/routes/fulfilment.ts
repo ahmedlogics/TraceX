@@ -153,11 +153,12 @@ fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
       openShipments: openShipments.filter((s: any) => s.status !== "departed"),
     };
 
-    return sendSuccess(res, data, 200);
-  } catch (err) {
-    return sendError(res, err, 500);
-  }
-});
+      return sendSuccess(res, data, 200);
+    } catch (err) {
+      return sendError(res, err, 500);
+    }
+  },
+);
 
 // ---------------------------------------------------------------- Authoritative Eligibility Gate
 

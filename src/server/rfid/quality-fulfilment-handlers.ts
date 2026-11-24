@@ -23,7 +23,10 @@ import {
   stitchingScanHandler,
   finishingScanHandler,
 } from "./domain-handlers";
-import { getPersistedFulfilmentEligibility } from "../fulfilment/fulfilment-service";
+import {
+  getPersistedFulfilmentEligibility,
+  executeWarehouseCartonIntake,
+} from "../fulfilment/fulfilment-service";
 import { publishPublicGarmentPayload } from "../public/public-service";
 
 /**
@@ -502,6 +505,7 @@ export class PackingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
 
 /**
  * Station 8: Warehouse Movement Scan Handler.
+ * Physical hardware RFID scans of the Master Box Tag at Station 8 / Scanner 8.
  */
 export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult> {
   readonly stationCode: RfidStationCode = "warehouse";
@@ -509,30 +513,69 @@ export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult
   async prepare(
     envelope: VersionedScanEnvelope,
     tx: PrismaTransactionClient,
-    context?: DomainScanContext,
+    _context?: DomainScanContext,
   ): Promise<PreparedScanSubject> {
-    const tagUid = normalizeTagUid(envelope.tagUid);
+    const rawUid = envelope.tagUid ? envelope.tagUid.trim() : "";
+    const tagUid = normalizeTagUid(rawUid);
 
-    const binding = await tx.rfid_tag_bindings.findFirst({
-      where: { tag_uid: tagUid, unbound_at: null },
-      include: { garments: true },
+    // 1. Identify carton from Master Box RFID Tag UID
+    let pkg = await tx.packages.findFirst({
+      where: {
+        OR: [
+          ...(rawUid.length === 36 ? [{ id: rawUid }] : []),
+          { code: rawUid },
+          { code: tagUid },
+          { code: { equals: rawUid, mode: "insensitive" } },
+        ],
+      },
+      include: {
+        package_items: {
+          where: { removed_at: null },
+          include: { garments: true },
+        },
+      },
     });
 
-    if (!binding || !binding.garment_id || !binding.garments) {
-      throw ApiError.badRequest(
-        `Card UID '${tagUid}' is not actively bound to a garment.`,
-        { tagUid },
+    // Fallback: check if card UID is bound to a garment inside a carton
+    if (!pkg) {
+      const binding = await tx.rfid_tag_bindings.findFirst({
+        where: {
+          OR: [
+            { tag_uid: tagUid, unbound_at: null },
+            { tag_identifier: rawUid, unbound_at: null },
+          ],
+        },
+        include: {
+          garments: {
+            include: {
+              package_items: {
+                where: { removed_at: null },
+                include: { packages: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (binding?.garments?.package_items?.packages) {
+        pkg = binding.garments.package_items.packages as any;
+      }
+    }
+
+    if (!pkg) {
+      throw ApiError.notFound(
+        `Master Box RFID Tag '${rawUid}' is not registered to any carton.`,
+        { tagUid: rawUid },
         "WT_ERR_UNKNOWN_CARD",
       );
     }
 
     return {
       kind: "garment",
-      subjectId: binding.garments.id,
-      subjectCode: binding.garments.code,
+      subjectId: pkg.id,
+      subjectCode: pkg.code,
       isNewEnrollment: false,
-      tagUid,
-      tagBindingId: binding.id,
+      tagUid: rawUid,
     };
   }
 
@@ -542,46 +585,52 @@ export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult
     tx: PrismaTransactionClient,
     context?: DomainScanContext,
   ): Promise<ScanOutcomeResult> {
-    const staffUserId =
-      context?.actor?.actorId ??
-      (context as any)?.operator?.actorId ??
-      (await tx.staff_users.findFirstOrThrow()).id;
+    const actor = context?.actor ?? (context as any)?.operator ?? {
+      actorId: (await tx.staff_users.findFirstOrThrow()).id,
+      username: "warehouse.operator",
+      displayName: "Warehouse Associate",
+      role: "logistics",
+      department: "warehouse",
+      authenticatedAt: new Date(),
+    };
 
-    const now = new Date();
-    const traceEvent = await tx.trace_events.create({
-      data: {
-        event_type: "warehouse_movement",
-        subject_revision: 1,
-        garment_id: subject.subjectId,
-        actor_id: staffUserId,
-        details: { location: "main_warehouse" },
-        occurred_at: now,
-        recorded_at: now,
-      },
-    });
-
-    await createInternalCommitment(
-      {
-        traceEventId: traceEvent.id,
-        payload: {
-          eventType: "warehouse_movement",
-          garmentId: subject.subjectId,
-          timestamp: traceEvent.occurred_at.toISOString(),
-        },
-      },
+    const outcome = await executeWarehouseCartonIntake(
       tx,
+      actor,
+      {
+        tagUid: envelope.tagUid,
+        binId:
+          (context as any)?.binId ||
+          (context?.actionContext?.payload as any)?.warehouseBinId ||
+          (context?.actionContext?.payload as any)?.binId ||
+          "BIN-A1",
+        isHardware: true,
+      },
     );
+
+    if (outcome.resolution !== "accepted") {
+      if (outcome.resolution === "rejected_unknown_card") {
+        throw ApiError.notFound(outcome.rejectReason || "Master box tag unknown", undefined, "WT_ERR_UNKNOWN_CARD");
+      }
+      if (outcome.resolution === "rejected_duplicate") {
+        throw ApiError.conflict(outcome.rejectReason || "Duplicate intake scan", undefined, "WT_ERR_DUPLICATE_SCAN");
+      }
+      if (outcome.resolution === "rejected_business_rule") {
+        throw ApiError.badRequest(outcome.rejectReason || "Business rule violation", undefined, "WT_ERR_ACTIVE_HOLD");
+      }
+      throw ApiError.badRequest(outcome.rejectReason || "Intake rejected", undefined, "WT_ERR_WRONG_STAGE");
+    }
 
     return {
       scanId: envelope.scanId,
       outcome: "accepted",
       outcomeCode: "WAREHOUSE_ACCEPTED",
-      outcomeMessage: `Warehouse movement recorded for ${subject.subjectCode}`,
+      outcomeMessage: outcome.productName || `Carton ${subject.subjectCode} received into warehouse stock`,
       stationCode: "warehouse",
-      subjectKind: "garment",
+      subjectKind: subject.kind,
       subjectId: subject.subjectId,
       subjectCode: subject.subjectCode,
-      processedAt: new Date().toISOString(),
+      processedAt: outcome.at,
       nextExpectedStation: "dispatch",
     };
   }

@@ -169,7 +169,7 @@ export function StationShell() {
                       <p className="wt-eyebrow">
                         {activeStations.length > 1
                           ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
-                          : "Assigned Workstation"}
+                          : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
                       </p>
                     </div>
                     <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
