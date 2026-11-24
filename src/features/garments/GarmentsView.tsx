@@ -49,6 +49,7 @@ export function GarmentsView() {
   const [disposition, setDisposition] = useState("all");
   const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
   const [recentScanOutcome, setRecentScanOutcome] = useState<ScanOutcome | null>(null);
+  const [completedIds, setCompletedIds] = useState<Record<string, boolean>>({});
 
   // Poll hardware station data for Station 4 (Stitching) or Station 5 (Finishing)
   const qStation = useWtQuery(
@@ -185,6 +186,23 @@ export function GarmentsView() {
           const releasedCount = gs.filter((g) => g.disposition === "released").length;
 
           const rows = gs.filter((g) => {
+            // For stitching operators: show only garments approved and cut by Cutting (or completed in session)
+            if (isStitching && stage === "all") {
+              const isRelevant =
+                (((g.stage as string) === "cut" || g.stage === "stitching" || g.stage === "stitched") ||
+                  Boolean(completedIds[g.id])) &&
+                Boolean(g.rfidUid);
+              if (!isRelevant) return false;
+            }
+            // For finishing operators: show only garments completed at Stitching (or completed in session)
+            if (isFinishing && stage === "all") {
+              const isRelevant =
+                ((g.stage === "stitched" || g.stage === "finishing" || g.stage === "finished") ||
+                  Boolean(completedIds[g.id])) &&
+                Boolean(g.rfidUid);
+              if (!isRelevant) return false;
+            }
+
             const matchesStage = stage === "all" || g.stage === stage;
             const matchesDisp =
               disposition === "all" ||
@@ -498,14 +516,21 @@ export function GarmentsView() {
                   {
                     header: "Actions",
                     cell: (g) => {
+                      const isDone = Boolean(completedIds[g.id]);
+                      if (isDone) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="size-3.5" /> Done
+                          </span>
+                        );
+                      }
+
                       const canStitch =
                         (activeStationCode === "stitching" || isStitching) &&
-                        (g.stage === "cut" || g.stage === "stitching");
+                        ((g.stage as string) === "cut" || g.stage === "stitching");
                       const canFinish =
                         (activeStationCode === "finishing" || isFinishing) &&
-                        g.stage !== "warehouse" &&
-                        g.stage !== "dispatched" &&
-                        g.stage !== "packing";
+                        (g.stage === "stitched" || g.stage === "finishing");
 
                       return (
                         <div className="flex items-center gap-1.5">
@@ -522,6 +547,9 @@ export function GarmentsView() {
                                   (c) => c.routineScan(targetUid, "stitching"),
                                   (outcome) => {
                                     setRecentScanOutcome(outcome);
+                                    if (outcome.resolution === "accepted") {
+                                      setCompletedIds((prev) => ({ ...prev, [g.id]: true }));
+                                    }
                                     void q.refetch();
                                     if (outcome.resolution === "accepted") {
                                       return `✓ Garment ${g.id} Stitching complete! Advanced to Finishing.`;
@@ -531,7 +559,7 @@ export function GarmentsView() {
                                 );
                               }}
                             >
-                              <Radio className="size-3" /> Scan Product Tag
+                              <Radio className="size-3" /> Scan &amp; Complete
                             </Button>
                           )}
                           {canFinish && (
@@ -547,6 +575,9 @@ export function GarmentsView() {
                                   (c) => c.routineScan(targetUid, "finishing"),
                                   (outcome) => {
                                     setRecentScanOutcome(outcome);
+                                    if (outcome.resolution === "accepted") {
+                                      setCompletedIds((prev) => ({ ...prev, [g.id]: true }));
+                                    }
                                     void q.refetch();
                                     if (outcome.resolution === "accepted") {
                                       return `✓ Garment ${g.id} Finished! Released to QC.`;
@@ -556,7 +587,7 @@ export function GarmentsView() {
                                 );
                               }}
                             >
-                              <Radio className="size-3" /> Scan Product Tag
+                              <Radio className="size-3" /> Scan &amp; Finish
                             </Button>
                           )}
                           <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
@@ -564,11 +595,13 @@ export function GarmentsView() {
                               View <ArrowRight className="size-3 ml-1" />
                             </AppLink>
                           </Button>
-                          <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
-                            <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
-                              <ExternalLink className="size-3 mr-1" /> Passport
-                            </AppLink>
-                          </Button>
+                          {!isStitching && !isFinishing && (
+                            <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
+                              <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
+                                <ExternalLink className="size-3 mr-1" /> Passport
+                              </AppLink>
+                            </Button>
+                          )}
                         </div>
                       );
                     },
