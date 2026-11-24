@@ -33,13 +33,13 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Work",
     items: [
       { key: "home", label: "Home", href: paths.home, icon: Home },
+      { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
       { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
     ],
   },
   {
     label: "Materials & production",
     items: [
-      { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
       { key: "materialLots", label: "Material lots", href: paths.lots, icon: Boxes },
       { key: "garments", label: "Garments", href: paths.garments, icon: Shirt },
       { key: "nfcHub", label: "NFC Tag Passports", href: paths.nfcHub, icon: Zap },
