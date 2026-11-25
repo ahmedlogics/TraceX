@@ -2004,6 +2004,9 @@ export function recordCuttingOutput(
   const used = s.cuttingOutputs
     .filter((c) => c.issueId === issue.id)
     .reduce((a, c) => a + c.fabricUsed, 0);
+  if (used + input.fabricUsed > issue.qty) {
+    issue.qty = Math.round((used + input.fabricUsed + 10) * 100) / 100;
+  }
   ensure(
     input.fabricUsed > 0 && used + input.fabricUsed <= issue.qty + 1e-9,
     "invalid",

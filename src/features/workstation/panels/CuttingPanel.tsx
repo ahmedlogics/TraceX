@@ -25,6 +25,7 @@ import { StatusBadge } from "@/components/wt/StatusBadge";
 import { Loadable } from "@/components/wt/states";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
 import type { Garment, MaterialLot, ProductionOrder, ReworkCase } from "@/domain/types";
@@ -38,6 +39,7 @@ type CuttingStep = "awaiting_bundle" | "bundle_orders" | "scanning_products";
 export function CuttingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
+  const isMock = getDataMode() === "mock";
 
   // Primary Queries
   const qOrders = useWtQuery(["orders"], (c) => c.listOrders(), { refetchInterval: 3000 });
@@ -56,6 +58,10 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
   const [selectedOrderId, setSelectedOrderId] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string>("M");
   const [completedOrders, setCompletedOrders] = useState<Record<string, boolean>>({});
+
+  // Mock Mode Manual Simulation Inputs
+  const [bundleInputUid, setBundleInputUid] = useState<string>("");
+  const [productTagInput, setProductTagInput] = useState<string>("");
 
   // Alerts & Feedback
   const [alertMessage, setAlertMessage] = useState<{
@@ -262,7 +268,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                       const targetLotCode = (activeLot as any).code || activeLot.id;
                       const targetDbLotId = (activeLot as any).lotId;
 
-                      return orders.filter((o) => {
+                      const matched = orders.filter((o) => {
                         const lotIds = o.lotIds ?? ((o as any).lotId ? [(o as any).lotId] : []);
                         const lotCodes = o.lotCodes ?? ((o as any).lotCode ? [(o as any).lotCode] : []);
 
@@ -277,9 +283,29 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                           (targetDbLotId && (o as any).lotId === targetDbLotId) ||
                           (o as any).lotId === targetLotCode;
 
-                        return matchesLotId || matchesLotCode || matchesDirect;
+                        const matchesIssues = o.issues?.some(
+                          (iss) =>
+                            iss.lotId === targetLotId ||
+                            iss.lotCode === targetLotCode ||
+                            (targetDbLotId && iss.lotId === targetDbLotId),
+                        );
+
+                        return matchesLotId || matchesLotCode || matchesDirect || matchesIssues;
                       });
-                    }, [orders, activeLot]);
+
+                      // In mock mode, if no orders have been explicitly matched to this lot yet,
+                      // fallback to show available active/approved orders for testing:
+                      if (matched.length === 0 && isMock) {
+                        return orders.filter(
+                          (o) =>
+                            o.status === "in-progress" ||
+                            o.status === "approved" ||
+                            o.status === "planned",
+                        );
+                      }
+
+                      return matched;
+                    }, [orders, activeLot, isMock]);
 
                     // Currently selected production order for cutting
                     const selectedOrder = orders.find((o) => o.id === selectedOrderId);
@@ -306,14 +332,16 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                         (l) =>
                           l.rfidUid?.toUpperCase() === uid ||
                           l.id.toUpperCase() === uid ||
-                          (l.rfidUid && l.rfidUid.toUpperCase().includes(uid)),
+                          (l.rfidUid && l.rfidUid.toUpperCase().includes(uid)) ||
+                          ((l as any).code && (l as any).code.toUpperCase() === uid) ||
+                          ((l as any).lotId && (l as any).lotId.toUpperCase() === uid),
                       );
 
                       if (!matchingLot) {
                         setAlertMessage({
                           type: "error",
                           title: "Scan Rejected — Unrecognised Bundle Tag",
-                          message: `Tag UID '${uid}' is not registered as a fabric roll card. Present a valid fabric roll card issued from Station 2.`,
+                          message: `Tag UID / Lot '${uid}' is not registered as a fabric roll card. Present a valid fabric roll card issued from Station 2 (e.g. FAB-001 or 04A1B2C3).`,
                         });
                         return;
                       }
@@ -413,16 +441,26 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                     // -------------------------------------------------------------
                     const handleCompleteOrderCutting = () => {
                       if (!selectedOrder) return;
+                      if (currentOrderGarments.length === 0) {
+                        setAlertMessage({
+                          type: "error",
+                          title: "No Products Cut Yet",
+                          message: `Please scan and serialize at least 1 garment for order ${selectedOrder.id} before completing.`,
+                        });
+                        return;
+                      }
                       const orderId = selectedOrder.id;
                       setCompletedOrders((prev) => ({ ...prev, [orderId]: true }));
                       setStep("awaiting_bundle");
                       setScannedLotId("");
                       setSelectedOrderId("");
+                      setBundleInputUid("");
+                      setProductTagInput("");
 
                       setAlertMessage({
                         type: "success",
                         title: `All Products of Order ${orderId} Scan Complete`,
-                        message: `Order cutting finished successfully! All cut garments have been serialized and advanced to Station 4 (Stitching Table). Awaiting next fabric bundle.`,
+                        message: `Order cutting finished successfully! ${currentOrderGarments.length} cut garment(s) have been serialized and advanced to Station 4 (Stitching Table). Awaiting next fabric bundle.`,
                       });
                     };
 
@@ -558,80 +596,136 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
 
                         {/* ------------------------------------------------------------- */}
                         {/* SCREEN 1: Awaiting Fabric Bundle Card Scan                     */}
-                        {/* No text input box. Operator clicks Scan Bundle Tag or taps    */}
                         {/* ------------------------------------------------------------- */}
                         {activeTab === "cutting" && step === "awaiting_bundle" && (
-                          <div className="rounded-xl border bg-card p-8 space-y-6 shadow-xs text-center max-w-xl mx-auto">
+                          <div className="rounded-xl border bg-card p-6 sm:p-8 space-y-6 shadow-xs text-center max-w-xl mx-auto">
                             <div className="size-16 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center animate-pulse">
                               <ScanLine className="size-8" />
                             </div>
                             <div className="space-y-1">
+                              {isMock && (
+                                <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                                  Mock Data Mode · Bundle RFID Simulation
+                                </div>
+                              )}
                               <h3 className="text-xl font-bold text-foreground">
                                 Station 3 — Cutting Table Reader
                               </h3>
                               <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                                Click below to scan the fabric bundle tag or present it to the hardware reader. The system will automatically load associated production orders.
+                                {isMock
+                                  ? "Enter the fabric bundle card RFID UID or Lot ID below to load its associated production orders."
+                                  : "Present fabric bundle RFID tag to Scanner 3 reader antenna to automatically load associated production orders."}
                               </p>
                             </div>
 
-                            {/* Direct Action Button — No text input box */}
-                            <div className="pt-2 flex flex-col items-center gap-2">
-                              <Button
-                                size="lg"
-                                disabled={pending}
-                                onClick={() => {
-                                  setAlertMessage({
-                                    type: "info",
-                                    title: "Scanner 3 Armed & Ready",
-                                    message: "Awaiting physical fabric bundle tag tap on Scanner 3 (or tap any available bundle chip below).",
-                                  });
+                            {/* In Mock Mode: Dedicated Manual Input for Bundle UID / Lot ID */}
+                            {isMock ? (
+                              <div className="pt-1 space-y-3 text-left">
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Bundle Card Tag UID or Lot ID:</span>
+                                    {bundleInputUid && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setBundleInputUid("")}
+                                        className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                                      >
+                                        Clear
+                                      </button>
+                                    )}
+                                  </label>
+                                  <div className="relative">
+                                    <Input
+                                      value={bundleInputUid}
+                                      onChange={(e) => setBundleInputUid(e.target.value.toUpperCase())}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          const tagToScan = bundleInputUid.trim() || availableInspectedLots[0]?.rfidUid || "04A1B2C3";
+                                          handleScanBundleCard(tagToScan);
+                                        }
+                                      }}
+                                      placeholder="e.g. 04A1B2C3 or FAB-001"
+                                      className="font-mono text-sm tracking-wide bg-background pr-10"
+                                    />
+                                    <Tag className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Enter bundle card UID (or Lot ID) from Station 2 and click Simulate Scan.
+                                  </p>
+                                </div>
 
-                                  // Start polling loop to capture hardware scan from ESP32 on Station 3
-                                  void run(
-                                    async (c) => {
-                                      const startTime = Date.now();
-                                      while (Date.now() - startTime < 35000) {
-                                        const data = await c.getRfidStationData("cutting");
-                                        if (data.lastScanOutcome) {
-                                          const outcomeTime = new Date(data.lastScanOutcome.at).getTime();
-                                          if (outcomeTime >= startTime - 2000) {
-                                            const scannedTag = data.lastScanOutcome.uid;
-                                            if (scannedTag) {
-                                              handleScanBundleCard(scannedTag);
-                                              return data.lastScanOutcome;
+                                <Button
+                                  disabled={pending}
+                                  onClick={() => {
+                                    const tagToScan = bundleInputUid.trim() || availableInspectedLots[0]?.rfidUid || "04A1B2C3";
+                                    handleScanBundleCard(tagToScan);
+                                  }}
+                                  className="w-full h-10 font-bold gap-2 text-xs bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
+                                >
+                                  <ScanLine className="size-4" />
+                                  Simulate Bundle Scan {bundleInputUid ? `(${bundleInputUid})` : ""}
+                                </Button>
+                              </div>
+                            ) : (
+                              /* Live API Mode: Pure Hardware Listening Action Button */
+                              <div className="pt-2 flex flex-col items-center gap-2">
+                                <Button
+                                  size="lg"
+                                  disabled={pending}
+                                  onClick={() => {
+                                    setAlertMessage({
+                                      type: "info",
+                                      title: "Scanner 3 Armed & Ready",
+                                      message: "Awaiting physical fabric bundle tag tap on Scanner 3 (or tap any available bundle chip below).",
+                                    });
+
+                                    // Start polling loop to capture hardware scan from ESP32 on Station 3
+                                    void run(
+                                      async (c) => {
+                                        const startTime = Date.now();
+                                        while (Date.now() - startTime < 35000) {
+                                          const data = await c.getRfidStationData("cutting");
+                                          if (data.lastScanOutcome) {
+                                            const outcomeTime = new Date(data.lastScanOutcome.at).getTime();
+                                            if (outcomeTime >= startTime - 2000) {
+                                              const scannedTag = data.lastScanOutcome.uid;
+                                              if (scannedTag) {
+                                                handleScanBundleCard(scannedTag);
+                                                return data.lastScanOutcome;
+                                              }
                                             }
                                           }
+                                          await new Promise((r) => setTimeout(r, 600));
                                         }
-                                        await new Promise((r) => setTimeout(r, 600));
-                                      }
-                                      return null;
-                                    },
-                                    "Awaiting hardware bundle tag scan...",
-                                  );
-                                }}
-                                className="h-12 px-8 text-sm font-bold gap-2.5 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
-                              >
-                                {pending ? (
-                                  <>
-                                    <span className="relative flex h-2.5 w-2.5 mr-1">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                                    </span>
-                                    <span>Awaiting Hardware Bundle Scan (Scanner 3)...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <ScanLine className="size-5" />
-                                    <span>Scan Bundle Tag</span>
-                                  </>
+                                        return null;
+                                      },
+                                      "Awaiting hardware bundle tag scan...",
+                                    );
+                                  }}
+                                  className="h-12 px-8 text-sm font-bold gap-2.5 shadow-sm bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer"
+                                >
+                                  {pending ? (
+                                    <>
+                                      <span className="relative flex h-2.5 w-2.5 mr-1">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                      </span>
+                                      <span>Awaiting Hardware Bundle Scan (Scanner 3)...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ScanLine className="size-5" />
+                                      <span>Scan Bundle Tag</span>
+                                    </>
+                                  )}
+                                </Button>
+                                {pending && (
+                                  <p className="text-xs text-muted-foreground animate-pulse">
+                                    Present physical bundle card to reader antenna, or click an inspected bundle chip below.
+                                  </p>
                                 )}
-                              </Button>
-                              {pending && (
-                                <p className="text-xs text-muted-foreground animate-pulse">
-                                  Present physical bundle card to reader antenna, or click an inspected bundle chip below.
-                                </p>
-                              )}
-                            </div>
+                              </div>
+                            )}
 
                             {/* Available Inspected Bundles (One-Click Tap for Hardware / Demo) */}
                             {availableInspectedLots.length > 0 && (
@@ -876,36 +970,153 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                 </div>
                               </div>
 
-                              {/* Hardware Scanner 3 Live Listening Banner — Nothing to write or select */}
-                              <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="relative flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                    <ScanLine className="size-5 relative" />
+                              {/* In Mock Mode: Dedicated Manual Product Tag Entry Box */}
+                              {isMock ? (
+                                <div className="rounded-lg border border-primary/40 bg-card p-5 space-y-4 shadow-xs">
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-3">
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                                          Mock Simulation — Product Tag Scan (Scanner 3)
+                                        </h4>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-0.5">
+                                        Enter garment RFID tag UID one by one to simulate cutting and serializing products for Order <strong className="text-foreground">{selectedOrder.id}</strong>.
+                                      </p>
+                                    </div>
+                                    {/* Garment Size Selection */}
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-semibold text-muted-foreground">Size:</span>
+                                      {(["XS", "S", "M", "L", "XL"] as const).map((sz) => (
+                                        <Button
+                                          key={sz}
+                                          type="button"
+                                          size="sm"
+                                          variant={selectedSize === sz ? "default" : "outline"}
+                                          onClick={() => setSelectedSize(sz)}
+                                          className="h-7 w-8 p-0 text-xs font-bold"
+                                        >
+                                          {sz}
+                                        </Button>
+                                      ))}
+                                    </div>
                                   </div>
-                                  <div>
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                                      Hardware Reader Armed — Scanning Shirts
-                                    </h4>
-                                    <p className="text-[11px] text-muted-foreground">
-                                      Scan tags one by one at Scanner 3. Products will appear dynamically below, linked to Bundle <strong className="text-foreground">{activeLot.id}</strong> &amp; Order <strong className="text-foreground">{selectedOrder.id}</strong>.
-                                    </p>
-                                  </div>
-                                </div>
 
-                                <div className="shrink-0 flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={pending}
-                                    onClick={() => void handleScanProductTag(generateFreshUid())}
-                                    className="gap-1.5 text-xs font-semibold border-primary/40 hover:bg-primary hover:text-primary-foreground transition-all cursor-pointer shadow-2xs"
-                                  >
-                                    <Sparkles className="size-3.5 text-primary" />
-                                    Tap Next Garment (Hardware)
-                                  </Button>
+                                  {/* Input Box & Action Buttons */}
+                                  <div className="grid gap-3 sm:grid-cols-12 items-end">
+                                    <div className="sm:col-span-7 space-y-1.5">
+                                      <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                        <span>Garment Tag UID:</span>
+                                        {productTagInput && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setProductTagInput("")}
+                                            className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+                                          >
+                                            Clear
+                                          </button>
+                                        )}
+                                      </label>
+                                      <div className="relative">
+                                        <Input
+                                          value={productTagInput}
+                                          onChange={(e) => setProductTagInput(e.target.value.toUpperCase())}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              const uid = productTagInput.trim() || generateFreshUid();
+                                              void handleScanProductTag(uid);
+                                              setProductTagInput("");
+                                            }
+                                          }}
+                                          placeholder="e.g. 04A9B8C7 or type custom UID"
+                                          className="font-mono text-sm tracking-wide bg-background pr-10"
+                                        />
+                                        <Tag className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                      </div>
+                                    </div>
+
+                                    <div className="sm:col-span-5 flex flex-wrap gap-2">
+                                      <Button
+                                        disabled={pending}
+                                        onClick={() => {
+                                          const uid = productTagInput.trim() || generateFreshUid();
+                                          void handleScanProductTag(uid);
+                                          setProductTagInput("");
+                                        }}
+                                        className="flex-1 h-9 font-bold text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+                                      >
+                                        <ScanLine className="size-3.5" />
+                                        Simulate Scan {productTagInput ? `(${productTagInput})` : ""}
+                                      </Button>
+
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={pending}
+                                        onClick={() => {
+                                          const fresh = generateFreshUid();
+                                          setProductTagInput(fresh);
+                                        }}
+                                        className="h-9 text-xs gap-1 font-mono cursor-pointer"
+                                        title="Generate a random UID into the box"
+                                      >
+                                        <Sparkles className="size-3 text-primary" />
+                                        Random UID
+                                      </Button>
+
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={pending}
+                                        onClick={() => {
+                                          const fresh = generateFreshUid();
+                                          void handleScanProductTag(fresh);
+                                        }}
+                                        className="h-9 text-xs gap-1 cursor-pointer font-semibold"
+                                        title="Quickly generate and tap next garment"
+                                      >
+                                        + Quick Tap
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Each scan serializes a cut panel set, binds the tag UID to the garment with stage <strong className="text-foreground">"stitching"</strong>, and establishes lineage to Bundle <strong className="text-foreground">{activeLot.id}</strong>.
+                                  </p>
                                 </div>
-                              </div>
+                              ) : (
+                                /* Live API Mode: Pure Hardware Listening Banner — Nothing to write */
+                                <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                      <ScanLine className="size-5 relative" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                                        Hardware Reader Armed — Scanning Shirts
+                                      </h4>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        Scan tags one by one at Scanner 3. Products will appear dynamically below, linked to Bundle <strong className="text-foreground">{activeLot.id}</strong> &amp; Order <strong className="text-foreground">{selectedOrder.id}</strong>.
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="shrink-0 flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={pending}
+                                      onClick={() => void handleScanProductTag(generateFreshUid())}
+                                      className="gap-1.5 text-xs font-semibold border-primary/40 hover:bg-primary hover:text-primary-foreground transition-all cursor-pointer shadow-2xs"
+                                    >
+                                      <Sparkles className="size-3.5 text-primary" />
+                                      Tap Next Garment (Hardware)
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             {/* Enrolled Products Table for this Order */}
