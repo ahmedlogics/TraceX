@@ -691,13 +691,12 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
           </span>
           <div className="flex items-center gap-1.5">
             <span
-              className={`size-2 rounded-full ${
-                isDispatched
-                  ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                  : hasActiveHold
-                    ? "bg-amber-400 animate-pulse"
-                    : "bg-purple-400 animate-pulse"
-              }`}
+              className={`size-2 rounded-full ${isDispatched
+                ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                : hasActiveHold
+                  ? "bg-amber-400 animate-pulse"
+                  : "bg-purple-400 animate-pulse"
+                }`}
             />
             <span className="text-xs font-semibold text-white">
               {isDispatched
@@ -721,13 +720,12 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
           </span>
           <div className="flex items-center gap-1.5">
             <span
-              className={`size-2 rounded-full ${
-                isQualityPassed
-                  ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                  : hasActiveHold
-                    ? "bg-amber-400 animate-pulse"
-                    : "bg-purple-400"
-              }`}
+              className={`size-2 rounded-full ${isQualityPassed
+                ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                : hasActiveHold
+                  ? "bg-amber-400 animate-pulse"
+                  : "bg-purple-400"
+                }`}
             />
             <span className="text-xs font-semibold text-white">
               {isQualityPassed
@@ -753,15 +751,14 @@ export function PublicJourneyView({ publicId }: { publicId: string }) {
           </span>
           <div className="flex items-center gap-1.5">
             <span
-              className={`size-2 rounded-full ${
-                isBlockchainVerified
-                  ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                  : verificationOutcome === "failed"
-                    ? "bg-rose-400"
-                    : verificationOutcome === "unavailable"
-                      ? "bg-slate-400"
-                      : "bg-amber-400 animate-pulse"
-              }`}
+              className={`size-2 rounded-full ${isBlockchainVerified
+                ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                : verificationOutcome === "failed"
+                  ? "bg-rose-400"
+                  : verificationOutcome === "unavailable"
+                    ? "bg-slate-400"
+                    : "bg-amber-400 animate-pulse"
+                }`}
             />
             <span className="text-xs font-semibold text-white">
               {isBlockchainVerified
