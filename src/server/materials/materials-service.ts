@@ -613,6 +613,7 @@ export async function bindLotCard(
         data: {
           status: "completed",
           completed_at: new Date(),
+          assignee_id: staffUserId,
         },
       });
     }

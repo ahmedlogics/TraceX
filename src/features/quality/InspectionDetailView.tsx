@@ -100,13 +100,6 @@ function InspectionBody({ d }: { d: InspectionDetail }) {
     <>
       <PageHeader
         title={<span className="wt-id text-2xl">{i.id}</span>}
-        description={`${
-          i.kind === "incoming"
-            ? "Incoming material lot-level evaluation"
-            : i.kind === "final"
-              ? "Final garment inspection before packing"
-              : "Reinspection of repaired garment"
-        }`}
         meta={
           <>
             <StatusBadge status={i.status} label="Result" />

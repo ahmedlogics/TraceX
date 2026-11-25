@@ -98,7 +98,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                   ? garments.filter(
                       (g) =>
                         g.packageId === activeBox.id ||
-                        activeBox.garmentIds.includes(g.id),
+                        (activeBox.garmentIds || []).includes(g.id),
                     )
                   : [];
 

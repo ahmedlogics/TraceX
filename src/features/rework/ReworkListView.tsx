@@ -92,14 +92,7 @@ export function ReworkListView() {
 
   return (
     <>
-      <PageHeader
-        title="Rework & Repairs"
-        description={
-          isProduction
-            ? `Production repair queue for ${departmentLabels[me.department]}.`
-            : "Factory-wide defect rework cases, repair assignments, and reinspection clearance."
-        }
-      />
+      <PageHeader title="Rework & Repairs" />
 
       <Loadable query={qRework}>
         {(allCases) => (
@@ -157,7 +150,6 @@ export function ReworkListView() {
                           <Clock className="size-4 text-warning" />
                         </div>
                         <p className="mt-2 text-2xl font-bold">{awaitingAssign}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Requires manager routing</p>
                       </div>
                     )}
                     <div className="rounded-lg border bg-card p-4 shadow-sm">
@@ -168,9 +160,6 @@ export function ReworkListView() {
                         <Hammer className="size-4 text-primary" />
                       </div>
                       <p className="mt-2 text-2xl font-bold">{assigned}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {isProduction ? `Active in ${departmentLabels[me.department]}` : "Active in production shops"}
-                      </p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 shadow-sm">
                       <div className="flex items-center justify-between text-muted-foreground">
@@ -180,7 +169,6 @@ export function ReworkListView() {
                         <RotateCcw className="size-4 text-accent" />
                       </div>
                       <p className="mt-2 text-2xl font-bold">{repaired}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Pending independent QC</p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 shadow-sm">
                       <div className="flex items-center justify-between text-muted-foreground">
@@ -190,7 +178,6 @@ export function ReworkListView() {
                         <CheckCircle2 className="size-4 text-success" />
                       </div>
                       <p className="mt-2 text-2xl font-bold">{closed}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Released back to packing</p>
                     </div>
                   </div>
 

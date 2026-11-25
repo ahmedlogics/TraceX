@@ -163,6 +163,23 @@ export class FabricReceivingScanHandler implements DomainScanHandler<ScanOutcome
       data: bindingData,
     });
 
+    // Complete pending receive-lot task if any
+    if (tx.work_tasks && typeof tx.work_tasks.updateMany === "function") {
+      const actorId = context?.actor?.actorId || "03221414-8e7e-4063-8054-e2426d7677c1";
+      await tx.work_tasks.updateMany({
+        where: {
+          material_lot_id: lotId,
+          action_code: "receive-lot",
+          status: { in: ["queued", "claimed", "in_progress"] },
+        },
+        data: {
+          status: "completed",
+          completed_at: new Date(),
+          assignee_id: actorId,
+        },
+      });
+    }
+
     // Ensure incoming QC task exists for this lot if work_tasks table is available
     if (tx.work_tasks && typeof tx.work_tasks.findFirst === "function") {
       const existingTask = await tx.work_tasks.findFirst({
@@ -651,6 +668,26 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
       data: tagBindingData,
     });
 
+    // 5b. Link new shirt to confirmed cutting source input (satisfies validate_accepted_rfid_scan trigger)
+    if (!cuttingInputId && cuttingJobId) {
+      const input = await tx.cutting_inputs.findFirst({
+        where: { cutting_job_id: cuttingJobId },
+        orderBy: { id: "desc" },
+      });
+      if (input) cuttingInputId = input.id;
+    }
+
+    if (cuttingInputId && cuttingJobId && tx.garment_material_inputs && typeof tx.garment_material_inputs.create === "function") {
+      await tx.garment_material_inputs.create({
+        data: {
+          garment_id: garment.id,
+          cutting_job_id: cuttingJobId,
+          cutting_input_id: cuttingInputId,
+          attributed_quantity: new Prisma.Decimal("1.000"),
+        },
+      });
+    }
+
     return {
       kind: "garment",
       subjectId: garment.id,
@@ -820,15 +857,24 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
       if (input) cuttingInputId = input.id;
     }
 
-    if (cuttingInputId && cuttingJobId) {
-      await tx.garment_material_inputs.create({
-        data: {
+    if (cuttingInputId && cuttingJobId && tx.garment_material_inputs && typeof tx.garment_material_inputs.findFirst === "function") {
+      const existingGmi = await tx.garment_material_inputs.findFirst({
+        where: {
           garment_id: subject.subjectId,
           cutting_job_id: cuttingJobId,
           cutting_input_id: cuttingInputId,
-          attributed_quantity: new Prisma.Decimal("1.000"),
         },
       });
+      if (!existingGmi && typeof tx.garment_material_inputs.create === "function") {
+        await tx.garment_material_inputs.create({
+          data: {
+            garment_id: subject.subjectId,
+            cutting_job_id: cuttingJobId,
+            cutting_input_id: cuttingInputId,
+            attributed_quantity: new Prisma.Decimal("1.000"),
+          },
+        });
+      }
     }
 
     // Try creating trace event and internal commitment
@@ -1133,36 +1179,38 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
       },
     });
 
-    // Close any open 'finish' task and generate 'final-qc-presentation' task
+    // Close any open 'finish' task and generate 'final_qc' task
     try {
-      if ("work_tasks" in (tx as any)) {
-        await (tx as any).work_tasks.updateMany({
+      if (tx.work_tasks && typeof tx.work_tasks.updateMany === "function") {
+        await tx.work_tasks.updateMany({
           where: {
             garment_id: subject.subjectId,
-            task_kind: "finish",
-            status: { in: ["open", "claimed"] },
+            action_code: "finish",
+            status: { in: ["queued", "assigned", "claimed", "in_progress"] },
           },
           data: {
-            status: "done",
+            status: "completed",
             completed_at: new Date(),
+            assignee_id: context?.actor?.actorId || "09abcce4-0126-42bc-bfdb-8e3f76332ee8",
           },
         });
 
-        const existingQcTask = await (tx as any).work_tasks.findFirst({
+        const existingQcTask = await tx.work_tasks.findFirst({
           where: {
             garment_id: subject.subjectId,
-            task_kind: "final-qc-presentation",
-            status: { in: ["open", "claimed"] },
+            action_code: "final_qc",
           },
         });
-        if (!existingQcTask) {
-          await (tx as any).work_tasks.create({
+        if (!existingQcTask && typeof tx.work_tasks.create === "function") {
+          await tx.work_tasks.create({
             data: {
-              title: `Final QC for Garment ${subject.subjectCode}`,
-              task_kind: "final-qc-presentation",
+              action_code: "final_qc",
               department_code: "quality",
               garment_id: subject.subjectId,
-              status: "open",
+              status: "queued",
+              created_by: context?.actor?.actorId || "09abcce4-0126-42bc-bfdb-8e3f76332ee8",
+              created_at: new Date(),
+              revision: 0,
             },
           });
         }
@@ -1177,7 +1225,7 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
         data: {
           event_type: "finishing_completed",
           garment_id: subject.subjectId,
-          subject_revision: garment.revision,
+          subject_revision: Math.max(1, (garment.revision || 0) + 1),
           actor_id: context?.actor?.actorId || "00000000-0000-0000-0000-000000000000",
           details: {
             garmentCode: subject.subjectCode,

@@ -132,12 +132,12 @@ export function ShipmentsView() {
           );
 
           if (pkg) {
-            const linkedGarments = pkg.garmentIds
+            const linkedGarments = (pkg.garmentIds || [])
               .map((gid) => allGarments.find((g) => g.id === gid))
               .filter(Boolean) as Garment[];
 
             const linkedShipment = allShipments.find((sh) =>
-              sh.garmentIds.some((gid) => pkg.garmentIds.includes(gid)),
+              (sh.garmentIds || []).some((gid) => (pkg.garmentIds || []).includes(gid)),
             );
 
             setDispatchedBoxDetails({
@@ -454,8 +454,8 @@ export function ShipmentsView() {
                           {
                             header: "Allocation Progress",
                             cell: (s) => {
-                              const total = s.garmentIds.length;
-                              const alloc = s.allocatedGarmentIds.length;
+                              const total = s.garmentIds?.length || 0;
+                              const alloc = s.allocatedGarmentIds?.length || 0;
                               const pct = total > 0 ? Math.round((alloc / total) * 100) : 0;
                               return (
                                 <div className="flex flex-col gap-1 min-w-[120px]">
@@ -475,7 +475,7 @@ export function ShipmentsView() {
                           {
                             header: "Manifest Verified",
                             cell: (s) => {
-                              const total = s.garmentIds.length;
+                              const total = s.garmentIds?.length || 0;
                               const verified = s.verifiedGarmentIds?.length ?? 0;
                               return (
                                 <span className="text-xs font-mono">

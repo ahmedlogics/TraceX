@@ -922,14 +922,7 @@ export function QualityView() {
   // -------------------------------------------------------------
   return (
     <>
-      <PageHeader
-        title="Quality Assurance"
-        description={
-          me.role === "M"
-            ? "Managerial quality oversight. Only certified inspectors record operational decisions."
-            : "Factory inspection queues, lot-level acceptance, and result-first RFID workstation."
-        }
-      />
+      <PageHeader title="Quality Assurance" />
 
       <div className="space-y-6">
         {/* KPI Summary Cards */}
@@ -956,7 +949,6 @@ export function QualityView() {
                     <ClipboardCheck className="size-4 text-primary" />
                   </div>
                   <p className="mt-2 text-2xl font-bold">{openFinal}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Garments ready for Final QC</p>
                 </div>
                 <div className="rounded-lg border bg-card p-4 shadow-sm">
                   <div className="flex items-center justify-between text-muted-foreground">
@@ -966,9 +958,6 @@ export function QualityView() {
                     <RotateCcw className="size-4 text-warning" />
                   </div>
                   <p className="mt-2 text-2xl font-bold">{openReinsp}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Repairs awaiting independent QC
-                  </p>
                 </div>
                 <div className="rounded-lg border bg-card p-4 shadow-sm">
                   <div className="flex items-center justify-between text-muted-foreground">
@@ -978,9 +967,6 @@ export function QualityView() {
                     <ShieldAlert className="size-4 text-destructive" />
                   </div>
                   <p className="mt-2 text-2xl font-bold text-destructive">{heldGarments.length}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Blocked from packing/dispatch
-                  </p>
                 </div>
                 {isFinalQc ? (
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
@@ -991,9 +977,6 @@ export function QualityView() {
                       <ShieldCheck className="size-4 text-success" />
                     </div>
                     <p className="mt-2 text-2xl font-bold text-success">{passedFinalCount}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Garments cleared for packing
-                    </p>
                   </div>
                 ) : (
                   <div className="rounded-lg border bg-card p-4 shadow-sm">
@@ -1004,9 +987,6 @@ export function QualityView() {
                       <Sparkles className="size-4 text-accent" />
                     </div>
                     <p className="mt-2 text-2xl font-bold">{openIncoming}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Fabric lots pending acceptance
-                    </p>
                   </div>
                 )}
               </div>
@@ -1023,10 +1003,6 @@ export function QualityView() {
                 <p className="text-sm font-semibold text-destructive">
                   {heldGarments.length} Garment{heldGarments.length > 1 ? "s" : ""} on Active
                   Quality Hold
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Quality holds strictly prevent downstream packaging, warehouse binning, and
-                  shipment departure until an independent inspector passes reinspection.
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1.5">
                   {heldGarments.map((g) => (
@@ -1047,10 +1023,7 @@ export function QualityView() {
 
         {/* Workstation RFID Station Panel (Station 6 Final QA only) */}
         {qRfidStation.data && (
-          <Section
-            title="Station 6: Final Quality Inspection Console"
-            description="Examine shirt physically, select Pass or Fail, click Submit, then scan tag at Scanner 6 hardware."
-          >
+          <Section title="Station 6: Final Quality Inspection Console">
             <QAPanel
               stationData={qRfidStation.data}
               onScanComplete={() => {

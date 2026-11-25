@@ -191,6 +191,136 @@ rfidRouter.post(
 // ============================================================================
 
 /**
+ * Helper to ensure a valid, authorized reader session bound to an unrevoked staff session
+ * exists for this operator and station.
+ */
+async function getOrCreateActiveReaderSession(
+  operatorId: string,
+  stationCode: string,
+) {
+  const HARDWARE_DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
+
+  // 1. Auto-close any orphaned reader sessions whose staff_sessions were revoked or expired
+  const staleStaffSessions = await prisma.staff_sessions.findMany({
+    where: {
+      OR: [
+        { revoked_at: { not: null } },
+        { expires_at: { lte: new Date() } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (staleStaffSessions.length > 0) {
+    const staleIds = staleStaffSessions.map((s) => s.id);
+    await prisma.reader_sessions.updateMany({
+      where: {
+        staff_session_id: { in: staleIds },
+        closed_at: null,
+      },
+      data: {
+        closed_at: new Date(),
+        close_reason: "Staff session revoked or expired",
+      },
+    });
+  }
+
+  // 2. Ensure operator has a valid unrevoked staff session
+  let staffSession = await prisma.staff_sessions.findFirst({
+    where: {
+      staff_user_id: operatorId,
+      revoked_at: null,
+      expires_at: { gt: new Date() },
+    },
+    orderBy: { expires_at: "desc" },
+  });
+
+  if (!staffSession) {
+    staffSession = await prisma.staff_sessions.create({
+      data: {
+        staff_user_id: operatorId,
+        token_digest: crypto.randomBytes(32),
+        expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+      },
+    });
+  }
+
+  // 3. Check for an existing open reader session for this operator on this station
+  // that is bound to a valid, unrevoked staff_session
+  let session = await prisma.reader_sessions.findFirst({
+    where: {
+      operator_id: operatorId,
+      station_code: stationCode,
+      closed_at: null,
+      expires_at: { gt: new Date() },
+      staff_session_id: staffSession.id,
+    },
+    orderBy: { opened_at: "desc" },
+  });
+
+  if (session) {
+    return session;
+  }
+
+  // 4. Resolve mapping (prefer hardware device)
+  let mapping = await prisma.device_reader_mappings.findFirst({
+    where: {
+      station_code: stationCode,
+      device_id: HARDWARE_DEVICE_ID,
+      device_mapping_versions: {
+        activated_at: { not: null },
+        retired_at: null,
+      },
+    },
+  });
+
+  if (!mapping) {
+    mapping = await prisma.device_reader_mappings.findFirst({
+      where: {
+        station_code: stationCode,
+        device_mapping_versions: {
+          activated_at: { not: null },
+          retired_at: null,
+        },
+      },
+    });
+  }
+
+  if (!mapping) {
+    throw ApiError.badRequest(
+      `No active hardware reader mapping found for station '${stationCode}'. Provision hardware device first.`,
+    );
+  }
+
+  // Close any existing unclosed reader session on this physical reader to prevent unique constraint conflict
+  await prisma.reader_sessions.updateMany({
+    where: {
+      device_id: mapping.device_id,
+      reader_index: mapping.reader_index,
+      closed_at: null,
+    },
+    data: {
+      closed_at: new Date(),
+      close_reason: "Superseded by new reader session",
+    },
+  });
+
+  // Create new active reader session
+  session = await prisma.reader_sessions.create({
+    data: {
+      device_id: mapping.device_id,
+      mapping_version: mapping.mapping_version,
+      reader_index: mapping.reader_index,
+      station_code: stationCode,
+      staff_session_id: staffSession.id,
+      operator_id: operatorId,
+      expires_at: staffSession.expires_at,
+    },
+  });
+
+  return session;
+}
+
+/**
  * GET /api/rfid/station/:stationCode
  * Returns active RFID station workstation state, active operator session,
  * armed action context, and last scan feedback.
@@ -211,90 +341,8 @@ rfidRouter.get(
         throw ApiError.notFound(`RFID station '${stationCode}' does not exist.`);
       }
 
-      // Find active session for this station (prefer hardware device)
-      const HARDWARE_DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
-      let session = await prisma.reader_sessions.findFirst({
-        where: {
-          station_code: stationCode,
-          device_id: HARDWARE_DEVICE_ID,
-          closed_at: null,
-          expires_at: { gt: new Date() },
-        },
-        orderBy: { opened_at: "desc" },
-      });
-
-      if (!session) {
-        session = await prisma.reader_sessions.findFirst({
-          where: {
-            station_code: stationCode,
-            closed_at: null,
-            expires_at: { gt: new Date() },
-          },
-          orderBy: { opened_at: "desc" },
-        });
-      }
-
-      if (!session) {
-        // Ensure operator session exists on physical hardware device
-        let mapping = await prisma.device_reader_mappings.findFirst({
-          where: {
-            station_code: stationCode,
-            device_id: HARDWARE_DEVICE_ID,
-            device_mapping_versions: {
-              activated_at: { not: null },
-              retired_at: null,
-            },
-          },
-        });
-        if (!mapping) {
-          mapping = await prisma.device_reader_mappings.findFirst({
-            where: {
-              station_code: stationCode,
-              device_mapping_versions: {
-                activated_at: { not: null },
-                retired_at: null,
-              },
-            },
-          });
-        }
-        if (mapping) {
-          let staffSession = await prisma.staff_sessions.findFirst({
-            where: { staff_user_id: user.id, revoked_at: null, expires_at: { gt: new Date() } },
-            orderBy: { expires_at: "desc" },
-          });
-          if (!staffSession) {
-            staffSession = await prisma.staff_sessions.create({
-              data: {
-                staff_user_id: user.id,
-                token_digest: crypto.randomBytes(32),
-                expires_at: new Date(Date.now() + 24 * 3600 * 1000),
-              },
-            });
-          }
-          await prisma.reader_sessions.updateMany({
-            where: {
-              device_id: mapping.device_id,
-              reader_index: mapping.reader_index,
-              closed_at: null,
-            },
-            data: {
-              closed_at: new Date(),
-              close_reason: "Auto-closed for new workstation operator session",
-            },
-          });
-          session = await prisma.reader_sessions.create({
-            data: {
-              device_id: mapping.device_id,
-              mapping_version: mapping.mapping_version,
-              reader_index: mapping.reader_index,
-              station_code: stationCode,
-              staff_session_id: staffSession.id,
-              operator_id: user.id,
-              expires_at: staffSession.expires_at,
-            },
-          });
-        }
-      }
+      // Find or create active reader session for this station & operator
+      const session = await getOrCreateActiveReaderSession(user.id, stationCode);
 
       let activeContext = undefined;
       if (session) {
@@ -464,123 +512,8 @@ rfidRouter.post(
         );
       }
 
-      // Ensure active reader session for this station & operator (prefer physical hardware device DEV-TEXTRACER-01)
-      const HARDWARE_DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
-      let session = await prisma.reader_sessions.findFirst({
-        where: {
-          station_code: stationCode,
-          device_id: HARDWARE_DEVICE_ID,
-          closed_at: null,
-          expires_at: { gt: new Date() },
-        },
-        orderBy: { opened_at: "desc" },
-      });
-
-      if (!session) {
-        session = await prisma.reader_sessions.findFirst({
-          where: {
-            station_code: stationCode,
-            closed_at: null,
-            expires_at: { gt: new Date() },
-          },
-          orderBy: { opened_at: "desc" },
-        });
-      }
-
-      if (session && session.operator_id !== user.id) {
-        let staffSession = await prisma.staff_sessions.findFirst({
-          where: { staff_user_id: user.id, revoked_at: null, expires_at: { gt: new Date() } },
-          orderBy: { expires_at: "desc" },
-        });
-        if (!staffSession) {
-          staffSession = await prisma.staff_sessions.create({
-            data: {
-              staff_user_id: user.id,
-              token_digest: crypto.randomBytes(32),
-              expires_at: new Date(Date.now() + 24 * 3600 * 1000),
-            },
-          });
-        }
-        session = await prisma.reader_sessions.update({
-          where: { id: session.id },
-          data: {
-            operator_id: user.id,
-            staff_session_id: staffSession.id,
-          },
-        });
-      }
-
-      if (!session) {
-        // Find mapped reader for this station (prefer physical ESP32 hardware device DEV-TEXTRACER-01 if mapped)
-        let mapping = await prisma.device_reader_mappings.findFirst({
-          where: {
-            station_code: stationCode,
-            device_id: HARDWARE_DEVICE_ID,
-            device_mapping_versions: {
-              activated_at: { not: null },
-              retired_at: null,
-            },
-          },
-        });
-
-        if (!mapping) {
-          mapping = await prisma.device_reader_mappings.findFirst({
-            where: {
-              station_code: stationCode,
-              device_mapping_versions: {
-                activated_at: { not: null },
-                retired_at: null,
-              },
-            },
-          });
-        }
-
-        if (!mapping) {
-          throw ApiError.badRequest(
-            `No active hardware reader mapping found for station '${stationCode}'. Provision hardware device first.`,
-          );
-        }
-
-        // Ensure active staff_session exists for FK
-        let staffSession = await prisma.staff_sessions.findFirst({
-          where: { staff_user_id: user.id, revoked_at: null, expires_at: { gt: new Date() } },
-          orderBy: { expires_at: "desc" },
-        });
-        if (!staffSession) {
-          staffSession = await prisma.staff_sessions.create({
-            data: {
-              staff_user_id: user.id,
-              token_digest: crypto.randomBytes(32),
-              expires_at: new Date(Date.now() + 24 * 3600 * 1000),
-            },
-          });
-        }
-
-        // Close any existing unclosed reader session on this physical reader to prevent unique constraint conflict
-        await prisma.reader_sessions.updateMany({
-          where: {
-            device_id: mapping.device_id,
-            reader_index: mapping.reader_index,
-            closed_at: null,
-          },
-          data: {
-            closed_at: new Date(),
-            close_reason: "Superseded by new reader session",
-          },
-        });
-
-        session = await prisma.reader_sessions.create({
-          data: {
-            device_id: mapping.device_id,
-            mapping_version: mapping.mapping_version,
-            reader_index: mapping.reader_index,
-            station_code: stationCode,
-            staff_session_id: staffSession.id,
-            operator_id: user.id,
-            expires_at: staffSession.expires_at,
-          },
-        });
-      }
+      // Ensure active reader session for this station & operator
+      let session = await getOrCreateActiveReaderSession(user.id, stationCode);
 
       // Close any previous open action context on this session
       await prisma.rfid_action_contexts.updateMany({
@@ -769,6 +702,29 @@ rfidRouter.post(
         }
       }
 
+      if (dbActionCode === "bind_garment_tag" && !resolvedSourceSelectionId) {
+        const activeSel = await prisma.cutting_source_selections.findFirst({
+          where: {
+            closed_at: null,
+            ...(resolvedCuttingJobId ? { cutting_job_id: resolvedCuttingJobId } : {}),
+          },
+          orderBy: { selected_at: "desc" },
+        });
+        if (activeSel) {
+          resolvedSourceSelectionId = activeSel.id;
+          resolvedCuttingJobId = activeSel.cutting_job_id;
+          resolvedCuttingInputId = activeSel.cutting_input_id;
+          if (activeSel.reader_session_id) {
+            const matchedSession = await prisma.reader_sessions.findUnique({
+              where: { id: activeSel.reader_session_id },
+            });
+            if (matchedSession && !matchedSession.closed_at) {
+              session = matchedSession;
+            }
+          }
+        }
+      }
+
       const context = await prisma.rfid_action_contexts.create({
         data: {
           reader_session_id: session.id,
@@ -921,16 +877,32 @@ rfidRouter.post(
 
       if (!uid) throw ApiError.badRequest("RFID UID is required.");
 
-      // Find operator's active reader session
-      const session = await prisma.reader_sessions.findFirst({
-        where: {
-          operator_id: user.id,
-          closed_at: null,
-          expires_at: { gt: new Date() },
-          ...(stationCode ? { station_code: stationCode } : {}),
-        },
-        orderBy: { opened_at: "desc" },
-      });
+      // Find operator's active reader session (prefer session from supplied action context if valid)
+      let session: any = null;
+      if (suppliedContextId) {
+        const linkedCtx = await prisma.rfid_action_contexts.findUnique({
+          where: { id: suppliedContextId },
+          include: {
+            reader_sessions: {
+              include: { staff_sessions: true },
+            },
+          },
+        });
+        if (
+          linkedCtx?.reader_sessions &&
+          !linkedCtx.reader_sessions.closed_at &&
+          linkedCtx.reader_sessions.expires_at > new Date() &&
+          linkedCtx.reader_sessions.staff_sessions &&
+          linkedCtx.reader_sessions.staff_sessions.revoked_at == null &&
+          linkedCtx.reader_sessions.staff_sessions.expires_at > new Date()
+        ) {
+          session = linkedCtx.reader_sessions;
+        }
+      }
+
+      if (!session && stationCode) {
+        session = await getOrCreateActiveReaderSession(user.id, stationCode);
+      }
 
       if (!session) {
         throw ApiError.badRequest(

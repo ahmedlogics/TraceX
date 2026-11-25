@@ -92,7 +92,7 @@ productionRouter.post(
         {
           product: req.body.product,
           styleCode: req.body.styleCode,
-          qty: Number(req.body.qty ?? req.body.quantity),
+          qty: Number(req.body.qty ?? req.body.quantity ?? req.body.targetQuantity ?? req.body.targetUnits ?? 10),
           dueDate: req.body.dueDate,
           workflowVersionId: req.body.workflowVersionId,
         },

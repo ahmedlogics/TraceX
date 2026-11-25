@@ -912,7 +912,7 @@ export function createHttpClient(): WearTrailClient {
     async createPackage(rfidUid?: string, customId?: string): Promise<string> {
       const res = await req<{ packageId?: string; id?: string; code?: string }>("/api/fulfilment/packages", {
         method: "POST",
-        body: { code: rfidUid || customId },
+        body: { code: customId || rfidUid, rfidUid: rfidUid || customId },
       });
       return res.packageId || res.id || res.code || String(res);
     },

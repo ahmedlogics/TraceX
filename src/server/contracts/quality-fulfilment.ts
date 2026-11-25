@@ -97,6 +97,7 @@ export interface ReleaseHoldPayload {
 
 export interface CreatePackagePayload {
   code?: string | undefined;
+  rfidUid?: string | undefined;
 }
 
 export interface PackGarmentPayload {

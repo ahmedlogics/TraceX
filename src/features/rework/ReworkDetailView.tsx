@@ -83,7 +83,6 @@ export function ReworkDetailView({ caseId }: { caseId: string }) {
           <>
             <PageHeader
               title={<span className="wt-id text-2xl">{rc.id}</span>}
-              description={`Rework and repair tracking for garment ${garment.id} (${garment.productName})`}
               crumbs={[
                 { label: "Staff", href: paths.home },
                 { label: "Rework", href: paths.rework },

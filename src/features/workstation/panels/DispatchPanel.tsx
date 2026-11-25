@@ -148,16 +148,16 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                 // Shipment lookup helper for each carton
                 const getCartonShipment = (pkg: Package): Shipment | undefined => {
                   return shipments.find((s) =>
-                    pkg.garmentIds.some(
+                    (pkg.garmentIds || []).some(
                       (gid) =>
-                        s.garmentIds.includes(gid) || s.allocatedGarmentIds.includes(gid),
+                        (s.garmentIds || []).includes(gid) || (s.allocatedGarmentIds || []).includes(gid),
                     ),
                   );
                 };
 
                 // Quality hold helper for a carton
                 const getCartonHold = (pkg: Package) => {
-                  const heldGarments = pkg.garmentIds
+                  const heldGarments = (pkg.garmentIds || [])
                     .map((gid) => garmentMap.get(gid))
                     .filter((g) => Boolean(g?.hold));
                   return heldGarments.length > 0 ? heldGarments : null;
@@ -424,7 +424,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                               header: "Linked Units",
                               cell: (p) => (
                                 <span className="text-xs font-semibold text-foreground">
-                                  {p.garmentIds.length} Garments
+                                  {p.garmentIds?.length || 0} Garments
                                 </span>
                               ),
                             },
@@ -534,7 +534,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                   Total Packed
                                 </span>
                                 <span className="font-semibold text-foreground">
-                                  {viewProductsBox.garmentIds.length} Garments
+                                  {viewProductsBox.garmentIds?.length || 0} Garments
                                 </span>
                               </div>
                               <div>
@@ -561,7 +561,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                  {viewProductsBox.garmentIds.map((gid, idx) => {
+                                  {(viewProductsBox.garmentIds || []).map((gid, idx) => {
                                     const g = garmentMap.get(gid);
                                     const isHeld = Boolean(g?.hold);
 

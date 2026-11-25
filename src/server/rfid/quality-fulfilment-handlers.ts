@@ -26,6 +26,7 @@ import {
 import {
   getPersistedFulfilmentEligibility,
   executeWarehouseCartonIntake,
+  dispatchBoxScan,
 } from "../fulfilment/fulfilment-service";
 import { publishPublicGarmentPayload } from "../public/public-service";
 
@@ -468,6 +469,37 @@ export class PackingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
       (await tx.staff_users.findFirstOrThrow()).id;
 
     const now = new Date();
+
+    // Link into active open package if available
+    try {
+      const openPkg = await tx.packages.findFirst({
+        where: { status: "open" },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (openPkg) {
+        const existingItem = await tx.package_items.findFirst({
+          where: {
+            package_id: openPkg.id,
+            garment_id: garment.id,
+            removed_at: null,
+          },
+        });
+        if (!existingItem) {
+          await tx.package_items.create({
+            data: {
+              package_id: openPkg.id,
+              garment_id: garment.id,
+              added_by: staffUserId,
+              added_at: now,
+            },
+          });
+        }
+      }
+    } catch {
+      // Optional package link
+    }
+
     const traceEvent = await tx.trace_events.create({
       data: {
         event_type: "garment_packed",
@@ -813,6 +845,7 @@ export class WarehouseScanHandler implements DomainScanHandler<ScanOutcomeResult
 /**
  * Station 9: Dispatch Scan Handler.
  * Gate: Evaluates package and shipment eligibility. Blocks if any garment has an active hold.
+ * Supports both aggregate Master Box scans and individual garment scans.
  */
 export class DispatchScanHandler implements DomainScanHandler<ScanOutcomeResult> {
   readonly stationCode: RfidStationCode = "dispatch";
@@ -822,45 +855,130 @@ export class DispatchScanHandler implements DomainScanHandler<ScanOutcomeResult>
     tx: PrismaTransactionClient,
     context?: DomainScanContext,
   ): Promise<PreparedScanSubject> {
-    const tagUid = normalizeTagUid(envelope.tagUid);
+    const rawUid = envelope.tagUid ? envelope.tagUid.trim() : "";
+    const tagUid = normalizeTagUid(rawUid);
 
+    // 1. Check if scanned tag is a package/carton
+    let pkg = await tx.packages.findFirst({
+      where: {
+        OR: [
+          ...(isValidUuid(rawUid) ? [{ id: rawUid }] : []),
+          { code: rawUid },
+          { code: tagUid },
+          { code: { equals: rawUid, mode: "insensitive" } },
+          { code: { equals: tagUid, mode: "insensitive" } },
+        ],
+      },
+      include: {
+        package_items: {
+          where: { removed_at: null },
+          include: {
+            garments: {
+              include: {
+                garment_holds: { where: { released_at: null } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (pkg) {
+      if (!pkg.package_items || pkg.package_items.length === 0) {
+        throw ApiError.badRequest(
+          `Cannot dispatch empty box — 0 products linked to ${pkg.code}.`,
+          { packageCode: pkg.code },
+          "WT_ERR_EMPTY_PACKAGE",
+        );
+      }
+      const holdItem = pkg.package_items.find((item) => item.garments.garment_holds.length > 0);
+      if (holdItem) {
+        throw ApiError.badRequest(
+          `Dispatch departure blocked: Garment '${holdItem.garments.code}' inside carton '${pkg.code}' has an active quality hold.`,
+          { garmentId: holdItem.garments.id },
+          "WT_ERR_DISPATCH_HOLD_ACTIVE",
+        );
+      }
+      return {
+        kind: "garment",
+        subjectId: pkg.id,
+        subjectCode: pkg.code,
+        isNewEnrollment: false,
+        tagUid: rawUid,
+      };
+    }
+
+    // 2. Check if bound to a garment (individual garment tag scan or unit test)
     const binding = await tx.rfid_tag_bindings.findFirst({
-      where: { tag_uid: tagUid, unbound_at: null },
+      where: {
+        OR: [
+          { tag_uid: tagUid, unbound_at: null },
+          { tag_identifier: rawUid, unbound_at: null },
+        ],
+      },
       include: {
         garments: {
           include: {
+            package_items: {
+              where: { removed_at: null },
+              include: {
+                packages: {
+                  include: {
+                    package_items: {
+                      where: { removed_at: null },
+                      include: {
+                        garments: {
+                          include: {
+                            garment_holds: { where: { released_at: null } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
             garment_holds: { where: { released_at: null } },
           },
         },
       },
     });
 
-    if (!binding || !binding.garment_id || !binding.garments) {
-      throw ApiError.badRequest(
-        `Card UID '${tagUid}' is not actively bound to a garment.`,
-        { tagUid },
-        "WT_ERR_UNKNOWN_CARD",
-      );
+    if (binding?.garments) {
+      const garment = binding.garments;
+      if (garment.garment_holds.length > 0) {
+        throw ApiError.badRequest(
+          `Dispatch departure blocked: Garment '${garment.code}' has an active quality hold.`,
+          { garmentId: garment.id },
+          "WT_ERR_DISPATCH_HOLD_ACTIVE",
+        );
+      }
+      const rawPkgItems: any = garment.package_items;
+      const candidatePkg = Array.isArray(rawPkgItems) ? rawPkgItems[0]?.packages : rawPkgItems?.packages;
+      if (candidatePkg) {
+        return {
+          kind: "garment",
+          subjectId: candidatePkg.id,
+          subjectCode: candidatePkg.code,
+          isNewEnrollment: false,
+          tagUid: rawUid,
+        };
+      }
+      return {
+        kind: "garment",
+        subjectId: garment.id,
+        subjectCode: garment.code,
+        isNewEnrollment: false,
+        tagUid: rawUid,
+        tagBindingId: binding.id,
+      };
     }
 
-    const garment = binding.garments;
-
-    if (garment.garment_holds.length > 0) {
-      throw ApiError.badRequest(
-        `Dispatch departure blocked: Garment '${garment.code}' has an active quality hold.`,
-        { garmentId: garment.id },
-        "WT_ERR_DISPATCH_HOLD_ACTIVE",
-      );
-    }
-
-    return {
-      kind: "garment",
-      subjectId: garment.id,
-      subjectCode: garment.code,
-      isNewEnrollment: false,
-      tagUid,
-      tagBindingId: binding.id,
-    };
+    throw ApiError.badRequest(
+      `Unrecognised Box or Garment Tag: Tag UID '${rawUid}' is not registered.`,
+      { tagUid: rawUid },
+      "WT_ERR_UNKNOWN_CARD",
+    );
   }
 
   async process(
@@ -869,56 +987,82 @@ export class DispatchScanHandler implements DomainScanHandler<ScanOutcomeResult>
     tx: PrismaTransactionClient,
     context?: DomainScanContext,
   ): Promise<ScanOutcomeResult> {
-    const staffUserId =
-      context?.actor?.actorId ??
-      (context as any)?.operator?.actorId ??
-      (await tx.staff_users.findFirstOrThrow()).id;
+    const actor = context?.actor ?? (context as any)?.operator ?? {
+      actorId: (await tx.staff_users.findFirstOrThrow()).id,
+      username: "dispatch.operator",
+      displayName: "Dispatch Associate",
+      role: "logistics",
+      department: "dispatch",
+      authenticatedAt: new Date(),
+    };
 
-    const now = new Date();
-    await tx.garments.update({
-      where: { id: subject.subjectId },
-      data: { stage: "dispatched", revision: { increment: 1 } },
-    });
-    const traceEvent = await tx.trace_events.create({
-      data: {
-        event_type: "shipment_dispatched",
-        subject_revision: 1,
-        garment_id: subject.subjectId,
-        actor_id: staffUserId,
-        details: { dispatched: true },
-        occurred_at: now,
-        recorded_at: now,
-      },
-    });
-
-    await createInternalCommitment(
-      {
-        traceEventId: traceEvent.id,
-        payload: {
-          eventType: "shipment_dispatched",
-          garmentId: subject.subjectId,
-          timestamp: traceEvent.occurred_at.toISOString(),
+    // If this was an individual garment scan not associated with a carton (e.g. legacy/direct unit test)
+    if (subject.tagBindingId) {
+      const staffUserId = actor.actorId;
+      const now = new Date();
+      await tx.garments.update({
+        where: { id: subject.subjectId },
+        data: { stage: "dispatched", revision: { increment: 1 } },
+      });
+      const traceEvent = await tx.trace_events.create({
+        data: {
+          event_type: "shipment_dispatched",
+          subject_revision: 1,
+          garment_id: subject.subjectId,
+          actor_id: staffUserId,
+          details: { dispatched: true },
+          occurred_at: now,
+          recorded_at: now,
         },
-      },
-      tx,
-    );
+      });
 
-    try {
-      await publishPublicGarmentPayload(tx, subject.subjectId, staffUserId);
-    } catch (pubErr) {
-      console.warn(`[DISPATCH_SCAN_WARN] Public payload publication skipped for garment ${subject.subjectId}:`, pubErr);
+      await createInternalCommitment(
+        {
+          traceEventId: traceEvent.id,
+          payload: {
+            eventType: "shipment_dispatched",
+            garmentId: subject.subjectId,
+            timestamp: traceEvent.occurred_at.toISOString(),
+          },
+        },
+        tx,
+      );
+
+      try {
+        await publishPublicGarmentPayload(tx, subject.subjectId, staffUserId);
+      } catch (pubErr) {
+        console.warn(`[DISPATCH_SCAN_WARN] Public payload publication skipped for garment ${subject.subjectId}:`, pubErr);
+      }
+
+      return {
+        scanId: envelope.scanId,
+        outcome: "accepted",
+        outcomeCode: "DISPATCH_ACCEPTED",
+        outcomeMessage: `Garment ${subject.subjectCode} cleared dispatch departure gate`,
+        stationCode: "dispatch",
+        subjectKind: "garment",
+        subjectId: subject.subjectId,
+        subjectCode: subject.subjectCode,
+        processedAt: new Date().toISOString(),
+      };
+    }
+
+    // Master carton / box scan: delegate to authoritative dispatchBoxScan
+    const outcome = await dispatchBoxScan(tx, actor, envelope.tagUid);
+    if (outcome.resolution !== "accepted") {
+      throw ApiError.badRequest(outcome.rejectReason || "Dispatch scan rejected", undefined, "WT_ERR_DISPATCH_REJECTED");
     }
 
     return {
       scanId: envelope.scanId,
       outcome: "accepted",
       outcomeCode: "DISPATCH_ACCEPTED",
-      outcomeMessage: `Garment ${subject.subjectCode} cleared dispatch departure gate`,
+      outcomeMessage: outcome.details?.message || `Carton ${subject.subjectCode} cleared dispatch gate`,
       stationCode: "dispatch",
-      subjectKind: "garment",
+      subjectKind: subject.kind,
       subjectId: subject.subjectId,
       subjectCode: subject.subjectCode,
-      processedAt: new Date().toISOString(),
+      processedAt: outcome.at,
     };
   }
 }

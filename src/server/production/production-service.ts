@@ -499,7 +499,7 @@ export async function createProductionOrder(
         code: orderCode,
         workflow_version_id: workflowVersionId,
         product_spec_version_id: spec.id,
-        planned_quantity: input.qty,
+        planned_quantity: Math.max(1, Math.round(Number(input.qty || 10))),
         status: "draft",
         planned_for: input.dueDate ? new Date(input.dueDate) : null,
         created_by: staffUserId,
