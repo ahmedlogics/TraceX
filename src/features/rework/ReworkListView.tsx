@@ -99,7 +99,6 @@ export function ReworkListView() {
             ? `Production repair queue for ${departmentLabels[me.department]}.`
             : "Factory-wide defect rework cases, repair assignments, and reinspection clearance."
         }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Rework" }]}
       />
 
       <Loadable query={qRework}>

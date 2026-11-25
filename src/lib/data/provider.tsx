@@ -19,7 +19,7 @@ export function getDataMode(): DataMode {
     return "live";
   }
 
-  // 1. Explicitly toggled user selection in localStorage takes top priority
+  // 1. Explicit user selection in localStorage takes absolute priority
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem(DATA_MODE_STORAGE_KEY);
@@ -29,7 +29,7 @@ export function getDataMode(): DataMode {
     }
   }
 
-  // 2. Default build-time environment mode when no user preference has been set in browser
+  // 2. Explicit environment override / default configuration when no explicit selection is stored
   const envMode = import.meta.env?.["VITE_DATA_MODE"] as string | undefined;
   if (envMode === "live") return "live";
   if (envMode === "mock") return "mock";

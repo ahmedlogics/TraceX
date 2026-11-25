@@ -1,8 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertCircle,
   AlertTriangle,
-  ArrowRight,
   Check,
   CheckCircle2,
   Clock,
@@ -11,10 +9,10 @@ import {
   Radio,
   RefreshCw,
   ScanLine,
-  Scissors,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  X,
   XCircle,
 } from "lucide-react";
 import { AppLink } from "@/app/navigation";
@@ -23,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
 import { Field, ScopeNote } from "@/components/wt/forms";
-import { fmt, KeyValue, Section } from "@/components/wt/layout";
+import { fmt, KeyValue, PageHeader, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
 import type { MaterialLot, ProductionOrder, ScanOutcome } from "@/domain/types";
@@ -37,7 +35,13 @@ function getRequiredFabric(order: ProductionOrder): number {
   return Math.round(order.plannedQty * 2.0 * 10) / 10;
 }
 
-export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
+export function IssuePanel({
+  stationData,
+  headerActions,
+}: {
+  stationData?: RfidStationData | undefined;
+  headerActions?: React.ReactNode | undefined;
+}) {
   const me = useMe();
   const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
@@ -47,13 +51,29 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
   const [selectedOrderId, setSelectedOrderId] = useState<string>("");
   const [scanUid, setScanUid] = useState<string>("");
   const [queueTab, setQueueTab] = useState<"pending" | "issued">("pending");
+  // Only show scan feedback (error or success) after a scan occurs in this session, never on screen arrival
+  const [activeOutcome, setActiveOutcome] = useState<ScanOutcome | null>(null);
+  const lastSeenScanAt = useRef<string | null>(stationData?.lastScanOutcome?.at ?? null);
+  const scannerRef = useRef<HTMLDivElement>(null);
+
+  // Listen for new hardware scan arrivals from Station 2 reader
+  useEffect(() => {
+    const incoming = stationData?.lastScanOutcome;
+    if (!incoming || !incoming.at) return;
+    if (incoming.at !== lastSeenScanAt.current) {
+      lastSeenScanAt.current = incoming.at;
+      setActiveOutcome(incoming);
+    }
+  }, [stationData?.lastScanOutcome]);
 
   const isStoreStaff =
     me.role === "M" || me.department === "raw-store" || me.username === "rawstore.demo";
+  const isLive = getDataMode() === "live";
 
-  const activeCtx = stationData.activeContext;
+  const activeCtx = stationData?.activeContext;
   const isCtxForThisStation = activeCtx && activeCtx.stationCode === "fabric_issue";
-  const lastOutcome = stationData.lastScanOutcome;
+  const lastOutcome = activeOutcome;
+  const showFeedback = Boolean(activeOutcome);
 
   return (
     <Loadable query={qOrders}>
@@ -61,12 +81,18 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
         <Loadable query={qLots}>
           {(lots) => {
             // Pending orders: approved/planned orders awaiting fabric allocation
-            const pendingOrders = orders.filter(
-              (o) =>
-                (o.status === "approved" || o.status === "planned") &&
-                (!o.lotCodes || o.lotCodes.length === 0) &&
-                (!o.issues || o.issues.length === 0),
-            );
+            const pendingOrders = orders
+              .filter(
+                (o) =>
+                  (o.status === "approved" || o.status === "planned") &&
+                  (!o.lotCodes || o.lotCodes.length === 0) &&
+                  (!o.issues || o.issues.length === 0),
+              )
+              .sort((a, b) => {
+                if (!a.dueDate) return 1;
+                if (!b.dueDate) return -1;
+                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+              });
 
             // Issued orders: already have fabric issued
             const issuedOrders = orders.filter(
@@ -78,45 +104,68 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
 
             const displayedOrders = queueTab === "pending" ? pendingOrders : issuedOrders;
 
-            // Active target order is either explicitly selected, or context order, or first pending order
+            // Active target order is either explicitly selected, or context order, or first pending order (only in pending queue)
             const targetOrderId =
-              selectedOrderId ||
-              (activeCtx?.payload && (activeCtx.payload as any).orderId) ||
-              pendingOrders[0]?.id ||
-              "";
+              queueTab === "issued"
+                ? ""
+                : selectedOrderId === "__none__"
+                  ? ""
+                  : selectedOrderId ||
+                    (activeCtx?.payload && (activeCtx.payload as any).orderId) ||
+                    pendingOrders[0]?.id ||
+                    "";
 
             const targetOrder = orders.find((o) => o.id === targetOrderId);
             const targetRequiredFabric = targetOrder ? getRequiredFabric(targetOrder) : 8.0;
 
-            const acceptedLots = lots.filter((l) => l.status === "accepted" && l.balanceQty > 0);
-            const totalAcceptedMeters = acceptedLots.reduce((sum, l) => sum + (Number(l.balanceQty) || 0), 0);
-            const unapprovedLots = lots.filter((l) => l.status !== "accepted" || l.balanceQty <= 0);
-
             // Handle target order selection and arm context
             const handleSelectOrder = (order: ProductionOrder) => {
               setSelectedOrderId(order.id);
+              setTimeout(() => {
+                scannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 50);
               const requiredQty = getRequiredFabric(order);
               void run(
-                (c) =>
-                  c.prepareActionContext("fabric_issue", "confirm_issue", {
+                async (c) => {
+                  const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
                     kind: "confirm_issue",
                     orderId: order.id,
                     qty: requiredQty,
-                  }),
+                  });
+                  if (ctxId) {
+                    await c.acknowledgeContext(ctxId);
+                  }
+                  return ctxId;
+                },
                 `Armed Scanner 2 for ${order.id} (${requiredQty} m required). Ready to scan bundle tag.`,
               );
+            };
+
+            const handleDeselectOrder = () => {
+              setSelectedOrderId("__none__");
+              if (activeCtx) {
+                void run((c) => c.cancelContext(activeCtx.id), "Order deselected. Scanner 2 disarmed.");
+              }
             };
 
             const handleOrderCreated = (newOrderId: string) => {
               setSelectedOrderId(newOrderId);
               void qOrders.refetch();
+              setTimeout(() => {
+                scannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 50);
               void run(
-                (c) =>
-                  c.prepareActionContext("fabric_issue", "confirm_issue", {
+                async (c) => {
+                  const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
                     kind: "confirm_issue",
                     orderId: newOrderId,
                     qty: 8.0,
-                  }),
+                  });
+                  if (ctxId) {
+                    await c.acknowledgeContext(ctxId);
+                  }
+                  return ctxId;
+                },
                 `Order ${newOrderId} created and armed for Scanner 2. Ready to scan bundle tag!`,
               );
             };
@@ -127,14 +176,30 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
               if (isMock && targetUid) {
                 void run(
                   async (c) => {
-                    if (targetOrderId && (!activeCtx || (activeCtx.payload as any)?.orderId !== targetOrderId)) {
-                      await c.prepareActionContext("fabric_issue", "confirm_issue", {
-                        kind: "confirm_issue",
-                        orderId: targetOrderId,
-                        qty: targetRequiredFabric,
-                      });
+                    // Ensure active context exists and is acknowledged for target order before scan
+                    if (
+                      targetOrderId &&
+                      (!activeCtx ||
+                        (activeCtx.payload as any)?.orderId !== targetOrderId ||
+                        activeCtx.status !== "ready")
+                    ) {
+                      try {
+                        const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
+                          kind: "confirm_issue",
+                          orderId: targetOrderId,
+                          qty: targetRequiredFabric,
+                        });
+                        if (ctxId) {
+                          await c.acknowledgeContext(ctxId);
+                        }
+                      } catch {
+                        // context already armed or prepared
+                      }
                     }
-                    return await c.resolveRfidScan(targetUid);
+                    const outcome = await c.resolveRfidScan(targetUid);
+                    lastSeenScanAt.current = outcome.at;
+                    setActiveOutcome(outcome);
+                    return outcome;
                   },
                   (outcome) => {
                     setScanUid("");
@@ -151,13 +216,21 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
               // Polling loop to wait for hardware scan from ESP32 on Reader 1 (GPIO 12)
               void run(
                 async (c) => {
-                  if (targetOrderId && (!activeCtx || (activeCtx.payload as any)?.orderId !== targetOrderId)) {
+                  if (
+                    targetOrderId &&
+                    (!activeCtx ||
+                      (activeCtx.payload as any)?.orderId !== targetOrderId ||
+                      activeCtx.status !== "ready")
+                  ) {
                     try {
-                      await c.prepareActionContext("fabric_issue", "confirm_issue", {
+                      const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
                         kind: "confirm_issue",
                         orderId: targetOrderId,
                         qty: targetRequiredFabric,
                       });
+                      if (ctxId) {
+                        await c.acknowledgeContext(ctxId);
+                      }
                     } catch {
                       // context already armed or prepared
                     }
@@ -166,15 +239,23 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                   while (Date.now() - startTime < 35000) {
                     const data = await c.getRfidStationData("fabric_issue");
                     if (data.lastScanOutcome) {
-                      if (data.lastScanOutcome.resolution === "accepted") {
-                        void qOrders.refetch();
-                        void qLots.refetch();
-                        return data.lastScanOutcome;
+                      const outcomeTime = new Date(data.lastScanOutcome.at).getTime();
+                      if (
+                        outcomeTime >= startTime - 2000 &&
+                        data.lastScanOutcome.at !== lastSeenScanAt.current
+                      ) {
+                        lastSeenScanAt.current = data.lastScanOutcome.at;
+                        setActiveOutcome(data.lastScanOutcome);
+                        if (data.lastScanOutcome.resolution === "accepted") {
+                          void qOrders.refetch();
+                          void qLots.refetch();
+                          return data.lastScanOutcome;
+                        }
+                        throw new Error(
+                          data.lastScanOutcome.rejectReason ??
+                            "Hardware scan on Scanner 2 was rejected by workstation rules.",
+                        );
                       }
-                      throw new Error(
-                        data.lastScanOutcome.rejectReason ??
-                          "Hardware scan on Scanner 2 was rejected by workstation rules.",
-                      );
                     }
 
                     const freshOrders = await c.listOrders();
@@ -185,12 +266,16 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                     ) {
                       void qOrders.refetch();
                       void qLots.refetch();
-                      return {
+                      const fallbackOutcome: ScanOutcome = {
                         resolution: "accepted",
                         uid: "PHYSICAL_CARD",
                         orderId: updatedOrder.id,
                         subjectId: "FAB-BUNDLE",
-                      } as ScanOutcome;
+                        at: new Date().toISOString(),
+                      };
+                      lastSeenScanAt.current = fallbackOutcome.at;
+                      setActiveOutcome(fallbackOutcome);
+                      return fallbackOutcome;
                     }
 
                     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -214,218 +299,47 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
 
             return (
               <div className="space-y-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold">
-                    <Radio className="size-3.5 text-primary" />
-                    <span>Raw Store Issuance Workstation</span>
-                    <span className="rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-semibold">
-                      {pendingOrders.length} Pending
-                    </span>
-                  </div>
+                <PageHeader
+                  title="Raw Store Workstation"
+                  description="Station 2 · Fabric allocation and bundle card enrollment for production cutting."
+                  actions={headerActions}
+                />
 
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">Active Workstation:</span>
-                    <span className="rounded bg-primary/10 px-2 py-0.5 font-semibold text-primary">
-                      Station 2 (Scanner 2)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-6">
-                    {/* Header & Station Hardware Status Banner */}
-                    <div className="rounded-xl border-2 border-primary/40 bg-card p-5 shadow-sm space-y-4">
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="wt-id rounded bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
-                              STATION 2
-                            </span>
-                            <span className="text-xs font-semibold text-muted-foreground">
-                              Fabric Issue Workstation
-                            </span>
-                          </div>
-                          <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                            Station 2 · Fabric Issue (Scanner 2)
-                          </h2>
-                          <p className="text-xs text-muted-foreground">
-                            Active Operator:{" "}
-                            <span className="font-semibold text-foreground">
-                              {me.username} ({me.displayName})
-                            </span>{" "}
-                            · Department:{" "}
-                            <span className="font-medium text-foreground">
-                              Raw Material Store (raw-store)
-                            </span>
-                          </p>
-                        </div>
-
-                        <div className="flex flex-col items-start gap-2 md:items-end">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Scanner 2 Status:</span>
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                              Green / Armed &amp; Connected
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Fast automated bundle card enrollment &amp; order linking
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Live Target Order Context Bar */}
-                      {targetOrder ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground font-bold">
-                              <Scissors className="size-3.5" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-foreground">
-                                Active Target:{" "}
-                                <span className="wt-id text-primary font-bold">{targetOrder.id}</span>{" "}
-                                — {targetOrder.product} ({targetOrder.plannedQty} pcs)
-                              </p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">
-                                Required Fabric:{" "}
-                                <strong className="text-foreground">{targetRequiredFabric} m</strong> ·{" "}
-                                Due Date: <span className="font-medium text-foreground">{targetOrder.dueDate}</span> ·{" "}
-                                Status:{" "}
-                                <span className="uppercase font-semibold">{targetOrder.status}</span>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {(targetOrder.lotCodes && targetOrder.lotCodes.length > 0) || (targetOrder.issues && targetOrder.issues.length > 0) ? (
-                              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                ✓ Fabric Already Issued ({targetOrder.lotCodes?.[0] || "Lot"})
-                              </span>
-                            ) : (
-                              <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
-                                Scanner 2 Ready for Bundle Tag
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning-foreground flex items-center gap-2">
-                          <AlertCircle className="size-4 shrink-0 text-warning" />
-                          <span>No target order selected. Click &ldquo;Select for Issue&rdquo; on an order in the queue below.</span>
-                        </div>
-                      )}
-
-                      {/* Live Scan Feedback Box */}
-                      {lastOutcome && (
-                        <div
-                          className={`rounded-lg border p-4 text-xs shadow-sm transition-all duration-200 ${
-                            lastOutcome.resolution === "accepted"
-                              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100"
-                              : "border-destructive/50 bg-destructive/10 text-destructive-foreground"
+                {/* Active Production Orders Queue */}
+                <Section
+                  title={
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setQueueTab("pending")}
+                          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                            queueTab === "pending"
+                              ? "bg-card text-foreground shadow-xs font-semibold"
+                              : "text-muted-foreground hover:text-foreground"
                           }`}
                         >
-                          <div className="flex items-start gap-3">
-                            {lastOutcome.resolution === "accepted" ? (
-                              <CheckCircle2 className="size-5 shrink-0 text-emerald-600 mt-0.5" />
-                            ) : (
-                              <XCircle className="size-5 shrink-0 text-destructive mt-0.5" />
-                            )}
-                            <div className="space-y-1.5 flex-1">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="font-bold text-sm tracking-tight">
-                                  {lastOutcome.resolution === "accepted"
-                                    ? "✓ Scan Accepted: Bundle Linked to Order → Issued to Cutting"
-                                    : "✕ Scan Rejected at Station 2"}
-                                </p>
-                                <span className="text-[11px] opacity-75 font-mono">
-                                  {fmt.dateTime(lastOutcome.at)}
-                                </span>
-                              </div>
-
-                              {lastOutcome.resolution === "accepted" ? (
-                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-md border border-emerald-500/30 bg-card/60 p-2.5 mt-2 text-foreground">
-                                  <div>
-                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground">
-                                      Order ID
-                                    </span>
-                                    <p className="font-bold wt-id">{lastOutcome.orderId ?? targetOrderId}</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground">
-                                      Matched Lot ID
-                                    </span>
-                                    <p className="font-bold wt-id text-primary">{lastOutcome.lotCode ?? lastOutcome.subjectId}</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground">
-                                      Issued Meterage
-                                    </span>
-                                    <p className="font-bold text-emerald-600">{lastOutcome.issuedQty ?? targetRequiredFabric} m</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground">
-                                      Remaining Balance
-                                    </span>
-                                    <p className="font-bold">{lastOutcome.remainingBalance ?? 0} m</p>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  <p className="font-semibold text-destructive text-xs">
-                                    {lastOutcome.rejectReason ?? lastOutcome.resolution}
-                                  </p>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Card UID scanned: <span className="font-mono font-bold text-foreground">{lastOutcome.uid}</span>. Target order {targetOrderId} remains open awaiting valid fabric roll.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                          Pending Fabric ({pendingOrders.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQueueTab("issued")}
+                          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                            queueTab === "issued"
+                              ? "bg-card text-foreground shadow-xs font-semibold"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Already Issued ({issuedOrders.length})
+                        </button>
+                      </div>
+                      <PlanOrderDialog
+                        triggerLabel="+ New Order"
+                        onSuccess={handleOrderCreated}
+                      />
                     </div>
-
-                    {/* Active Production Orders Queue */}
-                    <Section
-                      title="Production Orders Queue"
-                      description="Select an actionable approved order to arm Scanner 2. Completed issues are preserved separately."
-                      actions={
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
-                            <button
-                              type="button"
-                              onClick={() => setQueueTab("pending")}
-                              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                                queueTab === "pending"
-                                  ? "bg-card text-foreground shadow-xs font-semibold"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              Pending Fabric ({pendingOrders.length})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setQueueTab("issued")}
-                              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                                queueTab === "issued"
-                                  ? "bg-card text-foreground shadow-xs font-semibold"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
-                            >
-                              Already Issued ({issuedOrders.length})
-                            </button>
-                          </div>
-                          <PlanOrderDialog
-                            triggerLabel="+ New Order"
-                            onSuccess={handleOrderCreated}
-                          />
-                          <Button asChild size="sm" variant="ghost" className="h-7 text-xs gap-1">
-                            <AppLink href={paths.orders}>
-                              Manage in Orders <ArrowRight className="size-3" />
-                            </AppLink>
-                          </Button>
-                        </div>
-                      }
-                    >
+                  }
+                >
                       {displayedOrders.length === 0 ? (
                         <EmptyState
                           title={
@@ -467,12 +381,12 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                             {
                               header: "Order ID",
                               cell: (o) => (
-                                <div>
-                                  <span className="wt-id font-bold text-xs">{o.id}</span>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    Due: {o.dueDate}
-                                  </p>
-                                </div>
+                                <AppLink
+                                  href={paths.order(o.id)}
+                                  className="wt-id font-bold text-xs hover:underline text-primary"
+                                >
+                                  {o.id}
+                                </AppLink>
                               ),
                             },
                             {
@@ -501,8 +415,12 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                               ),
                             },
                             {
-                              header: "Order Status",
-                              cell: (o) => <StatusBadge status={o.status} />,
+                              header: "Due Date",
+                              cell: (o) => (
+                                <span className="text-xs font-medium">
+                                  {o.dueDate ? fmt.date(o.dueDate) : "—"}
+                                </span>
+                              ),
                             },
                             {
                               header: "Fabric Allocation",
@@ -526,27 +444,44 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                               header: "Workstation Action",
                               cell: (o) => {
                                 const isTarget = o.id === targetOrderId;
+                                const isArmed = Boolean(
+                                  activeCtx &&
+                                    activeCtx.stationCode === "fabric_issue" &&
+                                    (activeCtx.payload as any)?.orderId === o.id &&
+                                    activeCtx.status === "ready",
+                                );
                                 const isIssued =
                                   (o.lotCodes && o.lotCodes.length > 0) ||
-                                  (o.issues && o.issues.length > 0);
+                                  (o.issues && o.issues.length > 0) ||
+                                  (o.status === "in-progress" && (o.lotIds?.length ?? 0) > 0);
 
                                 if (isIssued && queueTab === "issued") {
                                   return (
-                                    <span className="text-[11px] text-muted-foreground italic">
-                                      Allocation complete
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] text-muted-foreground italic">
+                                        Allocation complete
+                                      </span>
+                                      <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-xs">
+                                        <AppLink href={paths.order(o.id)}>
+                                          View Order →
+                                        </AppLink>
+                                      </Button>
+                                    </div>
                                   );
                                 }
 
                                 return (
                                   <Button
                                     size="sm"
-                                    variant={isTarget ? "default" : "outline"}
+                                    variant={isArmed ? "default" : isTarget ? "secondary" : "outline"}
                                     className="h-7 text-xs gap-1"
                                     disabled={pending}
-                                    onClick={() => handleSelectOrder(o)}
+                                    onClick={() =>
+                                      isTarget ? handleDeselectOrder() : handleSelectOrder(o)
+                                    }
+                                    title={isTarget ? "Click to deselect" : "Select order for fabric issue"}
                                   >
-                                    {isTarget ? (
+                                    {isArmed ? (
                                       <>
                                         <Check className="size-3" /> Ready / Armed
                                       </>
@@ -564,243 +499,291 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                       )}
                     </Section>
 
-                    {/* Scanner 2 Interactive Card Tap & Fast RFID Interface */}
-                    <div className="grid gap-6 lg:grid-cols-2">
-                      <Section
-                        title={isMock ? "Station 2 Scanner Simulation & Tap" : "Station 2 Hardware Scanner"}
-                        description={
-                          isMock
-                            ? "Simulate presenting fabric bundle RFID tag to Scanner 2 to link it to the selected order."
-                            : "Present physical fabric bundle RFID tag to Scanner 2 (GPIO 12) to automatically validate and link it to the selected order."
-                        }
-                      >
-                        {isMock ? (
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Field
-                                label="Bundle Card Tag UID (Simulation)"
-                                htmlFor="s2-uid"
-                                hint="Enter bundle ID (e.g. FAB-001), card UID (e.g. 04A1B2C3), or tap a card below."
-                              >
-                                <Input
-                                  id="s2-uid"
-                                  value={scanUid}
-                                  onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                  placeholder="e.g. FAB-001 or 04A1B2C3"
-                                  className="font-mono bg-card"
-                                />
-                              </Field>
-                              <div className="flex flex-wrap items-center gap-2 pt-1">
-                                <Button
-                                  disabled={pending}
-                                  onClick={() => {
-                                    if (isMock && !scanUid.trim()) {
-                                      const firstAvailable = acceptedLots.find((l) => l.rfidUid);
-                                      if (firstAvailable?.rfidUid) {
-                                        setScanUid(firstAvailable.rfidUid);
-                                        handleScan(firstAvailable.rfidUid);
-                                        return;
-                                      }
-                                    }
-                                    handleScan();
-                                  }}
-                                  className="gap-1.5"
-                                >
-                                  {pending ? (
-                                    <>
-                                      <span className="relative flex h-2.5 w-2.5 mr-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                    {/* Scanner 2 Interactive Card Tap & Fast RFID Interface (Active only for pending orders awaiting issue) */}
+                    {queueTab === "pending" && (
+                      <>
+                        <div ref={scannerRef} className="scroll-mt-6">
+                          <Section
+                            title="Station 2 Scanner Simulation & Tap"
+                            actions={
+                              targetOrderId ? (
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  <span className="text-muted-foreground">Order Target:</span>
+                                  <span className="font-mono font-bold text-foreground bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                                    {targetOrderId} ({targetRequiredFabric} m)
+                                  </span>
+                                  {activeCtx &&
+                                    activeCtx.stationCode === "fabric_issue" &&
+                                    (activeCtx.payload as any)?.orderId === targetOrderId &&
+                                    activeCtx.status === "ready" && (
+                                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        <Check className="size-3" /> Armed
                                       </span>
-                                      Simulating RFID Scan...
-                                    </>
-                                  ) : scanUid.trim() ? (
-                                    <>
-                                      <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ScanLine className="size-4" /> Simulate Bundle Scan
-                                    </>
-                                  )}
-                                </Button>
-                                {scanUid && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={pending}
-                                    onClick={() => setScanUid("")}
-                                  >
-                                    Clear
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Quick Pre-fill Test Chips for Demonstration */}
-                            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                                One-Click Test Cards:
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {lots.map((l) => (
-                                  <Button
-                                    key={l.id}
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    className="h-7 text-xs font-mono"
-                                    disabled={pending || !l.rfidUid}
-                                    onClick={() => {
-                                      if (l.rfidUid) {
-                                        setScanUid(l.rfidUid);
-                                        handleScan(l.rfidUid);
-                                      }
-                                    }}
-                                    title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
-                                  >
-                                    {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
-                                  </Button>
-                                ))}
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs font-mono text-destructive border-destructive/30"
-                                  onClick={() => {
-                                    setScanUid("04999999");
-                                    handleScan("04999999");
-                                  }}
-                                  title="Unrecognised Card test"
-                                >
-                                  04999999 (Unbound Card)
-                                </Button>
-                              </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Clicking a card simulates Scanner 2 card tap to test validation, duplicate prevention, and QC clearance guards.
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                              <div className="space-y-1">
-                                <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                  <Radio className="size-3.5 text-primary animate-pulse" />
-                                  Hardware Scanner 2 Armed &amp; Listening
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  Present physical fabric bundle RFID tag to Scanner 2 (GPIO 12) to issue fabric to Order <strong className="text-foreground">{targetOrderId}</strong>.
-                                </p>
-                              </div>
-                              <Button
-                                disabled={pending}
-                                onClick={() => handleScan()}
-                                className="gap-1.5 shrink-0"
-                              >
-                                {pending ? (
-                                  <>
-                                    <span className="relative flex h-2.5 w-2.5 mr-2">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                                    </span>
-                                    Awaiting Hardware Card Tap (Scanner 2)...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </Section>
-
-                      {/* Available Inspected Bundles (Reference Panel) */}
-                      <Section
-                        title="Available Inspected Bundles (Reference Panel)"
-                        description="Read-only warehouse fabric inventory. Only rolls inspected and accepted by Incoming QC are issuable."
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground border-b pb-2">
-                            <span>Total Usable Stock: <strong className="text-foreground">{totalAcceptedMeters.toFixed(1)} m</strong></span>
-                            <span>{acceptedLots.length} passed rolls</span>
-                          </div>
-
-                          {acceptedLots.length > 0 ? (
-                            <div className="divide-y rounded-lg border bg-card max-h-[320px] overflow-y-auto">
-                              {acceptedLots.map((l) => (
-                                <div
-                                  key={l.id}
-                                  className="flex items-center justify-between p-3 text-xs hover:bg-muted/30 transition-colors"
-                                >
-                                  <div className="space-y-0.5">
+                                    )}
+                                </div>
+                              ) : undefined
+                            }
+                          >
+                            <div className="space-y-4">
+                              {/* Selected Target Order Details for Scan */}
+                              {targetOrder ? (
+                                <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs">
+                                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-primary/15 pb-3">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-bold wt-id">{l.id}</span>
-                                      <span className="font-mono text-[11px] rounded bg-muted px-1.5 py-0.5">
-                                        {l.rfidUid ?? "Unbound"}
+                                      <span className="inline-flex size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                        Selected Order for Issue:
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600">
-                                        <Check className="size-2.5" /> QC Passed
+                                      <span className="wt-id font-mono font-bold text-sm text-primary">
+                                        {targetOrder.id}
                                       </span>
                                     </div>
-                                    <p className="text-muted-foreground line-clamp-1">{l.material}</p>
-                                    <p className="text-[11px] text-foreground">
-                                      Remaining:{" "}
-                                      <strong className="text-emerald-600 font-bold">
-                                        {l.balanceQty} {l.unit ?? "m"}
-                                      </strong>{" "}
-                                      / {l.receivedQty} {l.unit ?? "m"}
-                                    </p>
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                        <CheckCircle2 className="size-3.5" /> Ready for Scan
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 px-2 text-xs gap-1 border-primary/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                                        onClick={handleDeselectOrder}
+                                      >
+                                        <X className="size-3" /> Deselect
+                                      </Button>
+                                    </div>
                                   </div>
 
-                                  {l.rfidUid ? (
+                                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-3 text-xs">
+                                    <div>
+                                      <span className="text-muted-foreground text-[11px] block">Product & Style</span>
+                                      <p className="font-semibold text-foreground text-sm mt-0.5">{targetOrder.product}</p>
+                                      <p className="text-[11px] font-mono text-muted-foreground">{targetOrder.styleCode}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground text-[11px] block">Planned Output</span>
+                                      <p className="font-bold text-foreground text-sm mt-0.5">{targetOrder.plannedQty} pcs</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground text-[11px] block">Required Fabric</span>
+                                      <p className="font-bold text-primary text-sm mt-0.5">{targetRequiredFabric} m</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground text-[11px] block">Due Date</span>
+                                      <p className="font-semibold text-foreground text-sm mt-0.5">
+                                        {targetOrder.dueDate ? fmt.date(targetOrder.dueDate) : "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4 text-center">
+                                  <p className="text-xs text-muted-foreground">
+                                    No order selected for fabric issue.
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground/80 mt-1">
+                                    Click <span className="font-semibold text-foreground">Select for Issue</span> on any order in the queue above to arm Scanner 2.
+                                  </p>
+                                </div>
+                              )}
+
+                              <div className="space-y-2">
+                                <Field
+                                  label="Bundle Card Tag UID"
+                                  htmlFor="s2-uid"
+                                  hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID/Lot ID to test manually."
+                                >
+                                  <Input
+                                    id="s2-uid"
+                                    value={scanUid}
+                                    onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                    placeholder="e.g. BB4A0003 or tap physical card"
+                                    className="font-mono bg-card"
+                                  />
+                                </Field>
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                  <Button
+                                    disabled={pending}
+                                    onClick={() => handleScan()}
+                                    className="gap-1.5"
+                                  >
+                                    {pending ? (
+                                      <>
+                                        <span className="relative flex h-2.5 w-2.5 mr-2">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                        </span>
+                                        Awaiting Hardware Card Tap (Scanner 2)...
+                                      </>
+                                    ) : scanUid.trim() ? (
+                                      <>
+                                        <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
+                                      </>
+                                    )}
+                                  </Button>
+                                  {scanUid && (
                                     <Button
+                                      variant="outline"
                                       size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs text-primary gap-1"
-                                      onClick={() => {
-                                        setScanUid(l.rfidUid!);
-                                        handleScan(l.rfidUid!);
-                                      }}
+                                      disabled={pending}
+                                      onClick={() => setScanUid("")}
                                     >
-                                      Tap <ArrowRight className="size-3" />
+                                      Clear
                                     </Button>
-                                  ) : (
-                                    <span className="text-[10px] text-muted-foreground italic">
-                                      Unassigned
-                                    </span>
                                   )}
                                 </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-lg border border-dashed p-4 text-center space-y-1 bg-muted/20">
-                              <p className="text-xs font-semibold text-foreground">0 QC-Cleared Fabric Rolls Available</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                No rolls currently have cleared stock balance. {unapprovedLots.length} roll(s) in quarantine awaiting Incoming QC evaluation.
-                              </p>
-                            </div>
-                          )}
-
-                          {unapprovedLots.length > 0 && (
-                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs space-y-1">
-                              <div className="flex items-center justify-between font-semibold text-amber-800 dark:text-amber-300">
-                                <span>Quarantine / Awaiting QC ({unapprovedLots.length} rolls)</span>
-                                <AppLink href={paths.lots} className="text-[11px] underline text-amber-600 dark:text-amber-400">
-                                  View in Lots
-                                </AppLink>
                               </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Rolls {unapprovedLots.map((l) => l.id).join(", ")} are in quarantine awaiting Incoming QC inspection before balance becomes issuable.
-                              </p>
+
+                              {/* Quick Pre-fill Test Chips for Demonstration (Mock Mode Only) */}
+                              {!isLive && (
+                                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                    One-Click Test Cards:
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {lots.map((l) => (
+                                      <Button
+                                        key={l.id}
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        className="h-7 text-xs font-mono"
+                                        disabled={pending || !l.rfidUid}
+                                        onClick={() => {
+                                          if (l.rfidUid) {
+                                            setScanUid(l.rfidUid);
+                                            handleScan(l.rfidUid);
+                                          }
+                                        }}
+                                        title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
+                                      >
+                                        {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
+                                      </Button>
+                                    ))}
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs font-mono text-destructive border-destructive/30"
+                                      onClick={() => {
+                                        setScanUid("04999999");
+                                        handleScan("04999999");
+                                      }}
+                                      title="Unrecognised Card test"
+                                    >
+                                      04999999 (Unbound Card)
+                                    </Button>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Clicking a card immediately sends it to Scanner 2 to test validation, duplicate prevention, and QC clearance guards.
+                                  </p>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </Section>
                         </div>
-                      </Section>
-                    </div>
-                  </div>
+
+                    {/* Live Scan Feedback Box */}
+                    {showFeedback && lastOutcome && (
+                      <div
+                        className={`rounded-xl border p-4 text-xs shadow-xs transition-all duration-200 ${
+                          lastOutcome.resolution === "accepted"
+                            ? "border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100"
+                            : "border-rose-400/50 bg-rose-50 dark:bg-rose-950/30 text-rose-950 dark:text-rose-100"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          {lastOutcome.resolution === "accepted" ? (
+                            <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                          ) : (
+                            <XCircle className="size-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                          )}
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p
+                                className={`font-bold text-sm tracking-tight ${
+                                  lastOutcome.resolution === "accepted"
+                                    ? "text-emerald-900 dark:text-emerald-200"
+                                    : "text-rose-900 dark:text-rose-200"
+                                }`}
+                              >
+                                {lastOutcome.resolution === "accepted"
+                                  ? "✓ Scan Accepted: Bundle Linked to Order → Issued to Cutting"
+                                  : "✕ Scan Rejected at Station 2"}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-[11px] font-mono ${
+                                    lastOutcome.resolution === "accepted"
+                                      ? "text-emerald-800/80 dark:text-emerald-300/80"
+                                      : "text-rose-800/80 dark:text-rose-300/80"
+                                  }`}
+                                >
+                                  {fmt.dateTime(lastOutcome.at)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveOutcome(null)}
+                                  className={`inline-flex size-6 items-center justify-center rounded-full transition-colors cursor-pointer ${
+                                    lastOutcome.resolution === "accepted"
+                                      ? "text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-950 dark:text-emerald-300 dark:hover:text-emerald-100"
+                                      : "text-rose-700 hover:bg-rose-500/20 hover:text-rose-950 dark:text-rose-300 dark:hover:text-rose-100"
+                                  }`}
+                                  aria-label="Dismiss scan notification"
+                                  title="Dismiss feedback"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {lastOutcome.resolution === "accepted" ? (
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-lg border border-emerald-500/20 bg-background/80 p-2.5 mt-2 text-foreground">
+                                <div>
+                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                    Order ID
+                                  </span>
+                                  <p className="font-bold wt-id">{lastOutcome.orderId ?? targetOrderId}</p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                    Matched Lot ID
+                                  </span>
+                                  <p className="font-bold wt-id text-primary">{lastOutcome.lotCode ?? lastOutcome.subjectId}</p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                    Issued Meterage
+                                  </span>
+                                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{lastOutcome.issuedQty ?? targetRequiredFabric} m</p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                    Remaining Balance
+                                  </span>
+                                  <p className="font-bold">{lastOutcome.remainingBalance ?? 0} m</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-1 pt-0.5">
+                                <p className="font-semibold text-rose-700 dark:text-rose-300 text-xs">
+                                  {lastOutcome.rejectReason ?? lastOutcome.resolution}
+                                </p>
+                                <p className="text-[11px] text-rose-950/80 dark:text-rose-200/85">
+                                  Card UID scanned: <span className="font-mono font-bold text-foreground">{lastOutcome.uid}</span>. Target order {targetOrderId} remains open awaiting valid fabric roll.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             );
           }}

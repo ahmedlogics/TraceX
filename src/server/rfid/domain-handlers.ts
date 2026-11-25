@@ -910,13 +910,29 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     const garment = binding.garments;
+    // Validate active quality holds
+    let activeHold: any = null;
+    if ("garment_holds" in (tx as any) && typeof (tx as any).garment_holds?.findFirst === "function") {
+      activeHold = await (tx as any).garment_holds.findFirst({
+        where: { garment_id: garment.id, released_at: null },
+      });
+    }
+    if (garment.quality_disposition === "held" || activeHold) {
+      const reason = activeHold?.reason || activeHold?.hold_reason || "Active quality hold in effect";
+      throw ApiError.badRequest(
+        `Garment ${garment.code} has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`,
+        { garmentId: garment.id, holdReason: reason },
+        "WT_ERR_ACTIVE_HOLD",
+      );
+    }
 
     // Validate duplicate scans
-    const existingStitching = (tx as any).trace_events?.findFirst
-      ? await (tx as any).trace_events.findFirst({
-          where: { garment_id: garment.id, event_type: "stitching_completed" },
-        })
-      : null;
+    let existingStitching: any = null;
+    if ("trace_events" in (tx as any) && typeof (tx as any).trace_events?.findFirst === "function") {
+      existingStitching = await (tx as any).trace_events.findFirst({
+        where: { garment_id: garment.id, event_type: "stitching_completed" },
+      });
+    }
     if (garment.stage === "stitched" || garment.stage === "finished" || existingStitching) {
       throw ApiError.conflict(
         `Duplicate scan: Garment ${garment.code} has already completed stitching and advanced to Finishing.`,
@@ -926,7 +942,7 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     // Validate cutting completion and current stage
-    if (garment.stage !== "cut") {
+    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
       throw ApiError.badRequest(
         `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'. Expected stage 'cut' (cutting completed).`,
         { garmentId: garment.id, stage: garment.stage },

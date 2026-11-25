@@ -616,36 +616,77 @@ export async function executeWarehouseCartonIntake(
           include: {
             package_items: {
               where: { removed_at: null },
-              include: {
-                packages: {
-                  include: {
-                    warehouse_stock: {
-                      include: { warehouse_bins: true },
-                    },
-                    package_items: {
-                      where: { removed_at: null },
-                      include: {
-                        garments: {
-                          include: {
-                            garment_holds: {
-                              where: { released_at: null },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
             },
           },
         },
       },
     });
 
-    const candidatePkg = (binding as any)?.garments?.package_items?.[0]?.packages;
-    if (candidatePkg) {
-      pkg = candidatePkg as any;
+    const rawPkgItems: any = binding?.garments?.package_items;
+    const targetPkgId = Array.isArray(rawPkgItems) ? rawPkgItems[0]?.package_id : rawPkgItems?.package_id;
+    if (targetPkgId) {
+      pkg = await tx.packages.findFirst({
+        where: { id: targetPkgId },
+        include: {
+          warehouse_stock: {
+            include: { warehouse_bins: true },
+          },
+          package_items: {
+            where: { removed_at: null },
+            include: {
+              garments: {
+                include: {
+                  garment_holds: {
+                    where: { released_at: null },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+  }
+
+  // If not found directly or via RFID card binding, check if rawUid is a direct garment ID or garment code
+  if (!pkg) {
+    const garment = await tx.garments.findFirst({
+      where: {
+        OR: [
+          ...(isValidUuid(rawUid) ? [{ id: rawUid }] : []),
+          { code: rawUid },
+        ],
+      },
+      include: {
+        package_items: {
+          where: { removed_at: null },
+        },
+      },
+    });
+
+    const rawGarmentItems: any = garment?.package_items;
+    const targetPkgId = Array.isArray(rawGarmentItems) ? rawGarmentItems[0]?.package_id : rawGarmentItems?.package_id;
+    if (targetPkgId) {
+      pkg = await tx.packages.findFirst({
+        where: { id: targetPkgId },
+        include: {
+          warehouse_stock: {
+            include: { warehouse_bins: true },
+          },
+          package_items: {
+            where: { removed_at: null },
+            include: {
+              garments: {
+                include: {
+                  garment_holds: {
+                    where: { released_at: null },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
     }
   }
 
@@ -749,25 +790,27 @@ export async function executeWarehouseCartonIntake(
       const failureReason = `Quality hold: ${holdReason}`;
 
       // Flag carton in audit trail as On Hold / Warehouse Intake Blocked
-      await tx.audit_events.create({
-        data: {
-          actor_staff_id: staffUserId,
-          department_code: "warehouse",
-          action_code: "warehouse_intake_blocked",
-          target_type: "package",
-          target_reference: pkg.code,
-          details: {
-            packageId: pkg.id,
-            packageCode: pkg.code,
-            affectedGarmentId: garment.id,
-            affectedGarmentCode: garment.code,
-            failureReason,
-            status: "On Hold / Warehouse Intake Blocked",
-            timestamp: now.toISOString(),
+      if ("audit_events" in (tx as any) && typeof (tx as any).audit_events?.create === "function") {
+        await tx.audit_events.create({
+          data: {
+            actor_staff_id: staffUserId,
+            department_code: "warehouse",
+            action_code: "warehouse_intake_blocked",
+            target_type: "package",
+            target_reference: pkg.code,
+            details: {
+              packageId: pkg.id,
+              packageCode: pkg.code,
+              affectedGarmentId: garment.id,
+              affectedGarmentCode: garment.code,
+              failureReason,
+              status: "On Hold / Warehouse Intake Blocked",
+              timestamp: now.toISOString(),
+            },
+            recorded_at: now,
           },
-          recorded_at: now,
-        },
-      });
+        });
+      }
 
       return {
         uid: rawUid,
@@ -801,25 +844,27 @@ export async function executeWarehouseCartonIntake(
         data: { quality_disposition: "held" },
       });
 
-      await tx.audit_events.create({
-        data: {
-          actor_staff_id: staffUserId,
-          department_code: "warehouse",
-          action_code: "warehouse_intake_blocked",
-          target_type: "package",
-          target_reference: pkg.code,
-          details: {
-            packageId: pkg.id,
-            packageCode: pkg.code,
-            affectedGarmentId: garment.id,
-            affectedGarmentCode: garment.code,
-            failureReason,
-            status: "On Hold / Warehouse Intake Blocked",
-            timestamp: now.toISOString(),
+      if ("audit_events" in (tx as any) && typeof (tx as any).audit_events?.create === "function") {
+        await tx.audit_events.create({
+          data: {
+            actor_staff_id: staffUserId,
+            department_code: "warehouse",
+            action_code: "warehouse_intake_blocked",
+            target_type: "package",
+            target_reference: pkg.code,
+            details: {
+              packageId: pkg.id,
+              packageCode: pkg.code,
+              affectedGarmentId: garment.id,
+              affectedGarmentCode: garment.code,
+              failureReason,
+              status: "On Hold / Warehouse Intake Blocked",
+              timestamp: now.toISOString(),
+            },
+            recorded_at: now,
           },
-          recorded_at: now,
-        },
-      });
+        });
+      }
 
       return {
         uid: rawUid,
@@ -853,25 +898,27 @@ export async function executeWarehouseCartonIntake(
         data: { quality_disposition: "held" },
       });
 
-      await tx.audit_events.create({
-        data: {
-          actor_staff_id: staffUserId,
-          department_code: "warehouse",
-          action_code: "warehouse_intake_blocked",
-          target_type: "package",
-          target_reference: pkg.code,
-          details: {
-            packageId: pkg.id,
-            packageCode: pkg.code,
-            affectedGarmentId: garment.id,
-            affectedGarmentCode: garment.code,
-            failureReason,
-            status: "On Hold / Warehouse Intake Blocked",
-            timestamp: now.toISOString(),
+      if ("audit_events" in (tx as any) && typeof (tx as any).audit_events?.create === "function") {
+        await tx.audit_events.create({
+          data: {
+            actor_staff_id: staffUserId,
+            department_code: "warehouse",
+            action_code: "warehouse_intake_blocked",
+            target_type: "package",
+            target_reference: pkg.code,
+            details: {
+              packageId: pkg.id,
+              packageCode: pkg.code,
+              affectedGarmentId: garment.id,
+              affectedGarmentCode: garment.code,
+              failureReason,
+              status: "On Hold / Warehouse Intake Blocked",
+              timestamp: now.toISOString(),
+            },
+            recorded_at: now,
           },
-          recorded_at: now,
-        },
-      });
+        });
+      }
 
       return {
         uid: rawUid,
@@ -1021,8 +1068,8 @@ export async function executeWarehouseCartonIntake(
   }
 
   // 11. Create audit event
-  if ((tx as any).audit_events?.create) {
-    await (tx as any).audit_events.create({
+  if ("audit_events" in (tx as any) && typeof (tx as any).audit_events?.create === "function") {
+    await tx.audit_events.create({
       data: {
         actor_staff_id: staffUserId,
         department_code: "warehouse",
@@ -1052,6 +1099,8 @@ export async function executeWarehouseCartonIntake(
     garmentCode: pkg.code,
     productName: `Box Received Successfully — ${updatedGarmentCodes.length} Garment${updatedGarmentCodes.length === 1 ? "" : "s"} Moved to Warehouse.`,
     message: `Received into storage bin ${bin.code}: ${updatedGarmentCodes.join(", ")}`,
+    binId: bin.id,
+    binCode: bin.code,
     at: now.toISOString(),
     isHardware: Boolean(input.isHardware),
   };
@@ -1093,7 +1142,7 @@ export async function receiveWarehouseStock(
 
   return {
     packageId: outcome.subjectId,
-    binId: bin ? bin.id : input.binId,
+    binId: (outcome as any).binId || (bin ? bin.id : input.binId),
     garmentsUpdated: outcome.garmentCode,
     outcome,
   };

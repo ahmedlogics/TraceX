@@ -6,8 +6,8 @@ import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
 import type { ISubjectRevisionService } from "../contracts/services";
 import { toActorRef, EXCLUDED_LOT_CODES } from "../materials/materials-service";
-import type { ScanOutcome } from "@/domain/types";
 import { createInternalCommitment } from "../ledger/commitment-service";
+import type { ScanOutcome, ScanResolution } from "@/domain/types";
 import type {
   ApproveOrderInput,
   BindGarmentTagInput,
@@ -1187,13 +1187,14 @@ export async function executeRoutineScan(
       garment.cutting_jobs?.production_orders?.product_spec_versions?.product_name || "Garment";
 
     // 2. Active quality hold check
-    const activeHold = (db as any).garment_holds?.findFirst
-      ? await (db as any).garment_holds.findFirst({
-          where: { garment_id: garment.id, released_at: null },
-        })
-      : null;
+    let activeHold: any = null;
+    if ("garment_holds" in (db as any) && typeof (db as any).garment_holds?.findFirst === "function") {
+      activeHold = await (db as any).garment_holds.findFirst({
+        where: { garment_id: garment.id, released_at: null },
+      });
+    }
     if (garment.quality_disposition === "held" || activeHold) {
-      const reason = activeHold?.reason || "Active quality hold is in effect";
+      const reason = activeHold?.reason || activeHold?.hold_reason || "Active quality hold is in effect";
       const rejectReason = `Garment '${garment.code}' has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`;
 
       await recordRfidScanLog(
@@ -1217,40 +1218,7 @@ export async function executeRoutineScan(
       };
     }
 
-    // 3. Duplicate scan check
-    const existingTrace = (db as any).trace_events?.findFirst
-      ? await (db as any).trace_events.findFirst({
-          where: {
-            garment_id: garment.id,
-            event_type: `${input.stationCode}_completed`,
-          },
-        })
-      : null;
-    if (existingTrace) {
-      const rejectReason = `Duplicate scan: Garment '${garment.code}' has already completed ${input.stationCode} and advanced to Finishing.`;
-
-      await recordRfidScanLog(
-        db,
-        normalizedUid,
-        input.stationCode,
-        "rejected",
-        "WT_ERR_DUPLICATE_SCAN",
-        rejectReason,
-        { garmentId: garment.id, tagBindingId: binding.id },
-      );
-
-      return {
-        uid: normalizedUid,
-        resolution: "rejected_duplicate",
-        garmentCode: garment.code,
-        subjectId: garment.id,
-        productName,
-        rejectReason,
-        at: now.toISOString(),
-      };
-    }
-
-    // 4. Current stage / cutting completion check
+    // 3. Current stage / cutting completion check
     if (input.stationCode === "stitching") {
       if (garment.stage !== "cut") {
         const rejectReason = `Garment '${garment.code}' is at stage '${garment.stage}'. Expected stage 'cut' for stitching station.`;
@@ -1299,6 +1267,40 @@ export async function executeRoutineScan(
           at: now.toISOString(),
         };
       }
+    }
+
+    // 4. Duplicate scan check
+    let existingTrace: any = null;
+    if ("trace_events" in (db as any) && typeof (db as any).trace_events?.findFirst === "function") {
+      existingTrace = await (db as any).trace_events.findFirst({
+        where: {
+          garment_id: garment.id,
+          event_type: `${input.stationCode}_completed`,
+        },
+      });
+    }
+    if (existingTrace) {
+      const rejectReason = `Duplicate scan: Garment '${garment.code}' has already completed ${input.stationCode} and advanced to Finishing.`;
+
+      await recordRfidScanLog(
+        db,
+        normalizedUid,
+        input.stationCode,
+        "rejected",
+        "WT_ERR_DUPLICATE_SCAN",
+        rejectReason,
+        { garmentId: garment.id, tagBindingId: binding.id },
+      );
+
+      return {
+        uid: normalizedUid,
+        resolution: "rejected_duplicate",
+        garmentCode: garment.code,
+        subjectId: garment.id,
+        productName,
+        rejectReason,
+        at: now.toISOString(),
+      };
     }
 
     // 5. Valid: Advance stage to next stage

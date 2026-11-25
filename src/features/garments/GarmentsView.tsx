@@ -51,6 +51,7 @@ export function GarmentsView() {
   const [disposition, setDisposition] = useState("all");
   const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
   const [recentScanOutcome, setRecentScanOutcome] = useState<ScanOutcome | null>(null);
+  const [completedIds, setCompletedIds] = useState<Record<string, boolean>>({});
 
   // Poll hardware station data for Station 4 (Stitching) or Station 5 (Finishing)
   const qStation = useWtQuery(
@@ -127,7 +128,6 @@ export function GarmentsView() {
     <>
       <PageHeader
         title={effectiveTab === "nfc" ? "NFC Tag Programming & Localtunnel Hub" : "Garment Registry & Production Status"}
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Garments" }]}
         actions={
           canAccessNfc ? (
             <div className="flex items-center gap-2">
@@ -187,6 +187,23 @@ export function GarmentsView() {
           const releasedCount = gs.filter((g) => g.disposition === "released").length;
 
           const rows = gs.filter((g) => {
+            // For stitching operators: show only garments approved and cut by Cutting (or completed in session)
+            if (isStitching && stage === "all") {
+              const isRelevant =
+                (((g.stage as string) === "cut" || g.stage === "stitching" || g.stage === "stitched") ||
+                  Boolean(completedIds[g.id])) &&
+                Boolean(g.rfidUid);
+              if (!isRelevant) return false;
+            }
+            // For finishing operators: show only garments completed at Stitching (or completed in session)
+            if (isFinishing && stage === "all") {
+              const isRelevant =
+                ((g.stage === "stitched" || g.stage === "finishing" || g.stage === "finished") ||
+                  Boolean(completedIds[g.id])) &&
+                Boolean(g.rfidUid);
+              if (!isRelevant) return false;
+            }
+
             const matchesStage = stage === "all" || g.stage === stage;
             const matchesDisp =
               disposition === "all" ||
@@ -502,14 +519,21 @@ export function GarmentsView() {
                   {
                     header: "Actions",
                     cell: (g) => {
+                      const isDone = Boolean(completedIds[g.id]);
+                      if (isDone) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="size-3.5" /> Done
+                          </span>
+                        );
+                      }
+
                       const canStitch =
                         (activeStationCode === "stitching" || isStitching) &&
-                        (g.stage === "cutting" || g.stage === "stitching");
+                        ((g.stage as string) === "cut" || g.stage === "cutting" || g.stage === "stitching");
                       const canFinish =
                         (activeStationCode === "finishing" || isFinishing) &&
-                        g.stage !== "warehouse" &&
-                        g.stage !== "dispatched" &&
-                        g.stage !== "packing";
+                        (g.stage === "stitched" || g.stage === "finishing");
 
                       return (
                         <div className="flex items-center gap-1.5">
@@ -526,6 +550,9 @@ export function GarmentsView() {
                                   (c) => c.routineScan(targetUid, "stitching"),
                                   (outcome) => {
                                     setRecentScanOutcome(outcome);
+                                    if (outcome.resolution === "accepted") {
+                                      setCompletedIds((prev) => ({ ...prev, [g.id]: true }));
+                                    }
                                     void q.refetch();
                                     if (outcome.resolution === "accepted") {
                                       return `✓ Garment ${g.id} Stitching complete! Advanced to Finishing.`;
@@ -535,7 +562,7 @@ export function GarmentsView() {
                                 );
                               }}
                             >
-                              <Radio className="size-3" /> Scan Product Tag
+                              <Radio className="size-3" /> Scan &amp; Complete
                             </Button>
                           )}
                           {canFinish && (
@@ -551,6 +578,9 @@ export function GarmentsView() {
                                   (c) => c.routineScan(targetUid, "finishing"),
                                   (outcome) => {
                                     setRecentScanOutcome(outcome);
+                                    if (outcome.resolution === "accepted") {
+                                      setCompletedIds((prev) => ({ ...prev, [g.id]: true }));
+                                    }
                                     void q.refetch();
                                     if (outcome.resolution === "accepted") {
                                       return `✓ Garment ${g.id} Finished! Released to QC.`;
@@ -560,7 +590,7 @@ export function GarmentsView() {
                                 );
                               }}
                             >
-                              <Radio className="size-3" /> Scan Product Tag
+                              <Radio className="size-3" /> Scan &amp; Finish
                             </Button>
                           )}
                           <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
@@ -568,17 +598,184 @@ export function GarmentsView() {
                               View <ArrowRight className="size-3 ml-1" />
                             </AppLink>
                           </Button>
-                          <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
-                            <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
-                              <ExternalLink className="size-3 mr-1" /> Passport
-                            </AppLink>
-                          </Button>
+                          {!isStitching && !isFinishing && (
+                            <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
+                              <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
+                                <ExternalLink className="size-3 mr-1" /> Passport
+                              </AppLink>
+                            </Button>
+                          )}
                         </div>
                       );
                     },
                   },
                 ]}
               />
+
+              {/* Station 4/5 Hardware Reader / Quick Scan (Positioned Bottom-Left) */}
+              {activeStationCode && (
+                <div className="flex justify-start pt-2">
+                  <div className="w-full max-w-2xl rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                          <Radio className="size-5 animate-pulse" />
+                          <span className="absolute -top-1 -right-1 flex size-3">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                            <span className="relative inline-flex size-3 rounded-full bg-success" />
+                          </span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-sm font-bold text-foreground">
+                              {activeStationCode === "finishing"
+                                ? "Station 5 — Finishing Line Reader (Live Scanner 5 Active)"
+                                : "Station 4 — Stitching Line Reader (Live Scanner 4 Active)"}
+                            </h2>
+                            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success border border-success/30">
+                              Ready for Scans
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {activeStationCode === "finishing"
+                              ? "Present physical garment tag to Scanner 5, or use the quick scan controls below."
+                              : "Present physical garment tag to Scanner 4, or use the quick scan controls below."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          value={scanInput}
+                          onChange={(e) => setScanInput(e.target.value.toUpperCase())}
+                          placeholder="Scan or enter card UID..."
+                          className="h-8 w-44 font-mono text-xs bg-card"
+                        />
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
+                          disabled={pending}
+                          onClick={() => {
+                            const targetUid = scanInput.trim();
+                            if (targetUid) {
+                              void run(
+                                (c) => c.routineScan(targetUid, activeStationCode),
+                                (outcome) => {
+                                  setScanInput("");
+                                  setRecentScanOutcome(outcome);
+                                  void q.refetch();
+                                  const stationLabel = activeStationCode === "finishing" ? "Finishing" : "Stitching";
+                                  if (outcome.resolution === "accepted") {
+                                    return activeStationCode === "finishing"
+                                      ? `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
+                                      : `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Stitching complete! Advanced to Finishing.`;
+                                  }
+                                  return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                }
+                              );
+                            } else {
+                              setAwaitingHardware(true);
+                              void run(
+                                async (c) => {
+                                  const startTime = Date.now();
+                                  while (Date.now() - startTime < 35000) {
+                                    const data = await c.getRfidStationData(activeStationCode);
+                                    if (data.lastScanOutcome && data.lastScanOutcome.at !== lastSeenScanRef.current) {
+                                      lastSeenScanRef.current = data.lastScanOutcome.at ?? null;
+                                      setRecentScanOutcome(data.lastScanOutcome);
+                                      void q.refetch();
+                                      return data.lastScanOutcome;
+                                    }
+                                    await new Promise((r) => setTimeout(r, 1000));
+                                  }
+                                  throw new Error(
+                                    `No hardware scan detected on Scanner ${activeStationCode === "finishing" ? 5 : 4} within 35 seconds. Please tap tag on reader.`
+                                  );
+                                },
+                                (outcome) => {
+                                  setAwaitingHardware(false);
+                                  void q.refetch();
+                                  return outcome?.resolution === "accepted"
+                                    ? activeStationCode === "finishing"
+                                      ? `✓ Scan accepted: Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
+                                      : `✓ Scan accepted: Garment ${outcome.garmentCode ?? outcome.subjectId} Stitched! Advanced to Finishing.`
+                                    : `Scan outcome: ${outcome?.rejectReason ?? outcome?.resolution ?? "Completed"}`;
+                                }
+                              ).finally(() => setAwaitingHardware(false));
+                            }
+                          }}
+                        >
+                          {awaitingHardware ? (
+                            <>
+                              <span className="relative flex h-2 w-2 mr-1">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                              </span>
+                              Awaiting Card Tap on Scanner {activeStationCode === "finishing" ? 5 : 4}...
+                            </>
+                          ) : scanInput.trim() ? (
+                            <>
+                              <ScanLine className="size-3.5" /> Simulate Scan ({scanInput.trim()})
+                            </>
+                          ) : (
+                            <>
+                              <Radio className="size-3.5" /> Scan Product Tag (Hardware)
+                            </>
+                          )}
+                        </Button>
+                        {scanInput && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs px-2"
+                            onClick={() => setScanInput("")}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {activeOutcome && (
+                      <div
+                        className={`rounded-lg border p-3 text-xs flex items-center justify-between gap-3 ${
+                          activeOutcome.resolution === "accepted"
+                            ? "border-success/40 bg-success-soft text-foreground"
+                            : "border-destructive/40 bg-danger-soft text-foreground"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {activeOutcome.resolution === "accepted" ? (
+                            <CheckCircle2 className="size-4 text-success shrink-0" />
+                          ) : (
+                            <OctagonAlert className="size-4 text-destructive shrink-0" />
+                          )}
+                          <div>
+                            <span className="font-bold">
+                              {activeOutcome.resolution === "accepted"
+                                ? `Scan Confirmed: ${activeOutcome.garmentCode ?? activeOutcome.subjectId}${
+                                    activeOutcome.productName ? ` · ${activeOutcome.productName}` : ""
+                                  }`
+                                : `Scan Rejected (${activeOutcome.uid})`}
+                            </span>
+                            <span className="text-muted-foreground ml-2">
+                              {activeOutcome.resolution === "accepted"
+                                ? activeStationCode === "finishing"
+                                  ? "· Finishing Complete → Status Updated to Finished"
+                                  : "· Stitching Complete → Status Updated to Stitched"
+                                : `· ${activeOutcome.rejectReason ?? activeOutcome.resolution}`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
+                          <span>Tag: {activeOutcome.uid}</span>
+                          {activeOutcome.at && <span>· {fmt.dateTime(activeOutcome.at)}</span>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         }}
