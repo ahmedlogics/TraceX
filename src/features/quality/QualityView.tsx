@@ -573,6 +573,7 @@ export function QualityView() {
   );
 
   const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
+  const isFinalQc = me.username?.toLowerCase() === "qc.demo" || (me.role === "Q" && !isIncomingQC);
 
   const [incomingMode, setIncomingMode] = useState<"queue" | "quarantine">("queue");
 
@@ -580,10 +581,15 @@ export function QualityView() {
     if (isIncomingQC) {
       return tabs.filter((t) => t.kind === "incoming");
     }
+    if (isFinalQc) {
+      return tabs.filter((t) => t.kind !== "incoming");
+    }
     return tabs;
-  }, [isIncomingQC]);
+  }, [isIncomingQC, isFinalQc]);
 
-  const [activeTab, setActiveTab] = useState<InspectionKind>("incoming");
+  const [activeTab, setActiveTab] = useState<InspectionKind>(
+    isIncomingQC ? "incoming" : "final",
+  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -936,6 +942,9 @@ export function QualityView() {
             const openIncoming = all.filter(
               (i) => i.kind === "incoming" && i.status === "open",
             ).length;
+            const passedFinalCount = all.filter(
+              (i) => i.kind === "final" && i.status === "passed",
+            ).length;
 
             return (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -973,18 +982,33 @@ export function QualityView() {
                     Blocked from packing/dispatch
                   </p>
                 </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-xs font-medium uppercase tracking-wider">
-                      Incoming Lots
-                    </span>
-                    <Sparkles className="size-4 text-accent" />
+                {isFinalQc ? (
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        QC Released
+                      </span>
+                      <ShieldCheck className="size-4 text-success" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-success">{passedFinalCount}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Garments cleared for packing
+                    </p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold">{openIncoming}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Fabric lots pending acceptance
-                  </p>
-                </div>
+                ) : (
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Incoming Lots
+                      </span>
+                      <Sparkles className="size-4 text-accent" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{openIncoming}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Fabric lots pending acceptance
+                    </p>
+                  </div>
+                )}
               </div>
             );
           }}
@@ -1040,8 +1064,10 @@ export function QualityView() {
         {/* Inspection Queues */}
         <Loadable query={insp}>
           {(all) => {
+            const resolvedTab = isFinalQc && activeTab === "incoming" ? "final" : activeTab;
+
             const filtered = all.filter((i) => {
-              if (i.kind !== activeTab) return false;
+              if (i.kind !== resolvedTab) return false;
               if (statusFilter !== "all" && i.status !== statusFilter) return false;
               if (search.trim()) {
                 const s = search.toLowerCase();
@@ -1055,7 +1081,7 @@ export function QualityView() {
 
             return (
               <div className="space-y-4">
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as InspectionKind)}>
+                <Tabs value={resolvedTab} onValueChange={(v) => setActiveTab(v as InspectionKind)}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
                     <TabsList className="flex h-auto flex-wrap">
                       {availableTabs.map((t) => {
@@ -1105,7 +1131,7 @@ export function QualityView() {
                     </div>
                   </div>
 
-                  {tabs.map((t) => (
+                  {availableTabs.map((t) => (
                     <TabsContent key={t.kind} value={t.kind} className="mt-3">
                       {t.kind === "incoming" ? (
                         <IncomingLotsTable
