@@ -207,20 +207,15 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                         </div>
 
                         {/* Hardware RFID Status */}
-                        <div className="flex flex-col items-start gap-2 md:items-end">
-                          <div className="flex items-center gap-2">
-                            <span className="relative flex size-2.5">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full size-2.5 bg-emerald-500"></span>
-                            </span>
-                            <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                              <Radio className="size-3.5" />
-                              {isArmed ? "Dock Reader: Armed & Listening" : "Dock Reader: Ready"}
-                            </span>
-                          </div>
-                          <p className="text-[11px] font-mono text-muted-foreground">
-                            Mode: Aggregate Carton Dispatch (Zero-Touch Garment Scanning)
-                          </p>
+                        <div className="flex items-center gap-2 md:justify-end">
+                          <span className="relative flex size-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full size-2.5 bg-emerald-500"></span>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            <Radio className="size-3.5" />
+                            {isArmed ? "Dock Reader: Armed & Listening" : "Dock Reader: Ready"}
+                          </span>
                         </div>
                       </div>
 
@@ -273,110 +268,87 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                     )}
 
                     {/* DOCK GATE INGESTION: LIVE API (HARDWARE ONLY) VS MOCK (TEST SIMULATION) */}
-                    <Section
-                      title="Dock Gate Carton Dispatch"
-                      description="Zero-touch aggregation: Scanning a master box tag automatically verifies and marks all child products as dispatched."
-                    >
+                    <Section title="Dock Gate Carton Dispatch">
                       {!isMock ? (
                         /* LIVE API MODE: PURE HARDWARE SCANNING — NO MANUAL UID WRITING */
-                        <div className="rounded-xl border bg-card p-5 space-y-4">
+                        <div className="rounded-xl border bg-card p-5">
                           {!isArmed ? (
-                            <div className="space-y-2">
-                              <Button
-                                size="lg"
-                                className="w-full text-base font-bold shadow-md gap-2 h-14 bg-primary hover:bg-primary/90 text-primary-foreground"
-                                disabled={pending || !isAuthorized}
-                                onClick={() => setIsArmed(true)}
-                              >
-                                <ScanLine className="size-5" />
-                                Scan Box Tag on Hardware
-                              </Button>
-                              <p className="text-xs text-muted-foreground text-center">
-                                Click above to arm Scanner 9, then tap the physical carton RFID tag against the dock gate reader.
-                              </p>
-                            </div>
+                            <Button
+                              size="lg"
+                              className="w-full text-base font-bold shadow-md gap-2 h-14 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              disabled={pending || !isAuthorized}
+                              onClick={() => setIsArmed(true)}
+                            >
+                              <ScanLine className="size-5" />
+                              Scan Box Tag on Hardware
+                            </Button>
                           ) : (
-                            <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-5 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="inline-flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                                  <Radio className="size-5 animate-spin text-emerald-600" />
-                                  Scanner 9 Dock Reader Armed & Listening for Master Box Tag
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-xs border-muted-foreground/30 hover:bg-muted"
-                                  onClick={() => setIsArmed(false)}
-                                >
-                                  Disarm
-                                </Button>
+                            <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-4 flex items-center justify-between">
+                              <div className="inline-flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                                <Radio className="size-5 animate-spin text-emerald-600" />
+                                Scanner 9 Dock Reader Armed & Listening for Master Box Tag
                               </div>
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                Present the physical master box RFID tag to Scanner 9 hardware at the dock gate. On hardware scan, the carton and all member garments will be automatically verified, marked dispatched, and cleared for outbound shipment.
-                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs border-muted-foreground/30 hover:bg-muted"
+                                onClick={() => setIsArmed(false)}
+                              >
+                                Disarm
+                              </Button>
                             </div>
                           )}
                         </div>
                       ) : (
                         /* MOCK MODE: Manual simulation & 1-click test chips for testing without hardware */
-                        <div className="rounded-xl border bg-card p-5 space-y-4">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-foreground">
-                              Simulate Box RFID Scan (Mock Mode)
-                            </label>
-                            <div className="flex items-center gap-2">
-                              <Input
-                                id="master-box-scan-input"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    if (scanUid.trim()) void handleBoxScan(scanUid);
-                                  }
-                                }}
-                                placeholder="Enter Box RFID tag UID or ID (e.g. PKG-001)..."
-                                className="font-mono text-xs flex-1"
-                                disabled={pending}
-                              />
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="text-xs h-9 px-4 font-semibold"
-                                disabled={pending || !scanUid.trim() || !isAuthorized}
-                                onClick={() => void handleBoxScan(scanUid)}
-                              >
-                                Dispatch Box
-                              </Button>
-                            </div>
+                        <div className="rounded-xl border bg-card p-5 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id="master-box-scan-input"
+                              value={scanUid}
+                              onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  if (scanUid.trim()) void handleBoxScan(scanUid);
+                                }
+                              }}
+                              placeholder="Enter Box RFID tag UID or ID (e.g. PKG-001)..."
+                              className="font-mono text-xs flex-1"
+                              disabled={pending}
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="text-xs h-9 px-4 font-semibold"
+                              disabled={pending || !scanUid.trim() || !isAuthorized}
+                              onClick={() => void handleBoxScan(scanUid)}
+                            >
+                              Dispatch Box
+                            </Button>
                           </div>
 
                           {/* Candidate Quick Selection Chips for Cartons Awaiting Dispatch */}
                           {awaitingDispatch.length > 0 && (
-                            <div className="space-y-1 pt-1 border-t">
-                              <span className="text-[11px] text-muted-foreground">
-                                Candidate Cartons Awaiting Dispatch (1-Click Test):
-                              </span>
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {awaitingDispatch.map((p) => {
-                                  const tagVal = p.rfidUid || (p as any).code || p.id;
-                                  return (
-                                    <button
-                                      key={p.id}
-                                      type="button"
-                                      className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 text-xs font-mono font-semibold text-primary cursor-pointer transition-colors"
-                                      onClick={() => {
-                                        setScanUid(tagVal);
-                                        void handleBoxScan(tagVal);
-                                      }}
-                                      title={`Click to simulate dispatch: ${p.id}`}
-                                    >
-                                      <Sparkles className="size-3" />
-                                      {(p as any).code || p.id}
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              {awaitingDispatch.map((p) => {
+                                const tagVal = p.rfidUid || (p as any).code || p.id;
+                                return (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 text-xs font-mono font-semibold text-primary cursor-pointer transition-colors"
+                                    onClick={() => {
+                                      setScanUid(tagVal);
+                                      void handleBoxScan(tagVal);
+                                    }}
+                                    title={`Click to simulate dispatch: ${p.id}`}
+                                  >
+                                    <Sparkles className="size-3" />
+                                    {(p as any).code || p.id}
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -384,10 +356,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                     </Section>
 
                     {/* MASTER CARTONS MANIFEST TABLE */}
-                    <Section
-                      title="Outbound Cartons Manifest"
-                      description="Master shipping cartons. Click 'View Products' on any carton to view all member garments inside."
-                    >
+                    <Section title="Outbound Cartons Manifest">
                       <div className="space-y-4">
                         {/* Status Filter Tabs */}
                         <div className="flex items-center gap-2">
@@ -541,9 +510,6 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                               <PkgIcon className="size-5 text-primary" />
                               Carton Products · {(viewProductsBox as any).code || viewProductsBox.id}
                             </DialogTitle>
-                            <DialogDescription>
-                              Member garments packed and aggregated inside this master shipping carton.
-                            </DialogDescription>
                           </DialogHeader>
 
                           <div className="space-y-4 pt-2">
@@ -641,10 +607,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                     </Dialog>
 
                     {/* COMPACT OUTBOUND SHIPMENTS & PROOF OF DEPARTURE */}
-                    <Section
-                      title="Outbound Shipments & Departure Clearance"
-                      description="Scheduled carrier departures. Release dock gate departure once all assigned cartons have been scanned and dispatched."
-                    >
+                    <Section title="Outbound Shipments & Departure Clearance">
                       <div className="space-y-4">
                         <DataTable
                           rows={shipments}
