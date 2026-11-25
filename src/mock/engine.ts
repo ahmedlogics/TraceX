@@ -321,6 +321,10 @@ export function resolveRfidScan(s: DemoState, actor: StaffUser, uid: string): Sc
       ctx.id,
     );
   }
+  if (ctx.status === "awaiting_ack") {
+    ctx.status = "ready";
+    ctx.acknowledgedAt = now();
+  }
   if (ctx.status !== "ready") {
     return rejectScan(
       s,
@@ -424,7 +428,21 @@ function handleConfirmIssue(
     qty?: number;
   };
   const normUid = normalizeUid(uid);
-  const binding = findBindingByUid(s, normUid);
+  let binding = findBindingByUid(s, normUid);
+
+  // 1. If not bound by UID directly, check if input is a lot/bundle ID (e.g. "FAB-001" or "FAB-003")
+  if (!binding) {
+    const rawTrimmed = uid.trim().toUpperCase();
+    const lotByCode = s.lots.find(
+      (l) =>
+        l.id.toUpperCase() === rawTrimmed ||
+        l.id.toUpperCase() === normUid ||
+        (l.rfidUid && normalizeUid(l.rfidUid) === normUid),
+    );
+    if (lotByCode && lotByCode.rfidUid) {
+      binding = findBindingByUid(s, normalizeUid(lotByCode.rfidUid));
+    }
+  }
 
   // Check 1: Card Exists & Bound to a Bundle?
   if (!binding) {
@@ -432,7 +450,7 @@ function handleConfirmIssue(
       s,
       normUid,
       "rejected_unknown_card",
-      "Rejected: UID not recognised or has no bundle history.",
+      `Rejected: UID or Bundle ID '${uid}' not recognised or has no bundle history.`,
       ctx.id,
     );
   }
@@ -463,7 +481,7 @@ function handleConfirmIssue(
       s,
       normUid,
       "rejected_business_rule",
-      `Card belongs to ${binding.subjectId}, not the selected lot ${payload.lotId}.`,
+      `Card belongs to ${binding?.subjectId ?? lot.id}, not the selected lot ${payload.lotId}.`,
       ctx.id,
     );
   }

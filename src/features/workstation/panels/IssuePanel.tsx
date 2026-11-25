@@ -126,7 +126,16 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
               const targetUid = (isMock ? (uidToScan || scanUid) : "").trim();
               if (isMock && targetUid) {
                 void run(
-                  (c) => c.resolveRfidScan(targetUid),
+                  async (c) => {
+                    if (targetOrderId && (!activeCtx || (activeCtx.payload as any)?.orderId !== targetOrderId)) {
+                      await c.prepareActionContext("fabric_issue", "confirm_issue", {
+                        kind: "confirm_issue",
+                        orderId: targetOrderId,
+                        qty: targetRequiredFabric,
+                      });
+                    }
+                    return await c.resolveRfidScan(targetUid);
+                  },
                   (outcome) => {
                     setScanUid("");
                     void qOrders.refetch();
@@ -571,20 +580,30 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                               <Field
                                 label="Bundle Card Tag UID (Simulation)"
                                 htmlFor="s2-uid"
-                                hint="Tap bundle card or enter UID to test manually."
+                                hint="Enter bundle ID (e.g. FAB-001), card UID (e.g. 04A1B2C3), or tap a card below."
                               >
                                 <Input
                                   id="s2-uid"
                                   value={scanUid}
                                   onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                  placeholder="e.g. 04A1B2C3 or BB4A0003"
+                                  placeholder="e.g. FAB-001 or 04A1B2C3"
                                   className="font-mono bg-card"
                                 />
                               </Field>
                               <div className="flex flex-wrap items-center gap-2 pt-1">
                                 <Button
                                   disabled={pending}
-                                  onClick={() => handleScan()}
+                                  onClick={() => {
+                                    if (isMock && !scanUid.trim()) {
+                                      const firstAvailable = acceptedLots.find((l) => l.rfidUid);
+                                      if (firstAvailable?.rfidUid) {
+                                        setScanUid(firstAvailable.rfidUid);
+                                        handleScan(firstAvailable.rfidUid);
+                                        return;
+                                      }
+                                    }
+                                    handleScan();
+                                  }}
                                   className="gap-1.5"
                                 >
                                   {pending ? (
