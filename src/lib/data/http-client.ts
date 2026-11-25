@@ -244,12 +244,26 @@ export function createHttpClient(): WearTrailClient {
         body: { username, password },
       });
       setStoredAuthToken(res.token);
+      if (typeof window !== "undefined" && res.user?.username) {
+        try {
+          window.localStorage.setItem("weartrail.staff-username", res.user.username);
+        } catch {
+          /* ignore */
+        }
+      }
       return res.user;
     },
 
     async getUser(_id: string): Promise<StaffUser | null> {
       try {
         const res = await req<{ user: StaffUser }>("/api/auth/me", { method: "GET" });
+        if (typeof window !== "undefined" && res.user?.username) {
+          try {
+            window.localStorage.setItem("weartrail.staff-username", res.user.username);
+          } catch {
+            /* ignore */
+          }
+        }
         return res.user;
       } catch (err) {
         if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {

@@ -4,7 +4,7 @@ import { clearDataMode, useClient } from "@/lib/data/provider";
 import { useWtQuery } from "@/lib/data/hooks";
 import { paths } from "./paths";
 import { useAppNavigate } from "./navigation";
-import { setSessionUserId, useSessionUserId } from "./session";
+import { clearSession, setSessionUserId, setSessionUsername, useSessionUserId } from "./session";
 
 export function useCurrentUser() {
   const id = useSessionUserId();
@@ -18,6 +18,7 @@ export function useSignIn() {
     await client.recordSignIn(userId);
     qc.clear();
     setSessionUserId(userId);
+    setSessionUsername(userId);
   };
 }
 
@@ -28,6 +29,7 @@ export function useAuthenticate() {
     const user = await client.authenticate(username, password);
     qc.clear();
     setSessionUserId(user.id);
+    setSessionUsername(user.username);
     return user;
   };
 }
@@ -41,7 +43,7 @@ export function useSignOut() {
     await client.recordSignOut();
     await qc.cancelQueries();
     qc.clear();
-    setSessionUserId(null);
+    clearSession();
     if (typeof window !== "undefined") {
       window.location.href = paths.login;
     } else {

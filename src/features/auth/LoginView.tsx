@@ -7,7 +7,6 @@ import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { TraceXMark } from "@/components/wt/Logo";
 import { errorMessage } from "@/lib/data/hooks";
-import { clearDataMode } from "@/lib/data/provider";
 
 export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
   const me = useCurrentUser();
@@ -43,7 +42,6 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
 
     setIsSubmitting(true);
     try {
-      clearDataMode();
       const user = await authenticate(cleanUsername, password);
       toast.success(`Signed in as ${user.displayName || user.username}`);
 
