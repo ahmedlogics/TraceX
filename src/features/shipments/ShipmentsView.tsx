@@ -486,14 +486,18 @@ export function ShipmentsView() {
                           },
                           { header: "Planned Date", cell: (s) => fmt.date(s.plannedDate) },
                           { header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
-                          {
-                            header: "Action",
-                            cell: (s) => (
-                              <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                                <AppLink href={paths.shipment(s.id)}>Manifest</AppLink>
-                              </Button>
-                            ),
-                          },
+                          ...(!isDispatch
+                            ? [
+                                {
+                                  header: "Action",
+                                  cell: (s: Shipment) => (
+                                    <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                                      <AppLink href={paths.shipment(s.id)}>Manifest</AppLink>
+                                    </Button>
+                                  ),
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     </TabsContent>

@@ -129,13 +129,20 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     }
   }
 
-  // Dispatch operators only handle outbound shipments and dock gate dispatch (strictly remove home, garments and fulfilment)
+  // Dispatch operators strictly operate at Station 9 Workstation dock gate (remove home, garments, fulfilment, and shipments)
   if (
     user.username === "dispatch.demo" ||
     (user.role === "L" && user.department === "dispatch") ||
     user.department?.toLowerCase() === "dispatch"
   ) {
-    if (key === "home" || key === "garments" || key === "garment" || key === "fulfilment") {
+    if (
+      key === "home" ||
+      key === "garments" ||
+      key === "garment" ||
+      key === "fulfilment" ||
+      key === "shipments" ||
+      key === "shipment"
+    ) {
       return false;
     }
   }

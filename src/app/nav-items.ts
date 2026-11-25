@@ -125,6 +125,12 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
             items: g.items.filter((i) => i.key !== "home"),
           };
         }
+        if (g.label === "Logistics") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "shipments"),
+          };
+        }
         return g;
       })
       .filter((g) => g.items.length > 0);
