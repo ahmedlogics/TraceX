@@ -253,13 +253,10 @@ export function acknowledgeContext(s: DemoState, actor: StaffUser, contextId: st
   expireOldContexts(s);
   const ctx = findOrThrow(s.actionContexts, contextId, "Action context");
   ensure(ctx.operatorId === actor.id, "forbidden", "This context belongs to another operator.");
-  ensure(
-    ctx.status === "awaiting_ack",
-    "conflict",
-    `Context is ${ctx.status}, not awaiting acknowledgement.`,
-  );
-  ctx.status = "ready";
-  ctx.acknowledgedAt = now();
+  if (ctx.status === "awaiting_ack") {
+    ctx.status = "ready";
+    ctx.acknowledgedAt = now();
+  }
   audit(s, actor, "rfid", "Context acknowledged — ready to scan", "context", contextId);
 }
 
@@ -925,7 +922,12 @@ function handleSubmitQc(
       );
     }
   }
-  if (payload.result === "pass" && !payload.checklist.every((c) => c.checked)) {
+  if (
+    payload.result === "pass" &&
+    payload.checklist &&
+    payload.checklist.length > 0 &&
+    !payload.checklist.every((c) => c.checked)
+  ) {
     return rejectScan(
       s,
       uid,
