@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Cpu,
   Info,
   OctagonAlert,
   Radio,
@@ -451,7 +452,7 @@ function StitchingDashboard() {
           <div className="flex items-center gap-2">
             <Button asChild size="sm" className="gap-1.5 h-8 text-xs">
               <AppLink href={paths.workstation}>
-                <Cpu className="size-3.5" /> Open Workstation S3
+                <Cpu className="size-3.5" /> Open Workstation (Station 4)
               </AppLink>
             </Button>
           </div>
