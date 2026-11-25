@@ -31,6 +31,10 @@ import { useMe } from "@/features/shared/useMe";
 import { getDataMode } from "@/lib/data/provider";
 import { cn } from "@/lib/utils";
 
+function generateFreshUid(): string {
+  return "04" + Array.from({ length: 6 }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join("");
+}
+
 export function ReceivingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const isMock = getDataMode() === "mock";
@@ -96,8 +100,9 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
           try {
             const outcome = await run(
               async (c) => {
-                if (isMock && scanUid.trim()) {
-                  return await c.resolveRfidScan(scanUid.trim());
+                if (isMock) {
+                  const targetUid = scanUid.trim() || generateFreshUid();
+                  return await c.resolveRfidScan(targetUid);
                 }
 
                 // Polling loop to wait for hardware scan from ESP32
@@ -555,9 +560,21 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                               <Radio className="size-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
                             </div>
 
-                            {/* Quick test tag chips to test easily */}
-                            <div className="flex items-center gap-1.5 pt-0.5">
-                              <span className="text-[10px] text-muted-foreground">
+                            {/* Random UID generator button & Quick test tag chips */}
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setScanUid(generateFreshUid())}
+                                className="h-7 text-[11px] font-mono gap-1 cursor-pointer bg-card border-border hover:bg-accent hover:border-primary/50 text-foreground"
+                                title="Generate a random UID into the box"
+                              >
+                                <Sparkles className="size-3 text-primary" />
+                                Random UID
+                              </Button>
+
+                              <span className="text-[10px] text-muted-foreground ml-1">
                                 Quick test tag:
                               </span>
                               {["04EE5566", "BB4A0003", "04A1B299"].map((chip) => (
@@ -598,12 +615,12 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                                 <span className="animate-ping absolute inline-flex size-full rounded-full bg-white opacity-75"></span>
                                 <span className="relative inline-flex rounded-full size-2 bg-white"></span>
                               </span>
-                              Listening for Card (35s)...
+                              {isMock ? "Simulating RFID Scan..." : "Listening for Card (35s)..."}
                             </>
-                          ) : isMock && scanUid.trim() ? (
+                          ) : isMock ? (
                             <>
                               <ScanLine className="size-3.5 mr-1.5" />
-                              Simulate RFID Scan ({scanUid.trim()})
+                              Simulate RFID Scan {scanUid.trim() ? `(${scanUid.trim()})` : "(Auto UID)"}
                             </>
                           ) : (
                             <>

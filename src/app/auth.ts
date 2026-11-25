@@ -1,6 +1,6 @@
 /** Mock auth adapter: sign-in / sign-out wiring (no real credentials). */
 import { useQueryClient } from "@tanstack/react-query";
-import { useClient } from "@/lib/data/provider";
+import { clearDataMode, useClient } from "@/lib/data/provider";
 import { useWtQuery } from "@/lib/data/hooks";
 import { paths } from "./paths";
 import { useAppNavigate } from "./navigation";
@@ -37,10 +37,15 @@ export function useSignOut() {
   const qc = useQueryClient();
   const navigate = useAppNavigate();
   return async () => {
+    clearDataMode();
     await client.recordSignOut();
     await qc.cancelQueries();
     qc.clear();
     setSessionUserId(null);
-    await navigate(paths.login, { replace: true });
+    if (typeof window !== "undefined") {
+      window.location.href = paths.login;
+    } else {
+      await navigate(paths.login, { replace: true });
+    }
   };
 }

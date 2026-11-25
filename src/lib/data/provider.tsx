@@ -37,7 +37,19 @@ export function getDataMode(): DataMode {
   // 3. When backend is explicitly configured via VITE_API_URL or VITE_API_BASE_URL, default to live
   if (import.meta.env?.["VITE_API_URL"] || import.meta.env?.["VITE_API_BASE_URL"]) return "live";
 
-  return "mock";
+  return "live";
+}
+
+/**
+ * Resets any saved data mode preference in localStorage.
+ */
+export function clearDataMode(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DATA_MODE_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
