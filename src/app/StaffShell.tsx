@@ -79,10 +79,13 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
   const isWarehouse =
     user?.username?.toLowerCase() === "warehouse.demo" ||
     user?.department?.toLowerCase() === "warehouse";
+  const isDispatch =
+    user?.username?.toLowerCase() === "dispatch.demo" ||
+    user?.department?.toLowerCase() === "dispatch";
 
   const logoHref = isFinalQc
     ? paths.quality
-    : isWarehouse
+    : isWarehouse || isDispatch
     ? paths.workstation
     : paths.home;
   return (
