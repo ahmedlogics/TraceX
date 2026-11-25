@@ -169,13 +169,15 @@ rfidRouter.post(
       // Authenticate device with Bearer or X-Device-Secret
       await authenticateDevice(req.headers, context.reader_sessions.device_id, prisma);
 
-      await prisma.rfid_action_contexts.update({
-        where: { id },
-        data: {
-          status: "armed",
-          acknowledged_at: new Date(),
-        },
-      });
+      if (context.status === "awaiting_ack") {
+        await prisma.rfid_action_contexts.update({
+          where: { id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+      }
 
       sendSuccess(res, { acknowledged: true, contextId: id, status: "armed" });
     } catch (err) {
@@ -849,13 +851,15 @@ rfidRouter.put(
         await authenticateDevice(req.headers, context.reader_sessions.device_id, prisma);
       }
 
-      await prisma.rfid_action_contexts.update({
-        where: { id },
-        data: {
-          status: "armed",
-          acknowledged_at: new Date(),
-        },
-      });
+      if (context.status === "awaiting_ack") {
+        await prisma.rfid_action_contexts.update({
+          where: { id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+      }
 
       sendSuccess(res, { acknowledged: true, contextId: id });
     } catch (err) {
