@@ -80,6 +80,14 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
 export const ActivityIcon = Activity;
 
 export function getNavGroups(user?: StaffUser | null): { label: string; items: NavItem[] }[] {
+  const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
+  if (isFinalQc) {
+    return navGroups.map((g) => ({
+      ...g,
+      items: g.items.filter((i) => i.key !== "home"),
+    }));
+  }
+
   const isRawStore =
     user?.username?.toLowerCase() === "rawstore.demo" || user?.department === "raw-store";
 

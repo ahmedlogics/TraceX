@@ -29,6 +29,7 @@ import { EmptyState, Loadable } from "@/components/wt/states";
 import { can, canAccessRoute } from "@/domain/permissions";
 import type {
   ChecklistItem,
+  Garment,
   Inspection,
   InspectionKind,
   InspectionStatus,
@@ -586,8 +587,45 @@ export function QualityView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  const garmentMap = useMemo(() => {
+    const map = new Map<string, Garment>();
+    (garments.data ?? []).forEach((g) => {
+      map.set(g.id, g);
+      if ((g as any).code) map.set((g as any).code, g);
+      if ((g as any).publicId) map.set((g as any).publicId, g);
+    });
+    return map;
+  }, [garments.data]);
+
+  const isDiscarded = (subjectId: string, defectReason?: string | null): boolean => {
+    if (
+      defectReason &&
+      (defectReason.startsWith("[SCRAP/DISCARD]") ||
+        defectReason.toLowerCase().includes("scrap") ||
+        defectReason.toLowerCase().includes("discard"))
+    ) {
+      return true;
+    }
+    const g = garmentMap.get(subjectId);
+    if (!g) return false;
+    return (
+      g.stage === "scrapped" ||
+      g.disposition === ("scrapped" as any) ||
+      Boolean(g.hold?.reason?.toLowerCase().includes("scrap")) ||
+      Boolean(g.hold?.reason?.toLowerCase().includes("discard"))
+    );
+  };
+
   const heldGarments = useMemo(
-    () => (garments.data ?? []).filter((g) => !!g.hold),
+    () =>
+      (garments.data ?? []).filter(
+        (g) =>
+          Boolean(g.hold) &&
+          g.stage !== "scrapped" &&
+          g.disposition !== ("scrapped" as any) &&
+          !g.hold?.reason?.toLowerCase().includes("scrap") &&
+          !g.hold?.reason?.toLowerCase().includes("discard"),
+      ),
     [garments.data],
   );
   const heldSet = useMemo(() => new Set(heldGarments.map((g) => g.id)), [heldGarments]);
@@ -1092,26 +1130,35 @@ export function QualityView() {
                             },
                             {
                               header: "Subject",
-                              cell: (i) => (
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  {i.subjectType === "lot" ? (
-                                    <LinkIf
-                                      user={me}
-                                      routeKey="materialLot"
-                                      href={paths.lot(i.subjectId)}
-                                      id={i.subjectId}
-                                    />
-                                  ) : (
-                                    <LinkIf
-                                      user={me}
-                                      routeKey="garment"
-                                      href={paths.garment(i.subjectId)}
-                                      id={i.subjectId}
-                                    />
-                                  )}
-                                  {heldSet.has(i.subjectId) && <HoldBadge />}
-                                </div>
-                              ),
+                              cell: (i) => {
+                                const discarded = isDiscarded(i.subjectId, i.defectReason);
+                                return (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {i.subjectType === "lot" ? (
+                                      <LinkIf
+                                        user={me}
+                                        routeKey="materialLot"
+                                        href={paths.lot(i.subjectId)}
+                                        id={i.subjectId}
+                                      />
+                                    ) : (
+                                      <LinkIf
+                                        user={me}
+                                        routeKey="garment"
+                                        href={paths.garment(i.subjectId)}
+                                        id={i.subjectId}
+                                      />
+                                    )}
+                                    {discarded ? (
+                                      <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                                        Discard
+                                      </span>
+                                    ) : heldSet.has(i.subjectId) ? (
+                                      <HoldBadge />
+                                    ) : null}
+                                  </div>
+                                );
+                              },
                             },
                             {
                               header: "Type",
@@ -1123,16 +1170,25 @@ export function QualityView() {
                             },
                             {
                               header: "Result / Status",
-                              cell: (i) => (
-                                <div className="flex flex-col gap-0.5">
-                                  <StatusBadge status={i.status} />
-                                  {i.defectReason && (
-                                    <span className="text-[11px] text-destructive truncate max-w-[180px]">
-                                      {i.defectReason}
-                                    </span>
-                                  )}
-                                </div>
-                              ),
+                              cell: (i) => {
+                                const discarded = isDiscarded(i.subjectId, i.defectReason);
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    {discarded ? (
+                                      <span className="inline-flex items-center w-fit gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                        Discarded
+                                      </span>
+                                    ) : (
+                                      <StatusBadge status={i.status} />
+                                    )}
+                                    {i.defectReason && (
+                                      <span className="text-[11px] text-destructive truncate max-w-[180px]">
+                                        {i.defectReason.replace(/^\[SCRAP\/DISCARD\]\s*/i, "")}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              },
                             },
                             {
                               header: "RFID Evidence",
@@ -1151,14 +1207,6 @@ export function QualityView() {
                                 <span className="text-xs text-muted-foreground">
                                   {fmt.dateTime(i.createdAt)}
                                 </span>
-                              ),
-                            },
-                            {
-                              header: "Action",
-                              cell: (i) => (
-                                <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                                  <AppLink href={paths.inspection(i.id)}>Inspect</AppLink>
-                                </Button>
                               ),
                             },
                           ]}

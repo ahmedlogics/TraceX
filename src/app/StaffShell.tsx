@@ -75,11 +75,12 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
   const signOut = useSignOut();
   const navigate = useAppNavigate();
   const dataMode = getDataMode();
+  const logoHref = user?.username?.toLowerCase() === "qc.demo" ? paths.quality : paths.home;
   return (
     <div className="flex min-h-screen w-full">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
         <div className="border-b px-4 py-4">
-          <AppLink href={paths.home} aria-label="TraceX staff home">
+          <AppLink href={logoHref} aria-label="TraceX staff home">
             <Logo height={26} />
           </AppLink>
           <p className="wt-eyebrow mt-1">Staff workspace</p>
@@ -113,7 +114,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               </div>
             </SheetContent>
           </Sheet>
-          <AppLink href={paths.home} className="lg:hidden" aria-label="TraceX staff home">
+          <AppLink href={logoHref} className="lg:hidden" aria-label="TraceX staff home">
             <Logo height={20} />
           </AppLink>
           <div className="ml-auto flex min-w-0 items-center gap-2">

@@ -162,15 +162,24 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       return incomingAllowed.includes(key);
     }
 
-    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Quality, and Rework
-    const finalQcAllowed: RouteKey[] = [
-      "account",
-      "home",
-      "quality",
-      "inspection",
-      "rework",
-      "reworkCase",
-    ];
+    // Line / Final QA Inspector (e.g. qc.demo): strictly Quality and Rework (no Home screen)
+    const isFinalQc = user.username?.toLowerCase() === "qc.demo";
+    const finalQcAllowed: RouteKey[] = isFinalQc
+      ? [
+          "account",
+          "quality",
+          "inspection",
+          "rework",
+          "reworkCase",
+        ]
+      : [
+          "account",
+          "home",
+          "quality",
+          "inspection",
+          "rework",
+          "reworkCase",
+        ];
     return finalQcAllowed.includes(key);
   }
 

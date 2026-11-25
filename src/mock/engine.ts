@@ -975,11 +975,7 @@ function handleSubmitQc(
   } else if (isDiscard) {
     g.disposition = "failed";
     g.stage = "final-qc";
-    g.hold = {
-      reason: insp.defectReason || "Product Scrapped / Discarded",
-      since: now(),
-      inspectionId: insp.id,
-    };
+    g.hold = null;
     garmentEvent(s, g.id, `${kindLabel} failed — garment scrapped & permanently decommissioned`, actor, insp.defectReason);
     audit(
       s,
