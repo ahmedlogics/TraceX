@@ -2760,7 +2760,14 @@ export function sealPackage(s: DemoState, actor: StaffUser, packageId: string): 
     "forbidden",
     "Unauthorized to seal package.",
   );
-  const pkg = findOrThrow(s.packages, packageId, "Package");
+  const cleanId = packageId.trim().toUpperCase();
+  const pkg =
+    s.packages.find(
+      (p) =>
+        p.id.toUpperCase() === cleanId ||
+        (p.rfidUid && p.rfidUid.toUpperCase() === cleanId) ||
+        (p as any).code?.toUpperCase() === cleanId,
+    ) || findOrThrow(s.packages, packageId, "Package");
   ensure(pkg.garmentIds.length > 0, "invalid", "Cannot seal an empty package.");
   pkg.status = "sealed";
   pkg.sealedAt = now();

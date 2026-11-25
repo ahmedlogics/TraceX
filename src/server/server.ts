@@ -53,6 +53,8 @@ export function startServer(port: number = serverConfig.port): Promise<Server> {
         console.log("==================================================");
         console.log(` WearTrail Express API Server running on port ${port}`);
         console.log(` Environment: ${serverConfig.nodeEnv}`);
+        console.log(` API Base URL: http://localhost:${port}/api`);
+        console.log(" Frontend Web UI: http://localhost:8080 (or run 'npm run dev')");
         console.log(" Diagnostics:", JSON.stringify(getSanitizedConfig(), null, 2));
         console.log("==================================================");
         resolve(serverInstance!);

@@ -40,6 +40,11 @@ const defaultBins = [
 export function WarehousePanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
+
+  // Queries placed at top of component so they are declared before any effects or handlers
+  const qFulfilment = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
+
   const [activeTab, setActiveTab] = useState<"awaiting" | "received">("awaiting");
 
   // Selected carton for read-only manifest inspection modal
@@ -68,9 +73,8 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
     }
   }, [stationData.lastScanOutcome, qFulfilment]);
 
-  const qFulfilment = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
-
-  const isAuthorized = me.role === "M" || me.role === "L" || me.role === "A" || me.department === "warehouse";
+  const isAuthorized =
+    me.role === "M" || me.role === "L" || me.role === "A" || me.department === "warehouse";
   const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
 
   // Sync bin selection with station context so hardware RFID scans route to selected bin
@@ -96,6 +100,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
         setLocalLastOutcome(outcome);
         setScanUid("");
         void qFulfilment.refetch();
+        void qGarments.refetch();
         if (outcome.resolution === "accepted") {
           return outcome.productName || "Box Received Successfully — Garments Moved to Warehouse.";
         }
@@ -147,10 +152,15 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
   return (
     <Loadable query={qFulfilment}>
       {(fulfilment) => {
-        // Real packages from PostgreSQL
         const allPackages = fulfilment.packages || [];
-        const sealedAwaitingIntake = allPackages.filter((p: any) => p.status === "sealed");
+        const sealedAwaitingIntake = allPackages.filter(
+          (p: any) => p.status === "sealed" || p.status === "packed",
+        );
         const receivedCartons = allPackages.filter((p: any) => p.status === "warehoused");
+
+        // Lookup map for garment details
+        const garmentsList = qGarments.data || [];
+        const garmentMap = new Map(garmentsList.map((g) => [g.id, g]));
 
         return (
           <div className="space-y-6">
@@ -166,7 +176,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                       Scanner 8 Active
                     </span>
                     <span className="font-mono text-muted-foreground">
-                      Station 8
+                      Station 8 · Finished Goods Intake
                     </span>
                   </div>
 
@@ -186,18 +196,28 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                   {/* Master Box RFID Tag Scan Input */}
                   <form onSubmit={handleManualScanSubmit} className="space-y-2 pt-2 border-t">
                     <Field
-                      label="Master Box Tag UID"
+                      label="Master Box Tag UID / ID"
                       htmlFor="master-box-scan-input"
                     >
-                      <Input
-                        id="master-box-scan-input"
-                        value={scanUid}
-                        onChange={(e) => setScanUid(e.target.value)}
-                        placeholder="Scan or enter tag UID..."
-                        className="font-mono text-xs"
-                        disabled={pending}
-                        autoFocus
-                      />
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="master-box-scan-input"
+                          value={scanUid}
+                          onChange={(e) => setScanUid(e.target.value)}
+                          placeholder="Scan Box Tag on Scanner 8 or enter UID..."
+                          className="font-mono text-xs flex-1"
+                          disabled={pending}
+                          autoFocus
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="text-xs h-9 px-4 font-semibold"
+                          disabled={pending || !scanUid.trim()}
+                        >
+                          Receive Box
+                        </Button>
+                      </div>
                     </Field>
                   </form>
 
@@ -300,7 +320,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                   <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
                     <PkgIcon className="size-8 mx-auto mb-2 opacity-40" />
                     <p className="text-xs font-medium">
-                      Waiting for Master Box RFID scan.
+                      Waiting for Master Box RFID scan on Scanner 8.
                     </p>
                   </div>
                 )}
@@ -330,6 +350,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                   size="sm"
                   onClick={() => {
                     void qFulfilment.refetch();
+                    void qGarments.refetch();
                   }}
                   className="gap-1.5 self-end text-xs text-muted-foreground hover:text-foreground"
                 >
@@ -343,14 +364,21 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                   <DataTable
                     rows={sealedAwaitingIntake}
                     rowKey={(p) => p.id}
-                    empty="No sealed cartons awaiting warehouse intake."
+                    empty="No sealed cartons awaiting warehouse intake. Pack and seal cartons at Packaging (Station 7) first."
                     columns={[
                       {
                         header: "Box ID / Tag",
                         cell: (p) => (
-                          <span className="wt-id font-mono font-bold text-foreground">
-                            {(p as any).code || p.id}
-                          </span>
+                          <div className="space-y-0.5">
+                            <span className="wt-id font-mono font-bold text-foreground">
+                              {(p as any).code || p.id}
+                            </span>
+                            {p.rfidUid && (
+                              <div className="text-[11px] font-mono text-primary font-semibold">
+                                RFID: {p.rfidUid}
+                              </div>
+                            )}
+                          </div>
                         ),
                       },
                       {
@@ -371,17 +399,44 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                         cell: (p) => fmt.dateTime(p.createdAt),
                       },
                       {
-                        header: "Manifest",
-                        cell: (p) => (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs gap-1.5"
-                            onClick={() => setManifestCarton(p)}
-                          >
-                            <Eye className="size-3.5" /> View Manifest
-                          </Button>
-                        ),
+                        header: "Actions",
+                        cell: (p) => {
+                          const targetTag = (p as any).rfidUid || (p as any).code || p.id;
+                          return (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+                                disabled={pending || !isAuthorized}
+                                onClick={() => {
+                                  setScanUid(targetTag);
+                                  void run(
+                                    (c) => c.warehouseIntake(targetTag, selectedBinId),
+                                    (outcome) => {
+                                      setLocalLastOutcome(outcome);
+                                      void qFulfilment.refetch();
+                                      void qGarments.refetch();
+                                      return outcome.resolution === "accepted"
+                                        ? `✓ Box ${(p as any).code || p.id} received into ${selectedBinId}.`
+                                        : outcome.rejectReason || "Intake rejected.";
+                                    },
+                                  );
+                                }}
+                              >
+                                <Warehouse className="size-3.5" /> Intake Box
+                              </Button>
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs gap-1.5"
+                                onClick={() => setManifestCarton(p)}
+                              >
+                                <Eye className="size-3.5" /> Manifest
+                              </Button>
+                            </div>
+                          );
+                        },
                       },
                     ]}
                   />
@@ -399,9 +454,16 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                       {
                         header: "Box ID / Tag",
                         cell: (p) => (
-                          <span className="wt-id font-mono font-bold text-foreground">
-                            {(p as any).code || p.id}
-                          </span>
+                          <div className="space-y-0.5">
+                            <span className="wt-id font-mono font-bold text-foreground">
+                              {(p as any).code || p.id}
+                            </span>
+                            {p.rfidUid && (
+                              <div className="text-[11px] font-mono text-primary font-semibold">
+                                RFID: {p.rfidUid}
+                              </div>
+                            )}
+                          </div>
                         ),
                       },
                       {
@@ -450,7 +512,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
               </TabsContent>
             </Tabs>
 
-            {/* Optional Read-Only Carton Manifest Dialog */}
+            {/* Read-Only Carton Manifest Dialog */}
             <Dialog
               open={Boolean(manifestCarton)}
               onOpenChange={(open) => {
@@ -501,6 +563,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                           <tr>
                             <th className="p-2.5">#</th>
                             <th className="p-2.5">Garment Code</th>
+                            <th className="p-2.5">Product Style</th>
                             <th className="p-2.5">Size</th>
                             <th className="p-2.5">Stage</th>
                             <th className="p-2.5">QC Disposition</th>
@@ -510,15 +573,30 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                           {(manifestCarton.garmentDetails || manifestCarton.garmentIds || []).map(
                             (item: any, idx: number) => {
                               const code = typeof item === "string" ? item : item.code || item.id;
-                              const stage = typeof item === "object" ? item.stage : manifestCarton.status === "warehoused" ? "warehouse" : "finished";
-                              const disp = typeof item === "object" ? item.disposition : "released";
-                              const size = typeof item === "object" && item.size ? item.size : "—";
+                              const matchedGarment = garmentMap.get(code);
+                              const styleName =
+                                matchedGarment?.productName ||
+                                (typeof item === "object" ? item.productName : "Garment");
+                              const stage =
+                                matchedGarment?.stage ||
+                                (typeof item === "object"
+                                  ? item.stage
+                                  : manifestCarton.status === "warehoused"
+                                  ? "warehouse"
+                                  : "packed");
+                              const disp =
+                                matchedGarment?.disposition ||
+                                (typeof item === "object" ? item.disposition : "released");
+                              const size =
+                                (matchedGarment as any)?.size ||
+                                (typeof item === "object" && item.size ? item.size : "M");
 
                               return (
                                 <tr key={code || idx} className="hover:bg-muted/40 transition-colors">
                                   <td className="p-2.5 font-mono text-muted-foreground">{idx + 1}</td>
                                   <td className="p-2.5 font-mono font-bold text-foreground">{code}</td>
-                                  <td className="p-2.5 font-medium">{size}</td>
+                                  <td className="p-2.5 font-medium">{styleName}</td>
+                                  <td className="p-2.5 font-mono">{size}</td>
                                   <td className="p-2.5">
                                     <StatusBadge status={stage} />
                                   </td>
