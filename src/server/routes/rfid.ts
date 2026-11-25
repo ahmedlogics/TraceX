@@ -599,7 +599,9 @@ rfidRouter.post(
       if (p["lotId"]) (answers as any)["lotId"] = p["lotId"];
       if (p["orderId"] || p["productionOrderId"]) (answers as any)["orderId"] = p["orderId"] || p["productionOrderId"];
       if (p["size"]) (answers as any)["size"] = p["size"];
-      if (p["assignedDepartment"]) (answers as any)["assignedDepartment"] = p["assignedDepartment"];
+      if (p["assignedDepartment"] || p["assigned_department"]) {
+        (answers as any)["assignedDepartment"] = p["assignedDepartment"] || p["assigned_department"];
+      }
       (answers as any)["kind"] = kind;
 
       // Context valid for at most 5 minutes, strictly bounded by reader session expiry
@@ -607,14 +609,18 @@ rfidRouter.post(
       const expiresAt =
         session.expires_at < targetExpiry ? new Date(session.expires_at.getTime() - 1000) : targetExpiry;
 
-      const qcScope = p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as "incoming" | "final" | "reinspection") : null;
+      const dbActionCode = toDbActionCode(stationCode, kind);
+
+      let qcScope = p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as "incoming" | "final" | "reinspection") : null;
+      if (dbActionCode === "submit_qc" && !qcScope) {
+        qcScope = "final";
+      }
+
       let checklistVersionId: string | null = null;
       if (qcScope) {
         const chk = await getOrCreateChecklistVersion(prisma as any, qcScope, user.id);
         checklistVersionId = chk.id;
       }
-
-      const dbActionCode = toDbActionCode(stationCode, kind);
 
       let resolvedProductionOrderId: string | null = null;
       let resolvedQuantity: Prisma.Decimal | null = null;
@@ -777,8 +783,14 @@ rfidRouter.post(
           warehouse_bin_id: resolvedWarehouseBinId,
           qc_scope: qcScope,
           checklist_version_id: checklistVersionId,
-          qc_outcome: p["outcome"] || p["qcOutcome"] ? (String(p["outcome"] || p["qcOutcome"]) as any) : null,
-          defect_reason: p["defectReason"] ? String(p["defectReason"]) : null,
+          qc_outcome:
+            dbActionCode === "submit_qc"
+              ? (p["outcome"] || p["qcOutcome"] || p["result"] ? (String(p["outcome"] || p["qcOutcome"] || p["result"]) as any) : "pass")
+              : null,
+          defect_reason:
+            p["defectReason"] || p["defect_reason"]
+              ? String(p["defectReason"] || p["defect_reason"])
+              : (p["outcome"] === "fail" || p["qcOutcome"] === "fail" || p["result"] === "fail" ? "Defect identified during inspection" : null),
           notes: p["notes"] ? String(p["notes"]) : null,
           answers: answers as any,
         },

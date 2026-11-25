@@ -182,14 +182,17 @@ export function QAPanel({
       const ctxId = await run((c) =>
         c.prepareActionContext("final_qc", "submit_qc", {
           kind: "submit_qc",
+          outcome: decision,
+          qcOutcome: decision,
           result: decision,
           scope: "final",
-          defectReason: decision === "fail" ? computedDefectReason : undefined,
+          defectReason: decision === "fail" ? (computedDefectReason || "Defect identified during inspection") : undefined,
           assignedDepartment: decision === "fail" && !discardProduct ? referDept : undefined,
+          assigned_department: decision === "fail" && !discardProduct ? referDept : undefined,
           discard: discardProduct,
           checklist:
             decision === "pass"
-              ? checklist
+              ? defaultChecklist
               : selectedLabels.map((l, i) => ({ id: `df-${i}`, label: l, checked: true })),
           notes: notes.trim(),
         }),
@@ -316,15 +319,40 @@ export function QAPanel({
     if (outcome.at && outcome.at !== lastSeenScanRef.current) {
       lastSeenScanRef.current = outcome.at;
       if (outcome.resolution === "accepted") {
-        setConfirmedOutcome({
-          type: outcome.actionKind === "discard" ? "discarded" : decision === "pass" ? "passed" : "failed",
-          title: `Inspection Passed: ${outcome.garmentCode ?? outcome.subjectId ?? outcome.uid}`,
-          message: "Inspection Passed → Released to Station 7 (Packing)",
-          garmentCode: outcome.garmentCode ?? outcome.subjectId,
-          productStyle: outcome.productName,
-          rfidUid: outcome.uid,
-          timestamp: new Date().toLocaleTimeString(),
-        });
+        if (discardProduct || outcome.actionKind === "discard") {
+          setConfirmedOutcome({
+            type: "discarded",
+            title: `Product Scrapped: ${outcome.garmentCode ?? outcome.subjectId ?? outcome.uid}`,
+            message: "Product Scrapped / Discarded → Decommissioned permanently from line",
+            garmentCode: outcome.garmentCode ?? outcome.subjectId,
+            productStyle: outcome.productName,
+            loggedDefect: computedDefectReason,
+            rfidUid: outcome.uid,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        } else if (decision === "pass") {
+          setConfirmedOutcome({
+            type: "passed",
+            title: `Inspection Passed: ${outcome.garmentCode ?? outcome.subjectId ?? outcome.uid}`,
+            message: "Inspection Passed → Released to Station 7 (Packing)",
+            garmentCode: outcome.garmentCode ?? outcome.subjectId,
+            productStyle: outcome.productName,
+            rfidUid: outcome.uid,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        } else {
+          setConfirmedOutcome({
+            type: "failed",
+            title: `Defect Registered: ${outcome.garmentCode ?? outcome.subjectId ?? outcome.uid}`,
+            message: `Defect Registered → Put on Quality Hold and routed to ${referDept.toUpperCase()} Repair`,
+            garmentCode: outcome.garmentCode ?? outcome.subjectId,
+            productStyle: outcome.productName,
+            loggedDefect: computedDefectReason,
+            assignedDepartment: referDept,
+            rfidUid: outcome.uid,
+            timestamp: new Date().toLocaleTimeString(),
+          });
+        }
         void qGarments.refetch();
         onScanComplete?.();
         resetForm();
