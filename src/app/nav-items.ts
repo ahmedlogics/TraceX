@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { RouteKey } from "@/domain/permissions";
+import type { StaffUser } from "@/domain/types";
 import { paths } from "./paths";
 
 export interface NavItem {
@@ -77,3 +78,26 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
 ];
 
 export const ActivityIcon = Activity;
+
+export function getNavGroups(user?: StaffUser | null): { label: string; items: NavItem[] }[] {
+  const isRawStore =
+    user?.username?.toLowerCase() === "rawstore.demo" || user?.department === "raw-store";
+
+  if (isRawStore) {
+    return navGroups.map((g) => {
+      if (g.label === "Work") {
+        return {
+          ...g,
+          items: [
+            { key: "home", label: "Home", href: paths.home, icon: Home },
+            { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
+            { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
+          ],
+        };
+      }
+      return g;
+    });
+  }
+
+  return navGroups;
+}

@@ -29,7 +29,6 @@ export function PlanOrderDialog({
   const [styleCode, setStyle] = useState("WT-SH-320");
   const [qty, setQty] = useState("4");
   const [dueDate, setDue] = useState("2026-12-15");
-  const [autoApprove, setAutoApprove] = useState(true);
 
   const defaultTrigger = (
     <span className="inline-flex items-center gap-1.5 font-semibold">
@@ -50,8 +49,10 @@ export function PlanOrderDialog({
         );
         if (id) {
           const resolvedId = typeof id === "string" ? id : (id as any).orderId || String(id);
-          if (autoApprove && can.approveOrder(me)) {
-            await run((c) => c.approveOrder(resolvedId), `${resolvedId} approved and ready for fabric issue.`);
+          try {
+            await run((c) => c.approveOrder(resolvedId));
+          } catch {
+            // auto-approved or already ready for issue
           }
           onSuccess?.(resolvedId);
           return true;
@@ -118,22 +119,6 @@ export function PlanOrderDialog({
                 </div>
               );
             })()}
-
-            {can.approveOrder(me) && (
-              <label className="flex items-center gap-2 text-xs font-medium cursor-pointer rounded-md border border-primary/20 bg-primary/5 p-2.5">
-                <input
-                  type="checkbox"
-                  checked={autoApprove}
-                  onChange={(e) => setAutoApprove(e.target.checked)}
-                  className="rounded border-gray-300 text-primary focus:ring-primary size-4"
-                />
-                <span>Approve immediately for production (ready for Station 2 fabric issue)</span>
-              </label>
-            )}
-
-            <p className="text-xs text-muted-foreground pt-1">
-              Note: Orders are digital instructions. Fabric bundle tags are linked at Station 2; garment RFID tags are bound at Station 3 (Cutting).
-            </p>
           </div>
         )}
       </Loadable>
@@ -158,15 +143,30 @@ export function OrdersView() {
       <Loadable query={q}>
         {(orders) => {
           const totalPlanned = orders.reduce((acc, o) => acc + o.plannedQty, 0);
-          const approvedCount = orders.filter((o) => o.status === "approved" || o.status === "in-progress").length;
-          const pendingApproval = orders.filter((o) => o.status === "planned" || o.status === "draft").length;
+          const inProgressCount = orders.filter((o) => o.status === "in-progress").length;
+          const pendingFabricCount = orders.filter(
+            (o) =>
+              (o.status === "planned" || o.status === "approved") &&
+              (!o.lotCodes || o.lotCodes.length === 0) &&
+              (!o.issues || o.issues.length === 0),
+          ).length;
           const completedCount = orders.filter((o) => o.status === "completed").length;
 
-          const rows = orders.filter(
-            (o) =>
-              (status === "all" || o.status === status) &&
-              `${o.id} ${o.product} ${o.styleCode}`.toLowerCase().includes(search.toLowerCase()),
-          );
+          const rows = orders
+            .filter((o) => {
+              const matchesSearch = `${o.id} ${o.product} ${o.styleCode}`
+                .toLowerCase()
+                .includes(search.toLowerCase());
+              if (!matchesSearch) return false;
+              if (status === "all") return true;
+              if (status === "planned") return o.status === "planned" || o.status === "approved";
+              return o.status === status;
+            })
+            .sort((a, b) => {
+              if (!a.dueDate) return 1;
+              if (!b.dueDate) return -1;
+              return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            });
 
           return (
             <div className="space-y-6">
@@ -183,21 +183,21 @@ export function OrdersView() {
                 </div>
                 <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-success/40 hover:shadow-sm transition-all duration-200">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">Approved / Active</span>
+                    <span className="text-xs font-medium text-muted-foreground">In Progress</span>
                     <div className="flex size-7 items-center justify-center rounded-lg bg-success/10 text-success group-hover:scale-105 transition-transform">
                       <CheckCircle2 className="size-3.5" />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-bold tracking-tight text-success">{approvedCount}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-success">{inProgressCount}</p>
                 </div>
                 <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-warning/40 hover:shadow-sm transition-all duration-200">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">Pending Approval</span>
+                    <span className="text-xs font-medium text-muted-foreground">Awaiting Fabric</span>
                     <div className="flex size-7 items-center justify-center rounded-lg bg-warning/10 text-warning group-hover:scale-105 transition-transform">
                       <Clock className="size-3.5" />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-bold tracking-tight text-warning">{pendingApproval}</p>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-warning">{pendingFabricCount}</p>
                 </div>
                 <div className="group rounded-xl border border-border/80 bg-card p-3.5 shadow-xs hover:border-muted-foreground/40 hover:shadow-sm transition-all duration-200">
                   <div className="flex items-center justify-between">
@@ -225,9 +225,8 @@ export function OrdersView() {
                     onChange={setStatus}
                     options={[
                       { value: "all", label: "All Statuses" },
-                      { value: "approved", label: "Approved" },
-                      { value: "in-progress", label: "In Progress" },
                       { value: "planned", label: "Planned (Pending)" },
+                      { value: "in-progress", label: "In Progress" },
                       { value: "completed", label: "Completed" },
                       { value: "draft", label: "Draft" },
                     ]}
@@ -242,12 +241,7 @@ export function OrdersView() {
                 columns={[
                   {
                     header: "Order Code",
-                    cell: (o) => (
-                      <div>
-                        <IdLink href={paths.order(o.id)} id={o.id} />
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Due {fmt.date(o.dueDate)}</p>
-                      </div>
-                    ),
+                    cell: (o) => <IdLink href={paths.order(o.id)} id={o.id} />,
                   },
                   {
                     header: "Product Specification",
@@ -263,23 +257,18 @@ export function OrdersView() {
                     cell: (o) => <span className="font-semibold tabular-nums">{o.plannedQty} pcs</span>,
                   },
                   {
-                    header: "Approval State",
-                    cell: (o) => <StatusBadge status={o.status} />,
-                  },
-                  {
-                    header: "Planner / Approver",
+                    header: "Due Date",
                     cell: (o) => (
-                      <div className="text-xs text-muted-foreground">
-                        <p>Plan: <UserName id={o.plannedBy} /></p>
-                        {o.approvedBy && <p>Appr: <UserName id={o.approvedBy} /></p>}
-                      </div>
+                      <span className="text-xs font-medium">
+                        {o.dueDate ? fmt.date(o.dueDate) : "—"}
+                      </span>
                     ),
                   },
                   {
                     header: "Actions",
                     cell: (o) => (
                       <div className="flex items-center gap-1.5">
-                        {can.issueMaterial(me) && o.status === "approved" && (!o.lotCodes || o.lotCodes.length === 0) && (
+                        {can.issueMaterial(me) && (o.status === "approved" || o.status === "planned") && (!o.lotCodes || o.lotCodes.length === 0) && (
                           <Button asChild size="sm" className="h-7 text-xs bg-primary">
                             <AppLink href={paths.workstation}>
                               Issue Fabric <ArrowRight className="size-3 ml-1" />
@@ -290,19 +279,6 @@ export function OrdersView() {
                           <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                             <CheckCircle2 className="size-2.5" /> Fabric Issued
                           </span>
-                        )}
-                        {can.approveOrder(me) && (o.status === "planned" || o.status === "draft") && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            disabled={pending}
-                            onClick={() =>
-                              void run((c) => c.approveOrder(o.id), `${o.id} approved for production.`)
-                            }
-                          >
-                            <CheckCircle2 className="size-3 mr-1 text-success" /> Approve
-                          </Button>
                         )}
                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
                           <AppLink href={paths.order(o.id)}>

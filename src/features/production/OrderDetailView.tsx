@@ -98,21 +98,13 @@ export function OrderDetailView({ orderId }: { orderId: string }) {
               meta={<StatusBadge status={order.status} />}
               actions={
                 <div className="flex flex-wrap items-center gap-2">
-                  {can.approveOrder(me) &&
-                    (order.status === "planned" || order.status === "draft") && (
-                      <Button
-                        size="sm"
-                        disabled={pending}
-                        onClick={() =>
-                          void run(
-                            (c) => c.approveOrder(order.id),
-                            `${order.id} approved for production.`,
-                          )
-                        }
-                      >
-                        <CheckCircle2 className="size-4 mr-1 text-success" /> Approve order
-                      </Button>
-                    )}
+                  {can.issueMaterial(me) && (!issues || issues.length === 0) && (
+                    <Button asChild size="sm" className="bg-primary">
+                      <AppLink href={paths.workstation}>
+                        Issue Fabric <ArrowRight className="size-3.5 ml-1" />
+                      </AppLink>
+                    </Button>
+                  )}
                   {me.role === "P" && me.department === "cutting" && issues.length > 0 && (
                     <CuttingDialog orderId={order.id} issues={issues} />
                   )}

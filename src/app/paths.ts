@@ -11,6 +11,7 @@ export const paths = {
   lot: (id: string) => `/staff/material-lots/${encodeURIComponent(id)}`,
   orders: "/staff/production-orders",
   order: (id: string) => `/staff/production-orders/${encodeURIComponent(id)}`,
+  orderDetail: (id: string) => `/staff/production-orders/${encodeURIComponent(id)}`,
   garments: "/staff/garments",
   garment: (id: string) => `/staff/garments/${encodeURIComponent(id)}`,
   quality: "/staff/quality",
