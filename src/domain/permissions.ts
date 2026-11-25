@@ -77,7 +77,7 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return user.username === "manager.demo" || user.role === "M";
   }
 
-  // Stitching and Finishing operators: strictly Home, Garments, and Rework screens
+  // Stitching and Finishing operators: Home, Workstation, Garments, and Rework screens
   if (
     user.username === "stitching.demo" ||
     user.department?.toLowerCase() === "stitching" ||
@@ -88,6 +88,7 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       "account",
       "home",
       "tasks",
+      "workstation",
       "garments",
       "garment",
       "rework",
