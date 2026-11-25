@@ -9,11 +9,13 @@ import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
 
 export function RoutinePanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const stationCode = stationData.stationCode as "stitching" | "finishing";
   const [scanUid, setScanUid] = useState("");
@@ -69,54 +71,66 @@ export function RoutinePanel({ stationData }: { stationData: RfidStationData }) 
                         )}
 
                         {isAuthorized && (
-                          <div className="pt-2 space-y-3">
-                            <Field
-                              label="Garment Card UID"
-                              htmlFor="rtn-uid"
-                            >
-                              <Input
-                                id="rtn-uid"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                className="font-mono bg-card"
-                                placeholder={isStitching ? "e.g. 04A7B8C9" : "e.g. 04001122"}
-                              />
-                            </Field>
-
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Button
-                                disabled={pending || !scanUid.trim()}
-                                onClick={() =>
-                                  void run(
-                                    (c) => c.routineScan(scanUid.trim(), stationCode),
-                                    (outcome) => {
-                                      if (outcome.resolution === "accepted") {
-                                        setScanUid("");
-                                        return `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) recorded at ${stationData.stationName}. Advanced to ${nextStage}.`;
-                                      }
-                                      return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
-                                    },
-                                  )
-                                }
+                          isMock ? (
+                            <div className="pt-2 space-y-3">
+                              <Field
+                                label="Garment Card UID (Simulation)"
+                                htmlFor="rtn-uid"
                               >
-                                <ScanLine className="size-4 mr-1.5" /> Record Routine Scan
-                              </Button>
+                                <Input
+                                  id="rtn-uid"
+                                  value={scanUid}
+                                  onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                  className="font-mono bg-card"
+                                  placeholder={isStitching ? "e.g. 04A7B8C9" : "e.g. 04001122"}
+                                />
+                              </Field>
 
-                              {queue.find((g) => g.stage === expectedStage && g.rfidUid) && (
+                              <div className="flex flex-wrap items-center gap-2">
                                 <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  disabled={pending}
-                                  onClick={() => {
-                                    const next = queue.find((g) => g.stage === expectedStage && g.rfidUid);
-                                    if (next?.rfidUid) setScanUid(next.rfidUid);
-                                  }}
+                                  disabled={pending || !scanUid.trim()}
+                                  onClick={() =>
+                                    void run(
+                                      (c) => c.routineScan(scanUid.trim(), stationCode),
+                                      (outcome) => {
+                                        if (outcome.resolution === "accepted") {
+                                          setScanUid("");
+                                          return `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) recorded at ${stationData.stationName}. Advanced to ${nextStage}.`;
+                                        }
+                                        return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                      },
+                                    )
+                                  }
                                 >
-                                  Pre-fill Next ({queue.find((g) => g.stage === expectedStage && g.rfidUid)?.id})
+                                  <ScanLine className="size-4 mr-1.5" /> Record Routine Scan
                                 </Button>
-                              )}
+
+                                {queue.find((g) => g.stage === expectedStage && g.rfidUid) && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    disabled={pending}
+                                    onClick={() => {
+                                      const next = queue.find((g) => g.stage === expectedStage && g.rfidUid);
+                                      if (next?.rfidUid) setScanUid(next.rfidUid);
+                                    }}
+                                  >
+                                    Pre-fill Next ({queue.find((g) => g.stage === expectedStage && g.rfidUid)?.id})
+                                  </Button>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-2 text-primary font-medium">
+                                <RotateCw className="size-4 animate-spin text-primary" />
+                                <span>Hardware Reader Active · Station {stationData.stationName}</span>
+                              </div>
+                              <p className="mt-1">
+                                Present garment RFID cards directly to the station reader. Scans are processed live against workflow rules.
+                              </p>
+                            </div>
+                          )
                         )}
                       </div>
                     </div>

@@ -28,14 +28,16 @@ import type { ScanOutcome } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
+import { getDataMode } from "@/lib/data/provider";
 import { cn } from "@/lib/utils";
 
 export function ReceivingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
   const [selectedLotId, setSelectedLotId] = useState("");
-  const [scanUid, setScanUid] = useState("");
+  const [scanUid, setScanUid] = useState(isMock ? "04EE5566" : "");
   const [lastOutcome, setLastOutcome] = useState<ScanOutcome | null>(null);
   const [lastBoundLotId, setLastBoundLotId] = useState<string>("");
 
@@ -94,7 +96,7 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
           try {
             const outcome = await run(
               async (c) => {
-                if (scanUid.trim()) {
+                if (isMock && scanUid.trim()) {
                   return await c.resolveRfidScan(scanUid.trim());
                 }
 
@@ -445,7 +447,7 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                           className="bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs h-8 shadow-xs"
                         >
                           <Cpu className="size-3 mr-1" />
-                          Simulate Acknowledgment
+                          {isMock ? "Simulate Acknowledgment" : "Acknowledge Hardware Handshake"}
                         </Button>
                         <Button
                           variant="outline"
@@ -518,62 +520,64 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                           </div>
                         </div>
 
-                        {/* Streamlined Manual Card UID Input with Quick Test Tags */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <label
-                              htmlFor="rcv-uid"
-                              className="font-medium text-foreground flex items-center gap-1"
-                            >
-                              <ScanLine className="size-3 text-primary" />
-                              <span>Manual Card UID</span>
-                              <span className="text-[10px] text-muted-foreground font-normal">
-                                (Optional)
-                              </span>
-                            </label>
-                            {scanUid && (
-                              <button
-                                type="button"
-                                onClick={() => setScanUid("")}
-                                className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer underline"
+                        {/* Streamlined Manual Card UID Input with Quick Test Tags - ONLY IN MOCK MODE */}
+                        {isMock && (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <label
+                                htmlFor="rcv-uid"
+                                className="font-medium text-foreground flex items-center gap-1"
                               >
-                                Clear
-                              </button>
-                            )}
-                          </div>
-                          <div className="relative">
-                            <Input
-                              id="rcv-uid"
-                              value={scanUid}
-                              onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                              className="font-mono bg-background tracking-wider uppercase text-xs h-9 pl-8"
-                              placeholder="e.g. BB4A0003 or 04EE5566"
-                            />
-                            <Radio className="size-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-                          </div>
+                                <ScanLine className="size-3 text-primary" />
+                                <span>Manual Card UID</span>
+                                <span className="text-[10px] text-muted-foreground font-normal">
+                                  (Mock Mode)
+                                </span>
+                              </label>
+                              {scanUid && (
+                                <button
+                                  type="button"
+                                  onClick={() => setScanUid("")}
+                                  className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer underline"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <Input
+                                id="rcv-uid"
+                                value={scanUid}
+                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                className="font-mono bg-background tracking-wider uppercase text-xs h-9 pl-8"
+                                placeholder="e.g. 04EE5566 or BB4A0003"
+                              />
+                              <Radio className="size-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                            </div>
 
-                          {/* Quick test tag chips to test easily */}
-                          <div className="flex items-center gap-1.5 pt-0.5">
-                            <span className="text-[10px] text-muted-foreground">
-                              Quick test tag:
-                            </span>
-                            {["BB4A0003", "04EE5566", "04A1B2C3"].map((chip) => (
-                              <button
-                                key={chip}
-                                type="button"
-                                onClick={() => setScanUid(chip)}
-                                className={cn(
-                                  "font-mono text-[10px] rounded border px-1.5 py-0.5 cursor-pointer transition-colors",
-                                  scanUid === chip
-                                    ? "bg-primary text-primary-foreground border-primary font-bold"
-                                    : "bg-card text-muted-foreground hover:text-foreground hover:border-primary/50 border-border",
-                                )}
-                              >
-                                {chip}
-                              </button>
-                            ))}
+                            {/* Quick test tag chips to test easily */}
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              <span className="text-[10px] text-muted-foreground">
+                                Quick test tag:
+                              </span>
+                              {["04EE5566", "BB4A0003", "04A1B299"].map((chip) => (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => setScanUid(chip)}
+                                  className={cn(
+                                    "font-mono text-[10px] rounded border px-1.5 py-0.5 cursor-pointer transition-colors",
+                                    scanUid === chip
+                                      ? "bg-primary text-primary-foreground border-primary font-bold"
+                                      : "bg-card text-muted-foreground hover:text-foreground hover:border-primary/50 border-border",
+                                  )}
+                                >
+                                  {chip}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
 
                       {/* Action buttons */}
@@ -596,7 +600,7 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                               </span>
                               Listening for Card (35s)...
                             </>
-                          ) : scanUid.trim() ? (
+                          ) : isMock && scanUid.trim() ? (
                             <>
                               <ScanLine className="size-3.5 mr-1.5" />
                               Simulate RFID Scan ({scanUid.trim()})

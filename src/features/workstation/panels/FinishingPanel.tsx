@@ -33,10 +33,12 @@ import { EmptyState, Loadable } from "@/components/wt/states";
 import type { Garment, ReworkCase } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 export function FinishingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
 
   // Mode switcher: "production" (Routine Throughput) | "rework" (Repair Queue)
@@ -202,12 +204,12 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                   <ScopeNote>
                                     Only finishing department operators or managers can record finishing routine scans.
                                   </ScopeNote>
-                                ) : (
+                                ) : isMock ? (
                                   <div className="pt-2 space-y-3">
                                     <Field
-                                      label="Garment Card RFID UID"
+                                      label="Garment Card RFID UID (Simulation)"
                                       htmlFor="finishing-uid-input"
-                                      hint="Automatically populated upon physical reader tap, or enter manually."
+                                      hint="Enter card UID manually or click Pre-fill Next to simulate finishing routine scan."
                                     >
                                       <Input
                                         id="finishing-uid-input"
@@ -251,6 +253,16 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                                         </Button>
                                       )}
                                     </div>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-2 text-primary font-medium">
+                                      <Radio className="size-4 animate-pulse" />
+                                      <span>Hardware Reader Active · Station 5 (Finishing Line)</span>
+                                    </div>
+                                    <p className="mt-1">
+                                      Present garment RFID cards directly to Station 5 reader antenna. Successful taps will advance garments automatically to Final QC.
+                                    </p>
                                   </div>
                                 )}
                               </div>

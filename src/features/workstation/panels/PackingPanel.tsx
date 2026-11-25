@@ -24,6 +24,7 @@ import { EmptyState, Loadable } from "@/components/wt/states";
 import type { Garment, MaterialLot, Package as PkgType } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
 
@@ -48,6 +49,7 @@ interface ScanFeedback {
 
 export function PackingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
 
   // Queries
@@ -600,25 +602,27 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 Scan Box Tag
                               </Button>
 
-                              {/* Quick Test Helper for Testing Without Physical Hardware */}
-                              <div className="pt-2">
-                                <p className="text-xs text-muted-foreground mb-1.5">
-                                  No physical RFID reader connected? Test directly:
-                                </p>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-xs font-mono text-primary border-primary/30 hover:bg-primary/10 gap-1.5"
-                                  disabled={pending || !isPackingStaff}
-                                  onClick={() => {
-                                    setIsWaitingForBoxScan(true);
-                                    void handleTagScan(testBoxUid);
-                                  }}
-                                >
-                                  <Sparkles className="size-3.5" />
-                                  Simulate Fresh Box Tag ({testBoxUid})
-                                </Button>
-                              </div>
+                              {/* Quick Test Helper for Testing Without Physical Hardware - ONLY IN MOCK MODE */}
+                              {isMock && (
+                                <div className="pt-2">
+                                  <p className="text-xs text-muted-foreground mb-1.5">
+                                    Simulate Box RFID Scan (Mock Mode):
+                                  </p>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs font-mono text-primary border-primary/30 hover:bg-primary/10 gap-1.5"
+                                    disabled={pending || !isPackingStaff}
+                                    onClick={() => {
+                                      setIsWaitingForBoxScan(true);
+                                      void handleTagScan(testBoxUid);
+                                    }}
+                                  >
+                                    <Sparkles className="size-3.5" />
+                                    Simulate Fresh Box Tag ({testBoxUid})
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="space-y-4 pt-2">
@@ -643,15 +647,17 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                   Cancel
                                 </Button>
 
-                                <Button
-                                  size="sm"
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs gap-1.5"
-                                  disabled={pending || !isPackingStaff}
-                                  onClick={() => void handleTagScan(testBoxUid)}
-                                >
-                                  <Sparkles className="size-3.5" />
-                                  Tap Simulated Clean Tag ({testBoxUid})
-                                </Button>
+                                {isMock && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs gap-1.5"
+                                    disabled={pending || !isPackingStaff}
+                                    onClick={() => void handleTagScan(testBoxUid)}
+                                  >
+                                    <Sparkles className="size-3.5" />
+                                    Tap Simulated Clean Tag ({testBoxUid})
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           )}

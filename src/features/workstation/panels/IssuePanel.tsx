@@ -29,6 +29,7 @@ import { EmptyState, Loadable } from "@/components/wt/states";
 import type { MaterialLot, ProductionOrder, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 import { PlanOrderDialog } from "@/features/production/OrdersView";
 
@@ -38,6 +39,7 @@ function getRequiredFabric(order: ProductionOrder): number {
 
 export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
@@ -119,10 +121,10 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
               );
             };
 
-            // Handle scan execution (simulation or polling hardware scan on Scanner 2 / GPIO 12)
+            // Handle scan execution (simulation in mock mode, or polling hardware scan on Scanner 2 / GPIO 12)
             const handleScan = (uidToScan?: string) => {
-              const targetUid = (uidToScan || scanUid).trim();
-              if (targetUid) {
+              const targetUid = (isMock ? (uidToScan || scanUid) : "").trim();
+              if (isMock && targetUid) {
                 void run(
                   (c) => c.resolveRfidScan(targetUid),
                   (outcome) => {
@@ -556,29 +558,126 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                     {/* Scanner 2 Interactive Card Tap & Fast RFID Interface */}
                     <div className="grid gap-6 lg:grid-cols-2">
                       <Section
-                        title="Station 2 Scanner Simulation & Tap"
-                        description="Present physical fabric bundle RFID tag to Scanner 2 to automatically validate and link it to the selected order."
+                        title={isMock ? "Station 2 Scanner Simulation & Tap" : "Station 2 Hardware Scanner"}
+                        description={
+                          isMock
+                            ? "Simulate presenting fabric bundle RFID tag to Scanner 2 to link it to the selected order."
+                            : "Present physical fabric bundle RFID tag to Scanner 2 (GPIO 12) to automatically validate and link it to the selected order."
+                        }
                       >
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Field
-                              label="Bundle Card Tag UID"
-                              htmlFor="s2-uid"
-                              hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID to test manually."
-                            >
-                              <Input
-                                id="s2-uid"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                placeholder="e.g. BB4A0003 or tap physical card"
-                                className="font-mono bg-card"
-                              />
-                            </Field>
-                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                        {isMock ? (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Field
+                                label="Bundle Card Tag UID (Simulation)"
+                                htmlFor="s2-uid"
+                                hint="Tap bundle card or enter UID to test manually."
+                              >
+                                <Input
+                                  id="s2-uid"
+                                  value={scanUid}
+                                  onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                  placeholder="e.g. 04A1B2C3 or BB4A0003"
+                                  className="font-mono bg-card"
+                                />
+                              </Field>
+                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <Button
+                                  disabled={pending}
+                                  onClick={() => handleScan()}
+                                  className="gap-1.5"
+                                >
+                                  {pending ? (
+                                    <>
+                                      <span className="relative flex h-2.5 w-2.5 mr-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                      </span>
+                                      Simulating RFID Scan...
+                                    </>
+                                  ) : scanUid.trim() ? (
+                                    <>
+                                      <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ScanLine className="size-4" /> Simulate Bundle Scan
+                                    </>
+                                  )}
+                                </Button>
+                                {scanUid && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={pending}
+                                    onClick={() => setScanUid("")}
+                                  >
+                                    Clear
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Quick Pre-fill Test Chips for Demonstration */}
+                            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                One-Click Test Cards:
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {lots.map((l) => (
+                                  <Button
+                                    key={l.id}
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-7 text-xs font-mono"
+                                    disabled={pending || !l.rfidUid}
+                                    onClick={() => {
+                                      if (l.rfidUid) {
+                                        setScanUid(l.rfidUid);
+                                        handleScan(l.rfidUid);
+                                      }
+                                    }}
+                                    title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
+                                  >
+                                    {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
+                                  </Button>
+                                ))}
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs font-mono text-destructive border-destructive/30"
+                                  onClick={() => {
+                                    setScanUid("04999999");
+                                    handleScan("04999999");
+                                  }}
+                                  title="Unrecognised Card test"
+                                >
+                                  04999999 (Unbound Card)
+                                </Button>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                Clicking a card simulates Scanner 2 card tap to test validation, duplicate prevention, and QC clearance guards.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div className="space-y-1">
+                                <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                  <Radio className="size-3.5 text-primary animate-pulse" />
+                                  Hardware Scanner 2 Armed &amp; Listening
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Present physical fabric bundle RFID tag to Scanner 2 (GPIO 12) to issue fabric to Order <strong className="text-foreground">{targetOrderId}</strong>.
+                                </p>
+                              </div>
                               <Button
                                 disabled={pending}
                                 onClick={() => handleScan()}
-                                className="gap-1.5"
+                                className="gap-1.5 shrink-0"
                               >
                                 {pending ? (
                                   <>
@@ -588,73 +687,15 @@ export function IssuePanel({ stationData }: { stationData: RfidStationData }) {
                                     </span>
                                     Awaiting Hardware Card Tap (Scanner 2)...
                                   </>
-                                ) : scanUid.trim() ? (
-                                  <>
-                                    <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
-                                  </>
                                 ) : (
                                   <>
                                     <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
                                   </>
                                 )}
                               </Button>
-                              {scanUid && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={pending}
-                                  onClick={() => setScanUid("")}
-                                >
-                                  Clear
-                                </Button>
-                              )}
                             </div>
                           </div>
-
-                          {/* Quick Pre-fill Test Chips for Demonstration */}
-                          <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                              One-Click Test Cards:
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {lots.map((l) => (
-                                <Button
-                                  key={l.id}
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-7 text-xs font-mono"
-                                  disabled={pending || !l.rfidUid}
-                                  onClick={() => {
-                                    if (l.rfidUid) {
-                                      setScanUid(l.rfidUid);
-                                      handleScan(l.rfidUid);
-                                    }
-                                  }}
-                                  title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
-                                >
-                                  {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
-                                </Button>
-                              ))}
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs font-mono text-destructive border-destructive/30"
-                                onClick={() => {
-                                  setScanUid("04999999");
-                                  handleScan("04999999");
-                                }}
-                                title="Unrecognised Card test"
-                              >
-                                04999999 (Unbound Card)
-                              </Button>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                              Clicking a card immediately sends it to Scanner 2 to test validation, duplicate prevention, and QC clearance guards.
-                            </p>
-                          </div>
-                        </div>
+                        )}
                       </Section>
 
                       {/* Available Inspected Bundles (Reference Panel) */}

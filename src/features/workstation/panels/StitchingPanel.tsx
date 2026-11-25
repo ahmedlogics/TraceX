@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Radio,
   RotateCw,
   ScanLine,
   ShieldAlert,
@@ -22,6 +23,7 @@ import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { paths } from "@/app/paths";
 import { useMe } from "@/features/shared/useMe";
 import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
@@ -29,6 +31,7 @@ import { can } from "@/domain/permissions";
 
 export function StitchingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const [activeTab, setActiveTab] = useState<"routine" | "rework">("routine");
 
@@ -196,54 +199,66 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                                 )}
 
                                 {isAuthorized && (
-                                  <div className="pt-2 space-y-3">
-                                    <Field
-                                      label="Garment Card UID (Manual Entry for Testing)"
-                                      htmlFor="stitching-scan-uid"
-                                      hint="Present card to reader or enter card UID manually. Processed via live backend validation."
-                                    >
-                                      <Input
-                                        id="stitching-scan-uid"
-                                        value={scanUid}
-                                        onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                        className="font-mono bg-card"
-                                        placeholder="e.g. 04001122"
-                                      />
-                                    </Field>
-
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Button
-                                        disabled={pending || !scanUid.trim()}
-                                        onClick={() => handleScan(scanUid)}
+                                  isMock ? (
+                                    <div className="pt-2 space-y-3">
+                                      <Field
+                                        label="Garment Card UID (Manual Entry for Testing)"
+                                        htmlFor="stitching-scan-uid"
+                                        hint="Enter card UID manually or click Pre-fill Next to simulate stitching routine scan."
                                       >
-                                        <ScanLine className="size-4 mr-1.5" /> Process Routine Scan
-                                      </Button>
+                                        <Input
+                                          id="stitching-scan-uid"
+                                          value={scanUid}
+                                          onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                          className="font-mono bg-card"
+                                          placeholder="e.g. 04001122"
+                                        />
+                                      </Field>
 
-                                      {stitchingQueue.find(
-                                        (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
-                                      ) && (
+                                      <div className="flex flex-wrap items-center gap-2">
                                         <Button
-                                          variant="secondary"
-                                          size="sm"
-                                          disabled={pending}
-                                          onClick={() => {
-                                            const next = stitchingQueue.find(
-                                              (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
-                                            );
-                                            if (next?.rfidUid) setScanUid(next.rfidUid);
-                                          }}
+                                          disabled={pending || !scanUid.trim()}
+                                          onClick={() => handleScan(scanUid)}
                                         >
-                                          Pre-fill Next (
-                                          {
-                                            stitchingQueue.find(
-                                              (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
-                                            )?.id
-                                          }
-                                          )
+                                          <ScanLine className="size-4 mr-1.5" /> Process Routine Scan
                                         </Button>
-                                      )}
+
+                                        {stitchingQueue.find(
+                                          (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
+                                        ) && (
+                                          <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            disabled={pending}
+                                            onClick={() => {
+                                              const next = stitchingQueue.find(
+                                                (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
+                                              );
+                                              if (next?.rfidUid) setScanUid(next.rfidUid);
+                                            }}
+                                          >
+                                            Pre-fill Next (
+                                            {
+                                              stitchingQueue.find(
+                                                (g) => isReadyForStitching(g.stage) && !g.hold && g.rfidUid,
+                                              )?.id
+                                            }
+                                            )
+                                          </Button>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
+                                      <div className="flex items-center gap-2 text-primary font-medium">
+                                        <Radio className="size-4 animate-pulse" />
+                                        <span>Hardware Reader Active · Station 4 (Stitching Table)</span>
+                                      </div>
+                                      <p className="mt-1">
+                                        Present garment RFID cards directly to Station 4 reader antenna. Successful taps will advance garments automatically to Finishing.
+                                      </p>
+                                    </div>
+                                  )
                                 )}
                               </div>
                             </div>

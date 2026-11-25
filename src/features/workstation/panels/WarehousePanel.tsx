@@ -28,6 +28,7 @@ import { Loadable } from "@/components/wt/states";
 import type { Garment, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 interface WarehousedBoxDetails {
@@ -41,6 +42,7 @@ interface WarehousedBoxDetails {
 
 export function WarehousePanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const [activeTab, setActiveTab] = useState<"awaiting" | "received">("awaiting");
 
@@ -185,16 +187,18 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                 <span className="text-muted-foreground text-[11px]">
                   Scan carton RFID tag on hardware to intake. Nothing to select on screen.
                 </span>
-                {/* Discreet test button for development testing */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
-                  onClick={() => void handleProcessScan("PKG-001")}
-                  title="Simulate hardware scan for PKG-001"
-                >
-                  (Dev: Test PKG-001)
-                </Button>
+                {/* Discreet test button for mock simulation */}
+                {isMock && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
+                    onClick={() => void handleProcessScan("PKG-001")}
+                    title="Simulate hardware scan for PKG-001 (Mock Mode)"
+                  >
+                    (Simulate PKG-001)
+                  </Button>
+                )}
               </div>
             </div>
 

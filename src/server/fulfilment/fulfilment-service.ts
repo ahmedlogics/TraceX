@@ -530,7 +530,7 @@ export async function executeWarehouseCartonIntake(
 
   // 1. Resolve Package/Carton from Master Box RFID Tag UID
   // Look up by package code or ID (or if UID bound to a garment inside a carton)
-  let pkg = await tx.packages.findFirst({
+  let pkg: any = await tx.packages.findFirst({
     where: {
       OR: [
         ...(isValidUuid(rawUid) ? [{ id: rawUid }] : []),
@@ -643,7 +643,7 @@ export async function executeWarehouseCartonIntake(
       },
     });
 
-    const candidatePkg = binding?.garments?.package_items?.[0]?.packages;
+    const candidatePkg = (binding as any)?.garments?.package_items?.[0]?.packages;
     if (candidatePkg) {
       pkg = candidatePkg as any;
     }
@@ -685,6 +685,18 @@ export async function executeWarehouseCartonIntake(
       pkg = fullPkg as any;
     }
   }
+
+  if (!pkg) {
+    return {
+      uid: rawUid,
+      resolution: "rejected_unknown_card",
+      rejectReason: `Master Box Tag '${rawUid}' is not recognised. No package/carton found.`,
+      at: now.toISOString(),
+      isHardware: Boolean(input.isHardware),
+    };
+  }
+
+  const carton = pkg!;
 
   // 2. Validate carton status: must be sealed
   if (pkg.status === "open") {
@@ -1061,7 +1073,7 @@ export async function receiveWarehouseStock(
   const outcome = await executeWarehouseCartonIntake(
     tx,
     actor,
-    { tagUid: input.garmentId || input.packageId || "", binId: input.binId, isHardware: false },
+    { tagUid: input.garmentId || (input as any).packageId || "", binId: input.binId, isHardware: false },
   );
 
   if (outcome.resolution !== "accepted") {

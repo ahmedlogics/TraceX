@@ -12,6 +12,7 @@ import { Loadable } from "@/components/wt/states";
 import type { LifecycleStage, ScanOutcome } from "@/domain/types";
 import { can } from "@/domain/permissions";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 import { NfcHubView } from "@/features/nfc/NfcHubView";
 
@@ -31,6 +32,7 @@ const stages: LifecycleStage[] = [
 
 export function GarmentsView() {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const isStitching = me?.department === "stitching" || me?.username === "stitching.demo";
   const isFinishing = me?.department === "finishing" || me?.username === "finishing.demo";
   const activeStationCode: "stitching" | "finishing" | null = isStitching
@@ -231,18 +233,20 @@ export function GarmentsView() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        value={scanInput}
-                        onChange={(e) => setScanInput(e.target.value.toUpperCase())}
-                        placeholder="Scan or enter card UID..."
-                        className="h-8 w-44 font-mono text-xs bg-card"
-                      />
+                      {isMock && (
+                        <Input
+                          value={scanInput}
+                          onChange={(e) => setScanInput(e.target.value.toUpperCase())}
+                          placeholder="Scan or enter card UID..."
+                          className="h-8 w-44 font-mono text-xs bg-card"
+                        />
+                      )}
                       <Button
                         size="sm"
                         className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
                         disabled={pending}
                         onClick={() => {
-                          const targetUid = scanInput.trim();
+                          const targetUid = isMock ? scanInput.trim() : "";
                           if (targetUid) {
                             void run(
                               (c) => c.routineScan(targetUid, activeStationCode),
@@ -299,7 +303,7 @@ export function GarmentsView() {
                             </span>
                             Awaiting Card Tap on Scanner {activeStationCode === "finishing" ? 5 : 4}...
                           </>
-                        ) : scanInput.trim() ? (
+                        ) : isMock && scanInput.trim() ? (
                           <>
                             <ScanLine className="size-3.5" /> Simulate Scan ({scanInput.trim()})
                           </>
@@ -309,7 +313,7 @@ export function GarmentsView() {
                           </>
                         )}
                       </Button>
-                      {scanInput && (
+                      {isMock && scanInput && (
                         <Button
                           variant="ghost"
                           size="sm"

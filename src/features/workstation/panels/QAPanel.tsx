@@ -26,6 +26,7 @@ import { Field } from "@/components/wt/forms";
 import type { ChecklistItem, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 const defaultChecklist: ChecklistItem[] = [
@@ -80,6 +81,7 @@ export function QAPanel({
   onScanComplete?: () => void;
 }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
 
@@ -463,15 +465,17 @@ export function QAPanel({
             </Button>
 
             {/* Discreet simulator button for testing environments without physical USB reader */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void handleProcessHardwareScan("04DAEBFC")}
-              className="text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
-              title="Simulate tag scan for development test"
-            >
-              (Dev: Simulate Tag 04DAEBFC)
-            </Button>
+            {isMock && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleProcessHardwareScan("04DAEBFC")}
+                className="text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
+                title="Simulate tag scan for development test"
+              >
+                (Dev: Simulate Tag 04DAEBFC)
+              </Button>
+            )}
           </div>
         </div>
       ) : (
