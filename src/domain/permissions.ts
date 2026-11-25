@@ -112,12 +112,21 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   ) {
     return false;
   }
-  // Warehouse operators only handle warehouse inventory and intake, not full factory garment production lists
+  // Warehouse operators: strictly Workstation and Fulfilment/Warehouse Stock
+  // (NO home, NO shipments, NO garments full factory list)
   if (
-    (user.username === "warehouse.demo" || user.department === "warehouse") &&
-    (key === "garments" || key === "garment")
+    user.username === "warehouse.demo" ||
+    user.department?.toLowerCase() === "warehouse"
   ) {
-    return false;
+    if (
+      key === "home" ||
+      key === "shipments" ||
+      key === "shipment" ||
+      key === "garments" ||
+      key === "garment"
+    ) {
+      return false;
+    }
   }
 
   // Dispatch operators only handle outbound shipments and dock gate dispatch (strictly remove garments and fulfilment)

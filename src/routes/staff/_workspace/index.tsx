@@ -16,14 +16,19 @@ function DashboardRoute() {
   const me = useCurrentUser();
   const navigate = useAppNavigate();
   const isFinalQc = me.data?.username?.toLowerCase() === "qc.demo";
+  const isWarehouse =
+    me.data?.username?.toLowerCase() === "warehouse.demo" ||
+    me.data?.department?.toLowerCase() === "warehouse";
 
   useEffect(() => {
     if (isFinalQc) {
       void navigate(paths.quality, { replace: true });
+    } else if (isWarehouse) {
+      void navigate(paths.workstation, { replace: true });
     }
-  }, [isFinalQc, navigate]);
+  }, [isFinalQc, isWarehouse, navigate]);
 
-  if (isFinalQc) return null;
+  if (isFinalQc || isWarehouse) return null;
 
   return <DashboardView />;
 }

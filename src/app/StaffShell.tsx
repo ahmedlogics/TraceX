@@ -75,7 +75,16 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
   const signOut = useSignOut();
   const navigate = useAppNavigate();
   const dataMode = getDataMode();
-  const logoHref = user?.username?.toLowerCase() === "qc.demo" ? paths.quality : paths.home;
+  const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
+  const isWarehouse =
+    user?.username?.toLowerCase() === "warehouse.demo" ||
+    user?.department?.toLowerCase() === "warehouse";
+
+  const logoHref = isFinalQc
+    ? paths.quality
+    : isWarehouse
+    ? paths.workstation
+    : paths.home;
   return (
     <div className="flex min-h-screen w-full">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">

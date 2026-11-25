@@ -4,9 +4,12 @@ import {
   Eye,
   Layers,
   Package as PkgIcon,
+  Radio,
   RotateCw,
+  ScanLine,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   Warehouse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +30,7 @@ import { Loadable } from "@/components/wt/states";
 import type { ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 const defaultBins = [
@@ -39,9 +43,10 @@ const defaultBins = [
 
 export function WarehousePanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
 
-  // Queries placed at top of component so they are declared before any effects or handlers
+  // Queries placed at top of component
   const qFulfilment = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
 
@@ -50,16 +55,47 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
   // Selected carton for read-only manifest inspection modal
   const [manifestCarton, setManifestCarton] = useState<any | null>(null);
 
-  // Destination Storage Bin state (synced with workstation context)
+  // Hardware scanner arming state for Live API mode
+  const [isArmed, setIsArmed] = useState<boolean>(false);
+
+  // Destination Storage Bin state (defaults to BIN-A1; no manual selection required)
   const initialBinId =
     (stationData.activeContext?.payload as any)?.binId ||
     (stationData.activeContext?.payload as any)?.warehouseBinId ||
     "BIN-A1";
   const [selectedBinId, setSelectedBinId] = useState<string>(initialBinId);
 
-  // Manual entry for barcode/keyboard fallback (submitted with Enter)
+  // Manual entry ONLY for Mock Mode test simulation
   const [scanUid, setScanUid] = useState("");
   const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
+
+  const isAuthorized =
+    me.role === "M" || me.role === "L" || me.role === "A" || me.department === "warehouse";
+  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
+
+  // Centralized box intake scan processor
+  const handleBoxScan = async (rawUid: string) => {
+    const uid = rawUid.trim().toUpperCase();
+    if (!uid || pending || !isAuthorized) return;
+
+    void run(
+      (c) => c.warehouseIntake(uid, selectedBinId),
+      (outcome) => {
+        setLocalLastOutcome(outcome);
+        setScanUid("");
+        void qFulfilment.refetch();
+        void qGarments.refetch();
+        if (outcome.resolution === "accepted") {
+          setActiveTab("received");
+          return (
+            outcome.productName ||
+            `✓ Box ${outcome.garmentCode || uid} received into ${selectedBinId}.`
+          );
+        }
+        return outcome.rejectReason || "Intake rejected.";
+      },
+    );
+  };
 
   // Auto-detect scans arriving via MQTT/backend hardware reader on Station 8
   const lastSeenScanRef = useRef<string | null>(null);
@@ -70,12 +106,43 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
       lastSeenScanRef.current = outcome.at;
       setLocalLastOutcome(outcome);
       void qFulfilment.refetch();
+      void qGarments.refetch();
+      if (outcome.resolution === "accepted") {
+        setActiveTab("received");
+      }
     }
-  }, [stationData.lastScanOutcome, qFulfilment]);
+  }, [stationData.lastScanOutcome, qFulfilment, qGarments]);
 
-  const isAuthorized =
-    me.role === "M" || me.role === "L" || me.role === "A" || me.department === "warehouse";
-  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
+  // Global USB Keyboard Wedge RFID reader listener for Station 8
+  // Operates without focusing any input: physical reader scan automatically ingests the box
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      const now = Date.now();
+      if (now - lastKeyTime > 500) {
+        buffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const scanned = buffer.trim().toUpperCase();
+        if (scanned) {
+          void handleBoxScan(scanned);
+        }
+        buffer = "";
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isArmed, selectedBinId, pending, isAuthorized]);
 
   // Sync bin selection with station context so hardware RFID scans route to selected bin
   const handleBinChange = (newBinId: string) => {
@@ -86,26 +153,6 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
         "warehouse_receive",
         { kind: "warehouse_receive", binId: newBinId } as any,
       ),
-    );
-  };
-
-  // Process manual/wedge scan through authoritative backend validation
-  const handleManualScanSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = scanUid.trim();
-    if (!trimmed || pending) return;
-    void run(
-      (c) => c.warehouseIntake(trimmed, selectedBinId),
-      (outcome) => {
-        setLocalLastOutcome(outcome);
-        setScanUid("");
-        void qFulfilment.refetch();
-        void qGarments.refetch();
-        if (outcome.resolution === "accepted") {
-          return outcome.productName || "Box Received Successfully — Garments Moved to Warehouse.";
-        }
-        return outcome.rejectReason || "Intake rejected.";
-      },
     );
   };
 
@@ -166,21 +213,21 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
           <div className="space-y-6">
             {/* Top Row: Bin Selection & Live Scan Result */}
             <div className="grid gap-6 lg:grid-cols-2">
-              {/* Left Column: Storage Bin Selection & Master Box RFID Scanning */}
+              {/* Left Column: Carton Intake Console */}
               <Section title="Carton Intake">
-                <div className="rounded-lg border bg-card p-4 space-y-4">
-                  {/* Real Scanner 8 Status */}
-                  <div className="flex items-center justify-between text-xs pb-1 border-b">
+                <div className="rounded-lg border bg-card p-5 space-y-4">
+                  {/* Scanner 8 Status */}
+                  <div className="flex items-center justify-between text-xs pb-2 border-b">
                     <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
                       <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Scanner 8 Active
+                      Scanner 8 {isArmed ? "Armed & Listening" : "Active"}
                     </span>
                     <span className="font-mono text-muted-foreground">
                       Station 8 · Finished Goods Intake
                     </span>
                   </div>
 
-                  {/* Destination Storage Bin Selection */}
+                  {/* Destination Storage Bin Selection (Defaults to BIN-A1; zero manual selection required) */}
                   <Field label="Destination Storage Bin" htmlFor="wh-bin">
                     <NativeSelect
                       id="wh-bin"
@@ -193,33 +240,119 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                     />
                   </Field>
 
-                  {/* Master Box RFID Tag Scan Input */}
-                  <form onSubmit={handleManualScanSubmit} className="space-y-2 pt-2 border-t">
-                    <Field
-                      label="Master Box Tag UID / ID"
-                      htmlFor="master-box-scan-input"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id="master-box-scan-input"
-                          value={scanUid}
-                          onChange={(e) => setScanUid(e.target.value)}
-                          placeholder="Scan Box Tag on Scanner 8 or enter UID..."
-                          className="font-mono text-xs flex-1"
-                          disabled={pending}
-                          autoFocus
-                        />
-                        <Button
-                          type="submit"
-                          size="sm"
-                          className="text-xs h-9 px-4 font-semibold"
-                          disabled={pending || !scanUid.trim()}
-                        >
-                          Receive Box
-                        </Button>
+                  {/* LIVE API MODE: Hardware Scan Button & Arming State (NO MANUAL UID INPUT) */}
+                  {!isMock ? (
+                    <div className="pt-2 border-t space-y-3">
+                      {!isArmed ? (
+                        <div className="space-y-2">
+                          <Button
+                            size="lg"
+                            className="w-full text-base font-bold shadow-md gap-2 h-12 bg-primary hover:bg-primary/90"
+                            disabled={pending || !isAuthorized}
+                            onClick={() => {
+                              setIsArmed(true);
+                              void run((c) =>
+                                c.prepareActionContext(
+                                  "warehouse",
+                                  "warehouse_receive",
+                                  { kind: "warehouse_receive", binId: selectedBinId } as any,
+                                ),
+                              );
+                            }}
+                          >
+                            <ScanLine className="size-5" />
+                            Scan Box Tag on Hardware
+                          </Button>
+                          <p className="text-xs text-muted-foreground text-center">
+                            Click above to arm Scanner 8, then tap the physical carton RFID tag against the reader.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                              <Radio className="size-4 animate-spin text-emerald-600" />
+                              Scanner 8 Armed & Listening for Box Tag
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs border-muted-foreground/30 hover:bg-muted"
+                              onClick={() => setIsArmed(false)}
+                            >
+                              Disarm
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Present the master shipping box RFID tag to Scanner 8 hardware. On hardware scan, the carton and all member garments will be automatically received into <strong className="text-foreground">{selectedBinId}</strong>.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* MOCK MODE: Manual UID Simulation & Quick Chips for Testing */
+                    <div className="pt-2 border-t space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground">
+                          Simulate Box RFID Scan (Mock Mode)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="master-box-scan-input"
+                            value={scanUid}
+                            onChange={(e) => setScanUid(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                if (scanUid.trim()) void handleBoxScan(scanUid);
+                              }
+                            }}
+                            placeholder="Enter Box RFID tag UID or ID..."
+                            className="font-mono text-xs flex-1"
+                            disabled={pending}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="text-xs h-9 px-4 font-semibold"
+                            disabled={pending || !scanUid.trim()}
+                            onClick={() => void handleBoxScan(scanUid)}
+                          >
+                            Receive Box
+                          </Button>
+                        </div>
                       </div>
-                    </Field>
-                  </form>
+
+                      {/* Candidate Quick Selection Chips for Sealed Boxes */}
+                      {sealedAwaitingIntake.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          <span className="text-[11px] text-muted-foreground">
+                            Candidate Sealed Cartons (1-Click Test):
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {sealedAwaitingIntake.map((p) => {
+                              const tagVal = (p as any).rfidUid || (p as any).code || p.id;
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/10 hover:bg-primary/20 px-2 py-0.5 text-xs font-mono font-semibold text-primary cursor-pointer transition-colors"
+                                  onClick={() => {
+                                    setScanUid(tagVal);
+                                    void handleBoxScan(tagVal);
+                                  }}
+                                  title={`Click to simulate intake: ${p.id}`}
+                                >
+                                  <Sparkles className="size-3" />
+                                  {(p as any).code || p.id}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {!isAuthorized && (
                     <ScopeNote>
@@ -404,27 +537,20 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                           const targetTag = (p as any).rfidUid || (p as any).code || p.id;
                           return (
                             <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
-                                disabled={pending || !isAuthorized}
-                                onClick={() => {
-                                  setScanUid(targetTag);
-                                  void run(
-                                    (c) => c.warehouseIntake(targetTag, selectedBinId),
-                                    (outcome) => {
-                                      setLocalLastOutcome(outcome);
-                                      void qFulfilment.refetch();
-                                      void qGarments.refetch();
-                                      return outcome.resolution === "accepted"
-                                        ? `✓ Box ${(p as any).code || p.id} received into ${selectedBinId}.`
-                                        : outcome.rejectReason || "Intake rejected.";
-                                    },
-                                  );
-                                }}
-                              >
-                                <Warehouse className="size-3.5" /> Intake Box
-                              </Button>
+                              {/* In Mock Mode, provide 1-click test intake button */}
+                              {isMock && (
+                                <Button
+                                  size="sm"
+                                  className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+                                  disabled={pending || !isAuthorized}
+                                  onClick={() => {
+                                    setScanUid(targetTag);
+                                    void handleBoxScan(targetTag);
+                                  }}
+                                >
+                                  <Warehouse className="size-3.5" /> Intake Box
+                                </Button>
+                              )}
 
                               <Button
                                 variant="outline"

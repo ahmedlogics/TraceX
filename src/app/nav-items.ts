@@ -88,6 +88,30 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
     }));
   }
 
+  const isWarehouse =
+    user?.username?.toLowerCase() === "warehouse.demo" ||
+    user?.department?.toLowerCase() === "warehouse";
+
+  if (isWarehouse) {
+    return navGroups
+      .map((g) => {
+        if (g.label === "Work") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "home"),
+          };
+        }
+        if (g.label === "Logistics") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "shipments"),
+          };
+        }
+        return g;
+      })
+      .filter((g) => g.items.length > 0);
+  }
+
   const isRawStore =
     user?.username?.toLowerCase() === "rawstore.demo" || user?.department === "raw-store";
 
