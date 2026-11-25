@@ -86,9 +86,12 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
     );
   };
 
-  const handleManualScan = () => {
-    const uid = scanUid.trim();
-    if (!uid) return;
+  const handleManualScan = (fallbackUid?: string) => {
+    const uid = scanUid.trim() || fallbackUid || "";
+    if (!uid) {
+      toast.error("No garment card UID to scan.");
+      return;
+    }
     void run(
       (c) => c.routineScan(uid, "finishing"),
       (outcome) => {
@@ -198,7 +201,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                     </TabsList>
                   </Tabs>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                       <span className="relative flex size-2">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -206,23 +209,42 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                       </span>
                       <span>Station 5 Ready</span>
                     </div>
+                    {finishingQueue[0] && !scanUid && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs font-mono gap-1"
+                        onClick={() => setScanUid(finishingQueue[0].rfidUid || "")}
+                      >
+                        Pre-fill Next ({finishingQueue[0].id})
+                      </Button>
+                    )}
                     <Input
                       value={scanUid}
                       onChange={(e) => setScanUid(e.target.value.toUpperCase())}
                       placeholder="Scan tag UID..."
                       className="h-8 w-36 font-mono text-xs bg-card"
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleManualScan();
+                        if (e.key === "Enter") handleManualScan(finishingQueue[0]?.rfidUid);
                       }}
                     />
-                    {scanUid.trim() && (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs font-semibold gap-1 bg-primary text-primary-foreground"
+                      disabled={pending || (!scanUid.trim() && finishingQueue.length === 0)}
+                      onClick={() => handleManualScan(finishingQueue[0]?.rfidUid)}
+                    >
+                      <ScanLine className="size-3.5" /> Simulate Scan {scanUid.trim() ? `(${scanUid.trim()})` : finishingQueue[0] ? `(${finishingQueue[0].id})` : ""}
+                    </Button>
+                    {scanUid && (
                       <Button
+                        variant="ghost"
                         size="sm"
-                        className="h-8 text-xs font-semibold gap-1 bg-primary text-primary-foreground"
-                        disabled={pending}
-                        onClick={handleManualScan}
+                        className="h-8 text-xs px-2"
+                        onClick={() => setScanUid("")}
                       >
-                        <ScanLine className="size-3.5" /> Scan
+                        Clear
                       </Button>
                     )}
                   </div>
