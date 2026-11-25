@@ -28,6 +28,7 @@ import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
+import { cn } from "@/lib/utils";
 
 const defaultChecklist: ChecklistItem[] = [
   { id: "c1", label: "Visual inspection — fabric surface, shading, no soil/oil", checked: true },
@@ -101,6 +102,32 @@ export function QAPanel({
   // Hardware Armed State
   const [isWaitingForHardwareScan, setIsWaitingForHardwareScan] = useState(false);
   const [armedContextId, setArmedContextId] = useState<string | null>(null);
+  const [scanUid, setScanUid] = useState("");
+
+  // Candidate garments for Final QC simulation
+  const candidateGarments = useMemo(() => {
+    return (qGarments.data ?? []).filter((g) => Boolean(g.rfidUid));
+  }, [qGarments.data]);
+
+  const pendingQcGarments = useMemo(() => {
+    const list = candidateGarments.filter(
+      (g) =>
+        g.stage === "finishing" ||
+        g.stage === "final-qc" ||
+        (g.stage === "rework" && g.hold) ||
+        g.disposition === "awaiting-inspection" ||
+        g.disposition === "not-inspected" ||
+        g.disposition === "failed",
+    );
+    if (list.length > 0) return list;
+    return candidateGarments;
+  }, [candidateGarments]);
+
+  useEffect(() => {
+    if (isWaitingForHardwareScan && !scanUid && pendingQcGarments[0]?.rfidUid) {
+      setScanUid(pendingQcGarments[0].rfidUid);
+    }
+  }, [isWaitingForHardwareScan, scanUid, pendingQcGarments]);
 
   // Runtime Confirmed Outcome Banner (displays dynamically on dashboard upon hardware scan)
   const [confirmedOutcome, setConfirmedOutcome] = useState<ConfirmedInspection | null>(null);
@@ -125,6 +152,7 @@ export function QAPanel({
     setChecklist(defaultChecklist);
     setIsWaitingForHardwareScan(false);
     setArmedContextId(null);
+    setScanUid("");
   };
 
   // Compile defect reason
@@ -251,7 +279,7 @@ export function QAPanel({
       } else {
         setConfirmedOutcome({
           type: "rejected",
-          title: "Hardware Scan Rejected",
+          title: isMock ? "QC Simulation Rejected" : "Hardware Scan Rejected",
           message: outcome.rejectReason || `Station rule violated: ${outcome.resolution}`,
           rfidUid: uid,
           timestamp: new Date().toLocaleTimeString(),
@@ -412,9 +440,13 @@ export function QAPanel({
       {/* Main Inspection Workflow: Either waiting for hardware scan, or showing pass/fail decision form */}
       {isWaitingForHardwareScan ? (
         /* Hardware Scanner 6 Active Listening Beacon */
-        <div className="rounded-xl border-2 border-primary/60 bg-primary/5 p-8 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="rounded-xl border-2 border-primary/60 bg-primary/5 p-6 sm:p-8 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="inline-flex items-center justify-center size-16 rounded-full bg-primary/10 text-primary mx-auto ring-8 ring-primary/5">
-            <Radio className="size-8 animate-pulse text-primary" />
+            {isMock ? (
+              <ScanLine className="size-8 text-primary" />
+            ) : (
+              <Radio className="size-8 animate-pulse text-primary" />
+            )}
           </div>
 
           <div className="space-y-1.5 max-w-md mx-auto">
@@ -423,21 +455,25 @@ export function QAPanel({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
               </span>
-              Scanner 6 Hardware Listening
+              {isMock ? "Scanner 6 Simulation Armed" : "Scanner 6 Hardware Listening"}
             </span>
             <h3 className="text-lg font-bold text-foreground">
-              Scan Garment Tag on Scanner 6 Hardware
+              {isMock ? "Simulate Garment Tag Scan (Station 6)" : "Scan Garment Tag on Scanner 6 Hardware"}
             </h3>
             <p className="text-xs text-muted-foreground">
               {decision === "pass" ? (
                 <span>
                   Decision armed: <strong className="text-success font-bold">PASS &amp; RELEASE</strong>.
-                  Present the physical garment tag to Scanner 6 to verify history and advance to packing.
+                  {isMock
+                    ? " Enter or select a garment RFID tag UID below to simulate inspection completion."
+                    : " Present the physical garment tag to Scanner 6 to verify history and advance to packing."}
                 </span>
               ) : discardProduct ? (
                 <span>
                   Decision armed: <strong className="text-destructive font-bold">SCRAP / DISCARD</strong>.
-                  Present the physical garment tag to Scanner 6 to permanently decommission it.
+                  {isMock
+                    ? " Enter or select a garment RFID tag UID below to simulate scrap/decommissioning."
+                    : " Present the physical garment tag to Scanner 6 to permanently decommission it."}
                 </span>
               ) : (
                 <span>
@@ -445,37 +481,106 @@ export function QAPanel({
                   <strong className="text-destructive font-bold">
                     FAIL → ROUTE TO {referDept.toUpperCase()}
                   </strong>
-                  . Present the physical garment tag to Scanner 6 to lock hold and assign to rework.
+                  . {isMock
+                    ? " Enter or select a garment RFID tag UID below to simulate quality hold and route to rework."
+                    : " Present the physical garment tag to Scanner 6 to lock hold and assign to rework."}
                 </span>
               )}
             </p>
           </div>
 
-          <div className="pt-3 flex flex-wrap items-center justify-center gap-3">
+          {/* In Mock Mode: Manual UID Input & Simulation Scan */}
+          {isMock && (
+            <div className="max-w-xl mx-auto space-y-3.5 pt-2">
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <div className="relative">
+                  <Input
+                    value={scanUid}
+                    onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                    placeholder="Enter garment card UID (e.g. 04001122)..."
+                    className="font-mono text-xs h-9 w-64 pl-8 bg-card uppercase"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && scanUid.trim()) {
+                        void handleProcessHardwareScan(scanUid.trim());
+                      }
+                    }}
+                  />
+                  <Tag className="size-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                </div>
+                <Button
+                  size="sm"
+                  disabled={pending || !scanUid.trim()}
+                  onClick={() => void handleProcessHardwareScan(scanUid.trim())}
+                  className="h-9 px-4 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground shadow-xs cursor-pointer"
+                >
+                  <ScanLine className="size-3.5" />
+                  Simulate Scan {scanUid.trim() ? `(${scanUid.trim()})` : ""}
+                </Button>
+              </div>
+
+              {/* Clickable Quick Tags for Candidate Garments */}
+              {pendingQcGarments.length > 0 && (
+                <div className="space-y-1.5 pt-1 text-center">
+                  <div className="text-[11px] text-muted-foreground font-medium">
+                    Available garments for Final QC inspection:
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    {pendingQcGarments.map((g) => {
+                      const isPassed = g.disposition === "passed" && !g.hold;
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => {
+                            setScanUid(g.rfidUid || "");
+                            void handleProcessHardwareScan(g.rfidUid || "");
+                          }}
+                          className={cn(
+                            "inline-flex items-center gap-1 font-mono text-[11px] rounded-md border px-2 py-1 cursor-pointer transition-colors shadow-2xs",
+                            scanUid === g.rfidUid
+                              ? "bg-primary text-primary-foreground border-primary font-bold"
+                              : "bg-card text-foreground hover:border-primary/60 hover:bg-accent border-border",
+                          )}
+                          title={`Click to simulate scanning ${g.id} (${g.productName ?? "Garment"}) - Stage: ${g.stage}, Disposition: ${g.disposition}`}
+                        >
+                          <Tag className="size-3 text-primary" />
+                          <span className="font-semibold">{g.id}</span>
+                          <span className="text-[10px] opacity-80">({g.rfidUid})</span>
+                          {isPassed ? (
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold rounded px-1 ml-0.5">
+                              Passed
+                            </span>
+                          ) : g.hold ? (
+                            <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold rounded px-1 ml-0.5">
+                              On Hold
+                            </span>
+                          ) : (
+                            <span className="text-[9px] bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold rounded px-1 ml-0.5">
+                              Ready
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 setIsWaitingForHardwareScan(false);
                 setArmedContextId(null);
+                setScanUid("");
               }}
               className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
             >
               Cancel / Modify Decision
             </Button>
-
-            {/* Discreet simulator button for testing environments without physical USB reader */}
-            {isMock && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void handleProcessHardwareScan("04DAEBFC")}
-                className="text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
-                title="Simulate tag scan for development test"
-              >
-                (Dev: Simulate Tag 04DAEBFC)
-              </Button>
-            )}
           </div>
         </div>
       ) : (
