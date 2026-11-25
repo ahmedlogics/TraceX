@@ -140,7 +140,7 @@ export function QAPanel({
   const isFailConfigValid =
     (hasDefectSelection || hasCustomComment) && (discardProduct || Boolean(referDept));
   const isDecisionReady =
-    decision === "pass" ? checklist.every((c) => c.checked) : decision === "fail" && isFailConfigValid;
+    decision === "pass" ? true : decision === "fail" && isFailConfigValid;
 
   const resetForm = () => {
     setDecision(null);
@@ -315,7 +315,29 @@ export function QAPanel({
     if (!outcome) return;
     if (outcome.at && outcome.at !== lastSeenScanRef.current) {
       lastSeenScanRef.current = outcome.at;
-      if (outcome.uid) {
+      if (outcome.resolution === "accepted") {
+        setConfirmedOutcome({
+          type: outcome.actionKind === "discard" ? "discarded" : decision === "pass" ? "passed" : "failed",
+          title: `Inspection Passed: ${outcome.garmentCode ?? outcome.subjectId ?? outcome.uid}`,
+          message: "Inspection Passed → Released to Station 7 (Packing)",
+          garmentCode: outcome.garmentCode ?? outcome.subjectId,
+          productStyle: outcome.productName,
+          rfidUid: outcome.uid,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        void qGarments.refetch();
+        onScanComplete?.();
+        resetForm();
+      } else if (outcome.resolution && outcome.resolution !== "accepted") {
+        setConfirmedOutcome({
+          type: "rejected",
+          title: isMock ? "QC Simulation Rejected" : "Hardware Scan Rejected",
+          message: outcome.rejectReason || `Station rule violated: ${outcome.resolution}`,
+          rfidUid: outcome.uid,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+        setIsWaitingForHardwareScan(false);
+      } else if (outcome.uid) {
         void handleProcessHardwareScan(outcome.uid);
       }
     }
@@ -657,25 +679,35 @@ export function QAPanel({
                 <span className="text-[11px] text-success font-semibold">Standard Quality Gate</span>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                {checklist.map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex items-start gap-2.5 text-xs cursor-pointer rounded-md p-2 bg-background/80 border border-success/20 hover:bg-background transition-colors"
-                  >
-                    <Checkbox
-                      checked={item.checked}
-                      onCheckedChange={(checked) =>
-                        setChecklist((prev) =>
-                          prev.map((c) => (c.id === item.id ? { ...c, checked: checked === true } : c)),
-                        )
-                      }
-                      className="mt-0.5"
-                    />
-                    <span className="leading-snug text-foreground/90 font-medium">{item.label}</span>
-                  </label>
-                ))}
-              </div>
+              {/* In Mock Mode: show checklist for simulation. In Live API Mode: No checklist! */}
+              {isMock ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {checklist.map((item) => (
+                    <label
+                      key={item.id}
+                      className="flex items-start gap-2.5 text-xs cursor-pointer rounded-md p-2 bg-background/80 border border-success/20 hover:bg-background transition-colors"
+                    >
+                      <Checkbox
+                        checked={item.checked}
+                        onCheckedChange={(checked) =>
+                          setChecklist((prev) =>
+                            prev.map((c) => (c.id === item.id ? { ...c, checked: checked === true } : c)),
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <span className="leading-snug text-foreground/90 font-medium">{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-background/70 border border-success/25 p-3.5 text-xs text-foreground/90 flex items-center gap-2.5">
+                  <CheckCircle2 className="size-4 text-success shrink-0" />
+                  <span>
+                    Physical garment inspection confirmed acceptable. Click below to start the hardware listener, then tap the garment RFID tag directly against Scanner 6.
+                  </span>
+                </div>
+              )}
 
               <Field label="Inspector Notes (Optional)" htmlFor="qc-notes">
                 <Input
@@ -690,11 +722,11 @@ export function QAPanel({
               <div className="pt-2 flex justify-end">
                 <Button
                   onClick={() => void handleSubmitDecision()}
-                  disabled={pending || !isDecisionReady}
+                  disabled={pending}
                   className="bg-success text-success-foreground hover:bg-success/90 font-bold px-6 gap-2 cursor-pointer shadow-xs"
                 >
                   <CheckCircle2 className="size-4" />
-                  Submit Pass Decision &amp; Arm Scanner 6
+                  {isMock ? "Arm Decision & Simulate Scan" : "Start Hardware Scan (Arm Scanner 6)"}
                 </Button>
               </div>
             </div>
