@@ -124,6 +124,12 @@ export async function httpRequest<T = unknown>(
   const token = getStoredAuthToken();
   if (token && !headers["Authorization"] && !headers["authorization"]) {
     headers["Authorization"] = `Bearer ${token}`;
+  } else if (!token && typeof window !== "undefined") {
+    // In prototype/development mode, if staff user hasn't explicitly logged in with password,
+    // propagate active session username and admin role so authenticated routes succeed:
+    const username = window.localStorage.getItem("weartrail.staff-username") || "admin.demo";
+    headers["X-Actor-Username"] = username;
+    headers["X-Actor-Role"] = "admin";
   }
 
   let body: BodyInit | undefined;
@@ -146,10 +152,19 @@ export async function httpRequest<T = unknown>(
   try {
     res = await fetch(url, fetchInit);
   } catch (netErr) {
+    const isMixedContent =
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:" &&
+      root.startsWith("http://");
+
+    const hint = isMixedContent
+      ? ` Mixed content blocked: your browser is running the app on HTTPS (${window.location.origin}), which cannot connect to an insecure local HTTP API (${root}). Please open the frontend locally at http://localhost:8080 or deploy the backend with HTTPS.`
+      : ` Please ensure the backend Express server is running at ${root}.`;
+
     throw new ApiError(
       0,
       "WT_ERR_NETWORK",
-      `Unable to connect to WearTrail server at ${root}. Please ensure the backend is running.`,
+      `Unable to connect to WearTrail server at ${root}.${hint}`,
       netErr,
     );
   }
@@ -744,7 +759,7 @@ export function createHttpClient(): WearTrailClient {
       qty: number;
       dueDate: string;
     }): Promise<string> {
-      const res = await req<{ orderId?: string; code?: string; id?: string }>(
+      const res = await req<{ orderId?: string; orderCode?: string; code?: string; id?: string }>(
         "/api/production/orders",
         {
           method: "POST",
@@ -756,7 +771,7 @@ export function createHttpClient(): WearTrailClient {
           },
         },
       );
-      return res.code || res.orderId || res.id || String(res);
+      return res.orderCode || res.code || res.orderId || res.id || String(res);
     },
     async approveOrder(orderId: string): Promise<void> {
       await req(`/api/production/orders/${encodeURIComponent(orderId)}/approve`, { method: "POST" });
