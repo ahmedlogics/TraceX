@@ -30,8 +30,9 @@ firmware/**/config.h
 firmware/**/reader_keys.h
 !firmware/**/reader_keys.example.h
 
-# Wrangler / Cloudflare
+# Wrangler / Cloudflare / Vercel
 .wrangler/
+.vercel/
 .dev.vars
 
 # Editor directories and files
