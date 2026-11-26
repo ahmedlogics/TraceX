@@ -43,37 +43,6 @@ async function main() {
     console.log("\n--- Device Mapping Versions ---");
     console.table(verRes.rows);
 
-    const mapRes = await client.query(`
-      SELECT 
-        d.code AS device_code,
-        m.device_id, 
-        m.mapping_version, 
-        m.reader_index, 
-        m.station_code, 
-        m.physical_label 
-      FROM supplyease.device_reader_mappings m
-      JOIN supplyease.devices d ON d.id = m.device_id
-      ORDER BY d.code, m.mapping_version, m.reader_index
-    `);
-    console.log("Device Reader Mappings (All):");
-    console.table(mapRes.rows);
-
-    const v2Res = await client.query(`
-      SELECT 
-        d.code AS device_code,
-        m.device_id, 
-        m.mapping_version, 
-        m.reader_index, 
-        m.station_code, 
-        m.physical_label 
-      FROM supplyease.device_reader_mappings m
-      JOIN supplyease.devices d ON d.id = m.device_id
-      WHERE m.mapping_version = 2
-      ORDER BY m.reader_index
-    `);
-    console.log("Device Reader Mappings (Version 2):");
-    console.table(v2Res.rows);
-
     // 3. Reader Mappings (All)
     const mapRes = await client.query(`
       SELECT 

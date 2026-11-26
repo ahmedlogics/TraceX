@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 
 const KEY = "weartrail.staff-session";
+const USERNAME_KEY = "weartrail.staff-username";
 const listeners = new Set<() => void>();
 
 export function getSessionUserId(): string | null {
@@ -17,10 +18,36 @@ export function getSessionUserId(): string | null {
   }
 }
 
+export function getSessionUsername(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(USERNAME_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function setSessionUserId(userId: string | null) {
   if (typeof window === "undefined") return;
   if (userId) window.localStorage.setItem(KEY, userId);
   else window.localStorage.removeItem(KEY);
+  listeners.forEach((l) => l());
+}
+
+export function setSessionUsername(username: string | null) {
+  if (typeof window === "undefined") return;
+  if (username) window.localStorage.setItem(USERNAME_KEY, username);
+  else window.localStorage.removeItem(USERNAME_KEY);
+}
+
+export function clearSession() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(KEY);
+    window.localStorage.removeItem(USERNAME_KEY);
+  } catch {
+    /* ignore */
+  }
   listeners.forEach((l) => l());
 }
 

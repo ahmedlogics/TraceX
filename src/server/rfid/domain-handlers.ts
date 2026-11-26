@@ -681,12 +681,12 @@ export class CuttingScanHandler implements DomainScanHandler<ScanOutcomeResult> 
         });
 
         let cuttingJobId =
-          context.actionContext?.payload?.cuttingJobId ||
+          (context.actionContext?.payload as any)?.["cuttingJobId"] ||
           (context.actionContext as any)?.cutting_job_id ||
           existingInput?.cutting_job_id ||
           null;
         let cuttingInputId =
-          context.actionContext?.payload?.cuttingInputId ||
+          (context.actionContext?.payload as any)?.["cuttingInputId"] ||
           (context.actionContext as any)?.cutting_input_id ||
           existingInput?.id ||
           null;
@@ -910,7 +910,15 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     const garment = binding.garments;
-    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
+    // Validate active quality holds
+    let activeHold: any = null;
+    if ("garment_holds" in (tx as any) && typeof (tx as any).garment_holds?.findFirst === "function") {
+      activeHold = await (tx as any).garment_holds.findFirst({
+        where: { garment_id: garment.id, released_at: null },
+      });
+    }
+    if (garment.quality_disposition === "held" || activeHold) {
+      const reason = activeHold?.reason || activeHold?.hold_reason || "Active quality hold in effect";
       throw ApiError.badRequest(
         `Garment ${garment.code} has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`,
         { garmentId: garment.id, holdReason: reason },
@@ -919,9 +927,12 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     // Validate duplicate scans
-    const existingStitching = await tx.trace_events.findFirst({
-      where: { garment_id: garment.id, event_type: "stitching_completed" },
-    });
+    let existingStitching: any = null;
+    if ("trace_events" in (tx as any) && typeof (tx as any).trace_events?.findFirst === "function") {
+      existingStitching = await (tx as any).trace_events.findFirst({
+        where: { garment_id: garment.id, event_type: "stitching_completed" },
+      });
+    }
     if (garment.stage === "stitched" || garment.stage === "finished" || existingStitching) {
       throw ApiError.conflict(
         `Duplicate scan: Garment ${garment.code} has already completed stitching and advanced to Finishing.`,
@@ -931,7 +942,7 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     // Validate cutting completion and current stage
-    if (garment.stage !== "cut") {
+    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
       throw ApiError.badRequest(
         `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'. Expected stage 'cut' (cutting completed).`,
         { garmentId: garment.id, stage: garment.stage },
@@ -1074,8 +1085,6 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
     if (
       garment.stage !== "stitched" &&
       garment.stage !== "finished" &&
-      garment.stage !== "finishing" &&
-      garment.stage !== "stitching" &&
       garment.stage !== "cut"
     ) {
       throw ApiError.badRequest(

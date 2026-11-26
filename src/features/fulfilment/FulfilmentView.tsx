@@ -73,17 +73,26 @@ export function FulfilmentView() {
   const me = useMe();
   const q = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
   const { run, pending } = useWtAction();
+  const isWarehouse = me.username === "warehouse.demo" || me.department === "warehouse";
   const defaultTab =
-    me.department === "warehouse" || me.department === "dispatch" ? "stock" : "packing";
+    isWarehouse || me.department === "dispatch" ? "stock" : "packing";
 
   return (
     <>
       <PageHeader
-        title="Fulfilment & Warehousing"
-        description="Packaging assembly, finished goods binning, and outbound stock allocation."
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Fulfilment" }]}
+        title={isWarehouse ? "Warehouse Finished Goods Stock" : "Fulfilment & Warehousing"}
+        description={
+          isWarehouse
+            ? "Finished goods bin storage, warehouse inventory, and received carton manifests."
+            : "Packaging assembly, finished goods binning, and outbound stock allocation."
+        }
+        crumbs={
+          isWarehouse
+            ? [{ label: "Warehouse", href: paths.workstation }, { label: "Finished Stock" }]
+            : [{ label: "Staff", href: paths.home }, { label: "Fulfilment" }]
+        }
         actions={
-          can.packGarment(me) ? (
+          !isWarehouse && can.packGarment(me) ? (
             <Button
               size="sm"
               disabled={pending}
@@ -107,8 +116,8 @@ export function FulfilmentView() {
 
           return (
             <div className="space-y-6">
-              {/* Quality Hold Guard Alert */}
-              {d.blocked.length > 0 && (
+              {/* Quality Hold Guard Alert - ONLY for packing/factory oversight, hidden for warehouse staff */}
+              {!isWarehouse && d.blocked.length > 0 && (
                 <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 shadow-sm">
                   <div className="flex items-start gap-3">
                     <ShieldAlert className="size-5 text-destructive shrink-0 mt-0.5" />
@@ -141,132 +150,191 @@ export function FulfilmentView() {
               )}
 
               {/* Metrics */}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-xs font-medium uppercase tracking-wider">
-                      Awaiting Packing
-                    </span>
-                    <PkgIcon className="size-4 text-primary" />
+              {isWarehouse ? (
+                /* Warehouse-Scoped Metrics */
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Inbound Cartons (Dock)
+                      </span>
+                      <Boxes className="size-4 text-warning" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">
+                      {d.packages.filter((p) => p.status === "sealed" || p.status === "packed").length}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Awaiting warehouse receipt</p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold">{d.awaitingPacking.length}</p>
-                  <p className="text-xs text-muted-foreground mt-1">QC passed & released</p>
-                </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-xs font-medium uppercase tracking-wider">
-                      Packed (Dock)
-                    </span>
-                    <Boxes className="size-4 text-warning" />
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Finished Stock
+                      </span>
+                      <Warehouse className="size-4 text-success" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{d.inStock.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">In warehouse storage bins</p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold">{d.packedAwaitingReceipt.length}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Awaiting warehouse receipt</p>
-                </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-xs font-medium uppercase tracking-wider">
-                      Finished Stock
-                    </span>
-                    <Warehouse className="size-4 text-success" />
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Warehoused Cartons
+                      </span>
+                      <PkgIcon className="size-4 text-primary" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">
+                      {d.packages.filter((p) => p.status === "warehoused").length}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Stored in warehouse bins</p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold">{d.inStock.length}</p>
-                  <p className="text-xs text-muted-foreground mt-1">In warehouse storage bins</p>
-                </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="text-xs font-medium uppercase tracking-wider">
-                      Open Packages
-                    </span>
-                    <Lock className="size-4 text-accent" />
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Storage Bins
+                      </span>
+                      <Lock className="size-4 text-accent" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{defaultBins.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Active warehouse storage bins</p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold">{openPackages.length}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {sealedPackages.length} sealed
-                  </p>
                 </div>
-              </div>
+              ) : (
+                /* Factory / Logistics Overview Metrics */
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Awaiting Packing
+                      </span>
+                      <PkgIcon className="size-4 text-primary" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{d.awaitingPacking.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">QC passed & released</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Packed (Dock)
+                      </span>
+                      <Boxes className="size-4 text-warning" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{d.packedAwaitingReceipt.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Awaiting warehouse receipt</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Finished Stock
+                      </span>
+                      <Warehouse className="size-4 text-success" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{d.inStock.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">In warehouse storage bins</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="text-xs font-medium uppercase tracking-wider">
+                        Open Packages
+                      </span>
+                      <Lock className="size-4 text-accent" />
+                    </div>
+                    <p className="mt-2 text-2xl font-bold">{openPackages.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {sealedPackages.length} sealed
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Main Tabs */}
               <Tabs defaultValue={defaultTab}>
                 <TabsList>
-                  <TabsTrigger value="packing">
-                    Packing Queue ({d.awaitingPacking.length})
-                  </TabsTrigger>
+                  {!isWarehouse && (
+                    <TabsTrigger value="packing">
+                      Packing Queue ({d.awaitingPacking.length})
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="stock">Finished Goods Stock ({d.inStock.length})</TabsTrigger>
-                  <TabsTrigger value="packages">Packages ({d.packages.length})</TabsTrigger>
+                  <TabsTrigger value="packages">
+                    {isWarehouse
+                      ? `Warehoused Cartons (${d.packages.filter((p) => p.status === "warehoused").length})`
+                      : `Packages (${d.packages.length})`}
+                  </TabsTrigger>
                 </TabsList>
 
-                {/* Tab 1: Packing */}
-                <TabsContent value="packing" className="mt-4 space-y-6">
-                  {!can.packGarment(me) && (
-                    <ScopeNote>
-                      Packaging actions are limited to authorized packing staff (Role L, Packing
-                      dept).
-                    </ScopeNote>
-                  )}
+                {/* Tab 1: Packing (Hidden for warehouse staff) */}
+                {!isWarehouse && (
+                  <TabsContent value="packing" className="mt-4 space-y-6">
+                    {!can.packGarment(me) && (
+                      <ScopeNote>
+                        Packaging actions are limited to authorized packing staff (Role L, Packing
+                        dept).
+                      </ScopeNote>
+                    )}
 
-                  <Section
-                    title="Released Garments Awaiting Packing"
-                    description="Only garments with quality clearance ('released') and zero active holds may be packed."
-                  >
-                    <DataTable
-                      rows={d.awaitingPacking}
-                      rowKey={(g) => g.id}
-                      empty="No garments awaiting packing. Released finished shirts appear here."
-                      columns={[
-                        {
-                          header: "Garment",
-                          cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
-                        },
-                        { header: "Product", cell: (g) => g.productName },
-                        {
-                          header: "RFID Card",
-                          cell: (g) =>
-                            g.rfidUid ? (
-                              <span className="font-mono text-xs text-success">{g.rfidUid}</span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
+                    <Section
+                      title="Released Garments Awaiting Packing"
+                      description="Only garments with quality clearance ('released') and zero active holds may be packed."
+                    >
+                      <DataTable
+                        rows={d.awaitingPacking}
+                        rowKey={(g) => g.id}
+                        empty="No garments awaiting packing. Released finished shirts appear here."
+                        columns={[
+                          {
+                            header: "Garment",
+                            cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
+                          },
+                          { header: "Product", cell: (g) => g.productName },
+                          {
+                            header: "RFID Card",
+                            cell: (g) =>
+                              g.rfidUid ? (
+                                <span className="font-mono text-xs text-success">{g.rfidUid}</span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              ),
+                          },
+                          {
+                            header: "Quality",
+                            cell: (g) => (
+                              <div className="flex items-center gap-1.5">
+                                <StatusBadge status={g.disposition} />
+                                {g.hold && <HoldBadge />}
+                              </div>
                             ),
-                        },
-                        {
-                          header: "Quality",
-                          cell: (g) => (
-                            <div className="flex items-center gap-1.5">
-                              <StatusBadge status={g.disposition} />
-                              {g.hold && <HoldBadge />}
-                            </div>
-                          ),
-                        },
-                        {
-                          header: "Eligibility",
-                          cell: (g) => (
-                            <span className="inline-flex items-center gap-1 text-xs text-success font-medium">
-                              <CheckCircle2 className="size-3.5" /> Eligible for Packing
-                            </span>
-                          ),
-                        },
-                        {
-                          header: "Action",
-                          cell: (g) =>
-                            can.packGarment(me) ? (
-                              <Button
-                                size="sm"
-                                disabled={pending}
-                                onClick={() =>
-                                  void run(
-                                    (c) => c.packGarment(g.id),
-                                    (p) => `${g.id} added to ${p}.`,
-                                  )
-                                }
-                              >
-                                Add to Package
-                              </Button>
-                            ) : null,
-                        },
-                      ]}
-                    />
-                  </Section>
-                </TabsContent>
+                          },
+                          {
+                            header: "Eligibility",
+                            cell: (g) => (
+                              <span className="inline-flex items-center gap-1 text-xs text-success font-medium">
+                                <CheckCircle2 className="size-3.5" /> Eligible for Packing
+                              </span>
+                            ),
+                          },
+                          {
+                            header: "Action",
+                            cell: (g) =>
+                              can.packGarment(me) ? (
+                                <Button
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    void run(
+                                      (c) => c.packGarment(g.id),
+                                      (p) => `${g.id} added to ${p}.`,
+                                    )
+                                  }
+                                >
+                                  Add to Package
+                                </Button>
+                              ) : null,
+                          },
+                        ]}
+                      />
+                    </Section>
+                  </TabsContent>
+                )}
 
                 {/* Tab 2: Warehouse Stock */}
                 <TabsContent value="stock" className="mt-4 space-y-6">

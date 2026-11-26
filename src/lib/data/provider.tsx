@@ -19,10 +19,7 @@ export function getDataMode(): DataMode {
     return "live";
   }
 
-  const envMode = import.meta.env?.["VITE_DATA_MODE"] as string | undefined;
-  if (envMode === "live") return "live";
-  if (envMode === "mock") return "mock";
-
+  // 1. Explicit user selection in localStorage takes absolute priority
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem(DATA_MODE_STORAGE_KEY);
@@ -32,10 +29,27 @@ export function getDataMode(): DataMode {
     }
   }
 
-  // When backend is explicitly configured via VITE_API_URL or VITE_API_BASE_URL, default to live
+  // 2. Explicit environment override / default configuration when no explicit selection is stored
+  const envMode = import.meta.env?.["VITE_DATA_MODE"] as string | undefined;
+  if (envMode === "live") return "live";
+  if (envMode === "mock") return "mock";
+
+  // 3. When backend is explicitly configured via VITE_API_URL or VITE_API_BASE_URL, default to live
   if (import.meta.env?.["VITE_API_URL"] || import.meta.env?.["VITE_API_BASE_URL"]) return "live";
 
-  return "mock";
+  return "live";
+}
+
+/**
+ * Resets any saved data mode preference in localStorage.
+ */
+export function clearDataMode(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DATA_MODE_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**

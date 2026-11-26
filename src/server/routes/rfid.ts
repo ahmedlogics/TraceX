@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { prisma } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import { validateBody } from "../middleware/validation";
 import { sendSuccess, ApiError } from "../middleware/responses";
 import { VersionedScanEnvelopeSchema } from "../rfid/schemas";
@@ -169,13 +169,15 @@ rfidRouter.post(
       // Authenticate device with Bearer or X-Device-Secret
       await authenticateDevice(req.headers, context.reader_sessions.device_id, prisma);
 
-      await prisma.rfid_action_contexts.update({
-        where: { id },
-        data: {
-          status: "armed",
-          acknowledged_at: new Date(),
-        },
-      });
+      if (context.status === "awaiting_ack") {
+        await prisma.rfid_action_contexts.update({
+          where: { id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+      }
 
       sendSuccess(res, { acknowledged: true, contextId: id, status: "armed" });
     } catch (err) {
@@ -599,7 +601,9 @@ rfidRouter.post(
       if (p["lotId"]) (answers as any)["lotId"] = p["lotId"];
       if (p["orderId"] || p["productionOrderId"]) (answers as any)["orderId"] = p["orderId"] || p["productionOrderId"];
       if (p["size"]) (answers as any)["size"] = p["size"];
-      if (p["assignedDepartment"]) (answers as any)["assignedDepartment"] = p["assignedDepartment"];
+      if (p["assignedDepartment"] || p["assigned_department"]) {
+        (answers as any)["assignedDepartment"] = p["assignedDepartment"] || p["assigned_department"];
+      }
       (answers as any)["kind"] = kind;
 
       // Context valid for at most 5 minutes, strictly bounded by reader session expiry
@@ -607,14 +611,18 @@ rfidRouter.post(
       const expiresAt =
         session.expires_at < targetExpiry ? new Date(session.expires_at.getTime() - 1000) : targetExpiry;
 
-      const qcScope = p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as "incoming" | "final" | "reinspection") : null;
+      const dbActionCode = toDbActionCode(stationCode, kind);
+
+      let qcScope = p["scope"] || p["qcScope"] ? (String(p["scope"] || p["qcScope"]) as "incoming" | "final" | "reinspection") : null;
+      if (dbActionCode === "submit_qc" && !qcScope) {
+        qcScope = "final";
+      }
+
       let checklistVersionId: string | null = null;
       if (qcScope) {
         const chk = await getOrCreateChecklistVersion(prisma as any, qcScope, user.id);
         checklistVersionId = chk.id;
       }
-
-      const dbActionCode = toDbActionCode(stationCode, kind);
 
       let resolvedProductionOrderId: string | null = null;
       let resolvedQuantity: Prisma.Decimal | null = null;
@@ -657,17 +665,19 @@ rfidRouter.post(
 
         // If database literally has zero production orders, auto-provision a default order
         if (!resolvedProductionOrderId) {
-          const spec = await prisma.product_specifications.findFirst();
+          const spec = await prisma.product_spec_versions.findFirst();
+          const workflow = await prisma.workflow_versions.findFirst();
           const adminUser = await prisma.staff_users.findFirst();
-          if (spec && adminUser) {
+          if (spec && workflow && adminUser) {
             const newOrder = await prisma.production_orders.create({
               data: {
                 code: `ORD-AUTO-${Date.now().toString(36).toUpperCase()}`,
-                product_spec_id: spec.id,
+                workflow_version_id: workflow.id,
+                product_spec_version_id: spec.id,
                 planned_quantity: 10,
                 status: "approved",
                 created_by: adminUser.id,
-                due_date: new Date(Date.now() + 7 * 86400000),
+                planned_for: new Date(Date.now() + 7 * 86400000),
               },
             });
             resolvedProductionOrderId = newOrder.id;
@@ -775,8 +785,14 @@ rfidRouter.post(
           warehouse_bin_id: resolvedWarehouseBinId,
           qc_scope: qcScope,
           checklist_version_id: checklistVersionId,
-          qc_outcome: p["outcome"] || p["qcOutcome"] ? (String(p["outcome"] || p["qcOutcome"]) as any) : null,
-          defect_reason: p["defectReason"] ? String(p["defectReason"]) : null,
+          qc_outcome:
+            dbActionCode === "submit_qc"
+              ? (p["outcome"] || p["qcOutcome"] || p["result"] ? (String(p["outcome"] || p["qcOutcome"] || p["result"]) as any) : "pass")
+              : null,
+          defect_reason:
+            p["defectReason"] || p["defect_reason"]
+              ? String(p["defectReason"] || p["defect_reason"])
+              : (p["outcome"] === "fail" || p["qcOutcome"] === "fail" || p["result"] === "fail" ? "Defect identified during inspection" : null),
           notes: p["notes"] ? String(p["notes"]) : null,
           answers: answers as any,
         },
@@ -835,13 +851,15 @@ rfidRouter.put(
         await authenticateDevice(req.headers, context.reader_sessions.device_id, prisma);
       }
 
-      await prisma.rfid_action_contexts.update({
-        where: { id },
-        data: {
-          status: "armed",
-          acknowledged_at: new Date(),
-        },
-      });
+      if (context.status === "awaiting_ack") {
+        await prisma.rfid_action_contexts.update({
+          where: { id },
+          data: {
+            status: "armed",
+            acknowledged_at: new Date(),
+          },
+        });
+      }
 
       sendSuccess(res, { acknowledged: true, contextId: id });
     } catch (err) {
@@ -985,7 +1003,11 @@ rfidRouter.post(
   prismaAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { uid, stationCode } = req.body as { uid?: string; stationCode?: "stitching" | "finishing" | "dispatch" };
+      const { uid, stationCode, binId } = req.body as {
+        uid?: string;
+        stationCode?: "stitching" | "finishing" | "warehouse" | "dispatch";
+        binId?: string;
+      };
       if (!uid || !stationCode) throw ApiError.badRequest("uid and stationCode are required.");
 
       const staff = getStaffUser(req);
@@ -1000,6 +1022,10 @@ rfidRouter.post(
         );
         sendSuccess(res, outcome, 200);
         return;
+      }
+
+      if (stationCode === "dispatch") {
+        throw ApiError.badRequest("Dispatch scans must be executed at station 'dispatch'.");
       }
 
       const outcome = await executeRoutineScan(

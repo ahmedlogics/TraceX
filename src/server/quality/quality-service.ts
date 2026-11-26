@@ -1116,6 +1116,42 @@ export async function executeFinalQcScan(
     };
   }
 
+  const answersObj = (context.answers as Record<string, any>) || {};
+  const isDiscard =
+    Boolean(answersObj["discard"]) ||
+    Boolean(context.defect_reason?.startsWith("[SCRAP/DISCARD]"));
+
+  if (isDiscard) {
+    await tx.garments.update({
+      where: { id: garment.id },
+      data: {
+        stage: "scrapped",
+        quality_disposition: "scrapped",
+        revision: { increment: 1 },
+      },
+    });
+
+    await tx.rfid_action_contexts.update({
+      where: { id: context.id },
+      data: {
+        status: "consumed",
+        closed_at: new Date(),
+        close_reason: "Inspection failure recorded with product scrapped / decommissioned",
+      },
+    });
+
+    return {
+      accepted: true,
+      outcome: "fail",
+      garmentId: garment.id,
+      garmentCode: garment.code,
+      inspectionId: inspection.id,
+      inspectionCode: inspection.code,
+      qualityDisposition: "scrapped",
+      holdOpened: false,
+    };
+  }
+
   // Outcome is FAIL: atomically open hold and rework case
   const hold = await tx.garment_holds.create({
     data: {
@@ -1130,7 +1166,6 @@ export async function executeFinalQcScan(
   holdId = hold.id;
 
   const rwkCode = `RWK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  const answersObj = (context.answers as Record<string, any>) || {};
   const assignedDept = (answersObj["assignedDepartment"] as string) || (answersObj["assigned_department_code"] as string) || null;
 
   const rework = await tx.rework_cases.create({

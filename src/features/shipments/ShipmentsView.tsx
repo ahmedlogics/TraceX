@@ -27,6 +27,7 @@ import { EmptyState, Loadable } from "@/components/wt/states";
 import { can } from "@/domain/permissions";
 import type { Garment, Package, ScanOutcome, Shipment, ShipmentStatus } from "@/domain/types";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 function PlanShipmentDialog() {
@@ -68,16 +69,17 @@ function PlanShipmentDialog() {
 
 interface DispatchedBoxDetails {
   boxId: string;
-  rfidUid?: string;
+  rfidUid?: string | undefined;
   status: string;
-  garments: { id: string; productName?: string; size?: string; stage: string }[];
-  destination?: string;
-  shipmentId?: string;
+  garments: { id: string; productName?: string | undefined; size?: string | undefined; stage: string }[];
+  destination?: string | undefined;
+  shipmentId?: string | undefined;
   scannedAt: string;
 }
 
 export function ShipmentsView() {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run } = useWtAction();
   const q = useWtQuery(["shipments"], (c) => c.listShipments());
   const qFulfilment = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
@@ -239,16 +241,18 @@ export function ShipmentsView() {
               <span className="text-muted-foreground text-[11px]">
                 Scan carton RFID tag on hardware to dispatch. Nothing to select or type.
               </span>
-              {/* Discreet test button for environments without physical USB hardware plugged in */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
-                onClick={() => void handleProcessScan("PKG-001")}
-                title="Simulate hardware scan for PKG-001"
-              >
-                (Dev: Test PKG-001)
-              </Button>
+              {/* Discreet test button for mock simulation environments */}
+              {isMock && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] text-muted-foreground/60 hover:text-foreground cursor-pointer"
+                  onClick={() => void handleProcessScan("PKG-001")}
+                  title="Simulate hardware scan for PKG-001 (Mock Mode)"
+                >
+                  (Simulate PKG-001)
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -482,14 +486,18 @@ export function ShipmentsView() {
                           },
                           { header: "Planned Date", cell: (s) => fmt.date(s.plannedDate) },
                           { header: "Status", cell: (s) => <StatusBadge status={s.status} /> },
-                          {
-                            header: "Action",
-                            cell: (s) => (
-                              <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                                <AppLink href={paths.shipment(s.id)}>Manifest</AppLink>
-                              </Button>
-                            ),
-                          },
+                          ...(!isDispatch
+                            ? [
+                                {
+                                  header: "Action",
+                                  cell: (s: Shipment) => (
+                                    <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                                      <AppLink href={paths.shipment(s.id)}>Manifest</AppLink>
+                                    </Button>
+                                  ),
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     </TabsContent>

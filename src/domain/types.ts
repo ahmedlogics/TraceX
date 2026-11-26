@@ -489,7 +489,7 @@ export interface Task {
   completedAt?: string | undefined;
 }
 
-export type PackageStatus = "open" | "sealed" | "dispatched";
+export type PackageStatus = "open" | "sealed" | "warehoused" | "dispatched" | "void";
 
 export interface Package {
   id: string;

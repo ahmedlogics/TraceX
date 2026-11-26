@@ -1,36 +1,23 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  AlertCircle,
-  AlertTriangle,
+  ArrowRight,
   CheckCircle2,
-  Clock,
-  Cpu,
-  Flame,
-  Hammer,
-  HelpCircle,
-  Info,
   Radio,
-  RotateCcw,
   ScanLine,
-  ShieldAlert,
-  ShieldCheck,
   Sparkles,
-  Tag,
   Wrench,
   XCircle,
 } from "lucide-react";
-import { paths } from "@/app/paths";
+import { toast } from "sonner";
 import { AppLink } from "@/app/navigation";
+import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DataTable } from "@/components/wt/DataTable";
-import { Field, FormDialog, ScopeNote } from "@/components/wt/forms";
-import { fmt, IdLink, Section } from "@/components/wt/layout";
-import { HoldBadge, StatusBadge } from "@/components/wt/StatusBadge";
-import { EmptyState, Loadable } from "@/components/wt/states";
-import type { Garment, ReworkCase } from "@/domain/types";
+import { IdLink, Section } from "@/components/wt/layout";
+import { StatusBadge } from "@/components/wt/StatusBadge";
+import { Loadable } from "@/components/wt/states";
+import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useMe } from "@/features/shared/useMe";
@@ -38,631 +25,373 @@ import { useMe } from "@/features/shared/useMe";
 export function FinishingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
   const { run, pending } = useWtAction();
-
-  // Mode switcher: "production" (Routine Throughput) | "rework" (Repair Queue)
-  const [activeMode, setActiveMode] = useState<"production" | "rework">("production");
+  const [activeTab, setActiveTab] = useState<"queue" | "rework">("queue");
   const [scanUid, setScanUid] = useState("");
-  const [reworkSearch, setReworkSearch] = useState("");
-  const [repairNote, setRepairNote] = useState("Re-pressed front placket with steam cloth; trimmed all loose thread ends.");
-  const [activeRepairCase, setActiveRepairCase] = useState<ReworkCase | null>(null);
+  const [completedIds, setCompletedIds] = useState<Record<string, { at: string; uid?: string }>>({});
+  const [repairedIds, setRepairedIds] = useState<Record<string, string>>({});
+  const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
 
-  // Queries
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 3000 });
-  const qTasks = useWtQuery(["tasks"], (c) => c.listTasks(), { refetchInterval: 3000 });
   const qRework = useWtQuery(["rework"], (c) => c.listRework(), { refetchInterval: 3000 });
 
-  const isAuthorized = me.role === "M" || me.department === "finishing";
+  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
+
+  // Auto-detect scans arriving via MQTT/backend hardware reader (Station 5)
+  const lastSeenScanRef = useRef<string | null>(null);
+  useEffect(() => {
+    const outcome = stationData.lastScanOutcome;
+    if (!outcome) return;
+    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
+      lastSeenScanRef.current = outcome.at;
+      setLocalLastOutcome(outcome);
+      if (outcome.resolution === "accepted") {
+        const matchedGarment = qGarments.data?.find(
+          (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
+        );
+        const gId = matchedGarment?.id || outcome.subjectId;
+        if (gId) {
+          setCompletedIds((prev) => ({
+            ...prev,
+            [gId]: { at: outcome.at || new Date().toISOString(), uid: outcome.uid },
+          }));
+        }
+        void qGarments.refetch();
+        toast.success(
+          `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? ""} Finishing complete! Released to Station 6 QC Gate.`
+        );
+      }
+    }
+  }, [stationData.lastScanOutcome, qGarments]);
+
+  const handleScan = (garment: Garment) => {
+    const uid = garment.rfidUid || scanUid.trim();
+    if (!uid) {
+      toast.error("No RFID card linked to this garment.");
+      return;
+    }
+    void run(
+      (c) => c.routineScan(uid, "finishing"),
+      (outcome) => {
+        setLocalLastOutcome(outcome);
+        if (outcome.resolution === "accepted") {
+          setCompletedIds((prev) => ({
+            ...prev,
+            [garment.id]: { at: outcome.at || new Date().toISOString(), uid },
+          }));
+          void qGarments.refetch();
+          return `✓ Garment ${garment.id} (${garment.productName}) Finishing complete! Released to Station 6 QC Gate.`;
+        }
+        return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+      }
+    );
+  };
+
+  const handleManualScan = (fallbackUid?: string) => {
+    const uid = scanUid.trim() || fallbackUid || "";
+    if (!uid) {
+      toast.error("No garment card UID to scan.");
+      return;
+    }
+    void run(
+      (c) => c.routineScan(uid, "finishing"),
+      (outcome) => {
+        setScanUid("");
+        setLocalLastOutcome(outcome);
+        if (outcome.resolution === "accepted") {
+          const matchedGarment = qGarments.data?.find(
+            (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
+          );
+          const gId = matchedGarment?.id || outcome.subjectId;
+          if (gId) {
+            setCompletedIds((prev) => ({
+              ...prev,
+              [gId]: { at: outcome.at || new Date().toISOString(), uid: outcome.uid },
+            }));
+          }
+          void qGarments.refetch();
+          return `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? ""} Finishing complete! Released to Station 6 QC Gate.`;
+        }
+        return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+      }
+    );
+  };
+
+  const handleRepair = (rc: ReworkCase) => {
+    void run(
+      (c) => c.completeRework(rc.id, "Finishing repair completed and pressed."),
+      () => {
+        setRepairedIds((prev) => ({ ...prev, [rc.id]: new Date().toISOString() }));
+        void qRework.refetch();
+        return `✓ Rework ${rc.id} repaired! Garment returned to QC for reinspection.`;
+      }
+    );
+  };
 
   return (
     <Loadable query={qGarments}>
       {(garments) => (
-        <Loadable query={qTasks}>
-          {(tasks) => (
-            <Loadable query={qRework}>
-              {(allRework) => {
-                // 1. Awaiting Finishing: strictly garments that completed stitching and are ready on the bench
-                const awaitingFinishing = garments.filter(
-                  (g) => g.stage === "finishing" && !g.hold,
-                );
+        <Loadable query={qRework}>
+          {(reworkCases) => {
+            // ONLY garments that completed Stitching at Station 4 (stage 'stitched' or 'finishing', with bound RFID tag)
+            const finishingQueue = garments.filter(
+              (g) =>
+                (g.stage === "stitched" || g.stage === "finishing") &&
+                Boolean(g.rfidUid) &&
+                !g.hold &&
+                !completedIds[g.id]
+            );
 
-                // 2. Handed Over to Station 6 (Final QC): garments processed here that advanced to next station
-                const handedOverToQc = garments.filter(
-                  (g) => g.stage === "final-qc" && !g.hold,
-                );
+            // QC rework cases: ONLY those failed by QC and assigned to Finishing
+            const finishingRework = reworkCases.filter(
+              (rc) =>
+                rc.assignedDepartment === "finishing" &&
+                rc.status === "assigned" &&
+                !repairedIds[rc.id]
+            );
 
-                // Filter rework queue specifically assigned to finishing
-                const finishingRework = allRework.filter(
-                  (r) =>
-                    r.assignedDepartment === "finishing" ||
-                    (r.status === "assigned" && r.defectReason.toLowerCase().includes("finish")) ||
-                    (r.status === "assigned" && r.defectReason.toLowerCase().includes("thread")) ||
-                    (r.status === "assigned" && r.defectReason.toLowerCase().includes("press")),
-                );
-
-                const activeRepairsCount = finishingRework.filter((r) => r.status === "assigned").length;
-                const awaitingReinspectionCount = finishingRework.filter((r) => r.status === "repaired").length;
-
-                // Most recent scan feedback from station data
-                const lastOutcome = stationData.lastScanOutcome;
-
-                return (
-                  <div className="space-y-6">
-                    {/* Mode Navigation Tabs */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-3">
-                      <div className="flex items-center gap-2">
-                        <Tabs
-                          value={activeMode}
-                          onValueChange={(v) => setActiveMode(v as "production" | "rework")}
-                          className="w-full sm:w-auto"
-                        >
-                          <TabsList className="grid grid-cols-2 w-full sm:w-auto">
-                            <TabsTrigger value="production" className="flex items-center gap-2 text-xs font-semibold">
-                              <Sparkles className="size-3.5 text-primary" />
-                              <span>Production Dashboard</span>
-                              <span className="rounded-full bg-primary/20 text-primary px-1.5 py-0.2 text-[10px] font-bold">
-                                {awaitingFinishing.length}
-                              </span>
-                            </TabsTrigger>
-                            <TabsTrigger value="rework" className="flex items-center gap-2 text-xs font-semibold">
-                              <Wrench className="size-3.5 text-warning" />
-                              <span>Repair & Rework Queue</span>
-                              {activeRepairsCount > 0 && (
-                                <span className="rounded-full bg-warning/20 text-warning px-1.5 py-0.2 text-[10px] font-bold">
-                                  {activeRepairsCount}
-                                </span>
-                              )}
-                            </TabsTrigger>
-                          </TabsList>
-                        </Tabs>
-                      </div>
-
-                      {/* Hardware Scanner Status Pill */}
-                      <div className="flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2.5 py-1 text-xs text-success-foreground font-medium">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+            return (
+              <div className="space-y-6">
+                {/* Live Scan Outcome Banner */}
+                {lastOutcome && (
+                  <div
+                    className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-xs ${
+                      lastOutcome.resolution === "accepted"
+                        ? "border-success/40 bg-success-soft text-foreground"
+                        : "border-destructive/40 bg-danger-soft text-foreground"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {lastOutcome.resolution === "accepted" ? (
+                        <CheckCircle2 className="size-4 shrink-0 text-success" />
+                      ) : (
+                        <XCircle className="size-4 shrink-0 text-destructive" />
+                      )}
+                      <div>
+                        <span className="font-bold">
+                          {lastOutcome.resolution === "accepted"
+                            ? `Scan Confirmed: ${lastOutcome.garmentCode ?? lastOutcome.subjectId}`
+                            : `Scan Rejected (${lastOutcome.uid})`}
                         </span>
-                        <span>Bench Scanner Active: GPIO 16 (Reader 5)</span>
+                        <span className="text-muted-foreground ml-2">
+                          {lastOutcome.resolution === "accepted"
+                            ? "· Finishing Complete → Released to Station 6 Final QC"
+                            : `· ${lastOutcome.rejectReason ?? lastOutcome.resolution}`}
+                        </span>
                       </div>
                     </div>
+                    <span className="font-mono text-muted-foreground text-[11px]">
+                      Tag: {lastOutcome.uid}
+                    </span>
+                  </div>
+                )}
 
-                    {/* Durable Live Scan Feedback Box */}
-                    {lastOutcome && (
-                      <div
-                        className={`rounded-lg border p-4 text-xs transition-all duration-200 shadow-xs ${
-                          lastOutcome.resolution === "accepted"
-                            ? "border-success/40 bg-success-soft text-success-foreground"
-                            : "border-destructive/40 bg-danger-soft text-destructive-foreground"
-                        }`}
+                {/* Header Controls: Tabs & Compact Scanner */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-3">
+                  <Tabs
+                    value={activeTab}
+                    onValueChange={(v) => setActiveTab(v as "queue" | "rework")}
+                  >
+                    <TabsList className="bg-muted p-1">
+                      <TabsTrigger value="queue" className="text-xs font-semibold gap-1.5">
+                        <Sparkles className="size-3.5" /> Finishing Queue ({finishingQueue.length})
+                      </TabsTrigger>
+                      <TabsTrigger value="rework" className="text-xs font-semibold gap-1.5">
+                        <Wrench className="size-3.5" /> QC Rework &amp; Repairs ({finishingRework.length})
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="relative flex size-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                      </span>
+                      <span>Station 5 Ready</span>
+                    </div>
+                    {finishingQueue[0] && !scanUid && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs font-mono gap-1"
+                        onClick={() => setScanUid(finishingQueue[0].rfidUid || "")}
                       >
-                        <div className="flex items-start gap-3">
-                          {lastOutcome.resolution === "accepted" ? (
-                            <CheckCircle2 className="size-5 shrink-0 text-success mt-0.5" />
-                          ) : (
-                            <XCircle className="size-5 shrink-0 text-destructive mt-0.5" />
-                          )}
-                          <div className="space-y-1 flex-1">
-                            <div className="flex items-center justify-between">
-                              <p className="font-bold text-sm">
-                                {lastOutcome.resolution === "accepted"
-                                  ? "Finishing completed → Advanced to Final QC"
-                                  : `Scan Blocked: ${lastOutcome.rejectReason || lastOutcome.resolution}`}
-                              </p>
-                              <span className="text-[11px] opacity-75 font-mono">{fmt.dateTime(lastOutcome.at)}</span>
-                            </div>
-                            <p className="text-xs">
-                              <span className="font-semibold">Garment:</span>{" "}
-                              <span className="font-mono">{lastOutcome.garmentCode || lastOutcome.subjectId}</span>
-                              {lastOutcome.productName && ` · ${lastOutcome.productName}`} ·{" "}
-                              <span className="font-semibold">Card UID:</span>{" "}
-                              <span className="font-mono">{lastOutcome.uid}</span>
-                            </p>
-                            {lastOutcome.resolution !== "accepted" && (
-                              <p className="text-[11px] font-medium text-destructive mt-1">
-                                Operational Rule: Garment must have completed stitching and have no active quality holds.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                        Pre-fill Next ({finishingQueue[0].id})
+                      </Button>
                     )}
+                    <Input
+                      value={scanUid}
+                      onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                      placeholder="Scan tag UID..."
+                      className="h-8 w-36 font-mono text-xs bg-card"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleManualScan(finishingQueue[0]?.rfidUid);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs font-semibold gap-1 bg-primary text-primary-foreground"
+                      disabled={pending || (!scanUid.trim() && finishingQueue.length === 0)}
+                      onClick={() => handleManualScan(finishingQueue[0]?.rfidUid)}
+                    >
+                      <ScanLine className="size-3.5" /> Simulate Scan {scanUid.trim() ? `(${scanUid.trim()})` : finishingQueue[0] ? `(${finishingQueue[0].id})` : ""}
+                    </Button>
+                    {scanUid && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs px-2"
+                        onClick={() => setScanUid("")}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </div>
 
-                    {/* ------------------------------------------------------------- */}
-                    {/* MODE 1: NORMAL PRODUCTION DASHBOARD                           */}
-                    {/* ------------------------------------------------------------- */}
-                    {activeMode === "production" && (
-                      <div className="space-y-6">
-                        <div className="grid gap-6 lg:grid-cols-2">
-                          {/* Continuous Reader & Quick Tap Bench */}
-                          <Section
-                            title="Bench Scanner"
-                            description="RFID card tap advances garment from finishing to final QC."
-                          >
-                            <div className="space-y-4">
-                              <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="relative flex h-2 w-2">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                {/* TAB 1: FINISHING QUEUE */}
+                {activeTab === "queue" && (
+                  <Section
+                    title="Active Finishing Bench Queue"
+                    description="Garments that completed Station 4 Stitching awaiting pressing and finishing."
+                  >
+                    {finishingQueue.length === 0 ? (
+                      <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
+                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                          <CheckCircle2 className="size-4" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">
+                          All stitched garments finished
+                        </p>
+                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                          No garments currently in line for Station 5. When Station 4 Stitching completes assembly, garments will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
+                        {finishingQueue.map((g) => {
+                          const isDone = Boolean(completedIds[g.id]);
+                          return (
+                            <div
+                              key={g.id}
+                              className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <IdLink href={paths.garment(g.id)} id={g.id} />
+                                  <span className="text-muted-foreground">·</span>
+                                  <span className="font-semibold text-foreground">{g.productName}</span>
+                                  {g.size && (
+                                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                      Size {g.size}
                                     </span>
-                                    <p className="text-sm font-semibold text-foreground">Continuous Reader Active</p>
-                                  </div>
-                                  <span className="text-[11px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                                    GPIO 16 · Reader 5
+                                  )}
+                                  <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                    <Radio className="size-2.5" /> Tag: {g.rfidUid}
                                   </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                  Present garment card at the bench reader.
-                                  Advancement: <span className="font-semibold text-foreground">finishing</span> &rarr;{" "}
-                                  <span className="font-semibold text-foreground">final-qc</span>.
+                                  Order: <AppLink href={paths.order(g.orderId)} className="font-medium text-foreground hover:underline">{g.orderId}</AppLink> · Source: Station 4 Stitching
                                 </p>
+                              </div>
 
-                                {!isAuthorized ? (
-                                  <ScopeNote>
-                                    Only finishing department operators or managers can record finishing routine scans.
-                                  </ScopeNote>
+                              <div className="flex items-center gap-2">
+                                {isDone ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 className="size-3" /> Done · Finished
+                                  </span>
                                 ) : (
-                                  <div className="pt-2 space-y-3">
-                                    <Field
-                                      label="Garment Card RFID UID"
-                                      htmlFor="finishing-uid-input"
-                                      hint="Automatically populated upon physical reader tap, or enter manually."
+                                  <>
+                                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                      Ready to Finish
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+                                      disabled={pending}
+                                      onClick={() => handleScan(g)}
                                     >
-                                      <Input
-                                        id="finishing-uid-input"
-                                        value={scanUid}
-                                        onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                        className="font-mono bg-card"
-                                        placeholder="e.g. 04001122 or 04A1B2C3D4E5F6"
-                                      />
-                                    </Field>
-
-                                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                                      <Button
-                                        disabled={pending || !scanUid.trim()}
-                                        onClick={() =>
-                                          void run(
-                                            (c) => c.routineScan(scanUid.trim(), "finishing"),
-                                            (outcome) => {
-                                              if (outcome.resolution === "accepted") {
-                                                setScanUid("");
-                                                return `Garment ${outcome.garmentCode ?? outcome.subjectId} recorded at Finishing. Advanced to Final QC.`;
-                                              }
-                                              return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
-                                            },
-                                          )
-                                        }
-                                      >
-                                        <ScanLine className="size-4 mr-1.5" /> Record Routine Scan
-                                      </Button>
-
-                                      {awaitingFinishing.find((g) => g.rfidUid) && (
-                                        <Button
-                                          variant="secondary"
-                                          size="sm"
-                                          disabled={pending}
-                                          onClick={() => {
-                                            const next = awaitingFinishing.find((g) => g.rfidUid);
-                                            if (next?.rfidUid) setScanUid(next.rfidUid);
-                                          }}
-                                        >
-                                          Pre-fill Next ({awaitingFinishing.find((g) => g.rfidUid)?.id})
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
+                                      <ScanLine className="size-3.5" /> Scan &amp; Finish <ArrowRight className="size-3" />
+                                    </Button>
+                                  </>
                                 )}
                               </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Section>
+                )}
 
-                              {/* Station Safety Guards Callout */}
-                              <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5 text-xs text-muted-foreground">
-                                <p className="font-semibold text-foreground flex items-center gap-1.5">
-                                  <ShieldCheck className="size-3.5 text-primary" /> Active Safety Guards:
+                {/* TAB 2: QC REWORK & REPAIRS */}
+                {activeTab === "rework" && (
+                  <Section
+                    title="Finishing Rework & Repairs"
+                    description="Defects identified by Station 6 Final QC assigned specifically to Finishing."
+                  >
+                    {finishingRework.length === 0 ? (
+                      <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
+                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                          <CheckCircle2 className="size-4" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">
+                          No active finishing rework cases
+                        </p>
+                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                          When QC rejects a garment and assigns corrective action to Finishing, it will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
+                        {finishingRework.map((rc) => {
+                          const isRepaired = Boolean(repairedIds[rc.id]);
+                          return (
+                            <div
+                              key={rc.id}
+                              className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold wt-id text-foreground">{rc.id}</span>
+                                  <span className="text-muted-foreground">·</span>
+                                  <span className="font-semibold text-foreground">Garment: {rc.garmentId}</span>
+                                  <span className="rounded bg-destructive/15 text-destructive px-2 py-0.5 text-[11px] font-bold">
+                                    QC Rejected
+                                  </span>
+                                </div>
+                                <p className="text-xs text-destructive font-medium">
+                                  Defect: {rc.defectReason}
                                 </p>
-                                <p>&bull; <strong className="text-foreground">Stitching Guard:</strong> Blocks any garment that has not completed stitching.</p>
-                                <p>&bull; <strong className="text-foreground">Quality Hold Guard:</strong> Blocks any garment with an active Quality Hold.</p>
-                                <p>&bull; <strong className="text-foreground">Duplicate Suppression:</strong> Suppresses repeated reads to prevent duplicate records.</p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {isRepaired ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 className="size-3" /> Repaired · Returned to QC
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    className="h-8 text-xs gap-1.5 bg-primary font-semibold"
+                                    disabled={pending}
+                                    onClick={() => handleRepair(rc)}
+                                  >
+                                    <Wrench className="size-3.5" /> Complete Repair &amp; Return to QC
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                          </Section>
-
-                          {/* Work Queue & Active Ingestion Table */}
-                          <Section
-                            title="Finishing Work Queue"
-                            description="Only garments completed at Stitching (Station 4) awaiting finishing operations."
-                          >
-                            <DataTable
-                              rows={awaitingFinishing}
-                              rowKey={(g) => g.id}
-                              empty="No garments awaiting finishing. Items will appear here once stitched at Station 4."
-                              columns={[
-                                {
-                                  header: "Garment ID",
-                                  cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
-                                },
-                                {
-                                  header: "Product & Size",
-                                  cell: (g) => (
-                                    <div>
-                                      <p className="font-medium text-xs sm:text-sm">{g.productName}</p>
-                                      {g.size && (
-                                        <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
-                                          Size {g.size}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ),
-                                },
-                                {
-                                  header: "Active RFID Tag",
-                                  cell: (g) =>
-                                    g.rfidUid ? (
-                                      <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                                        {g.rfidUid}
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground text-xs italic">Unbound</span>
-                                    ),
-                                },
-                                {
-                                  header: "Physical Stage",
-                                  cell: (g) => <StatusBadge status={g.stage} />,
-                                },
-                                {
-                                  header: "Quality",
-                                  cell: (g) => (
-                                    <div className="flex items-center gap-1">
-                                      <StatusBadge status={g.disposition} />
-                                      {g.hold && <HoldBadge />}
-                                    </div>
-                                  ),
-                                },
-                                {
-                                  header: "Quick Scan",
-                                  cell: (g) => {
-                                    if (g.hold) {
-                                      return (
-                                        <span className="text-xs text-destructive font-medium flex items-center gap-1">
-                                          <ShieldAlert className="size-3" /> On Hold
-                                        </span>
-                                      );
-                                    }
-                                    if (!g.rfidUid) {
-                                      return (
-                                        <span className="text-xs text-warning font-medium">No Card</span>
-                                      );
-                                    }
-                                    return (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 text-xs font-semibold border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-2xs"
-                                        disabled={pending || !isAuthorized}
-                                        onClick={() =>
-                                          void run(
-                                            (c) => c.routineScan(g.rfidUid!, "finishing"),
-                                            (outcome) =>
-                                              outcome.resolution === "accepted"
-                                                ? `Garment ${outcome.garmentCode ?? outcome.subjectId} completed at Finishing → Advanced to Station 6 (Final QC).`
-                                                : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
-                                          )
-                                        }
-                                      >
-                                        <ScanLine className="size-3 mr-1" /> Tap Card / Complete
-                                      </Button>
-                                    );
-                                  },
-                                },
-                              ]}
-                            />
-                          </Section>
-
-                          {/* Handed Over to Next Station Section */}
-                          {handedOverToQc.length > 0 && (
-                            <Section
-                              title="Handed Over to Station 6 (Final QC)"
-                              description="Garments that completed finishing and advanced forward to Quality Control."
-                            >
-                              <DataTable
-                                rows={handedOverToQc}
-                                rowKey={(g) => g.id}
-                                columns={[
-                                  {
-                                    header: "Garment ID",
-                                    cell: (g) => <IdLink href={paths.garment(g.id)} id={g.id} />,
-                                  },
-                                  {
-                                    header: "Product & Size",
-                                    cell: (g) => (
-                                      <div>
-                                        <p className="font-medium text-xs sm:text-sm">{g.productName}</p>
-                                        {g.size && (
-                                          <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
-                                            Size {g.size}
-                                          </span>
-                                        )}
-                                      </div>
-                                    ),
-                                  },
-                                  {
-                                    header: "Active RFID Tag",
-                                    cell: (g) => (
-                                      <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                                        {g.rfidUid}
-                                      </span>
-                                    ),
-                                  },
-                                  {
-                                    header: "Status",
-                                    cell: () => (
-                                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-success">
-                                        <CheckCircle2 className="size-3.5" /> Ready for QC Inspection
-                                      </span>
-                                    ),
-                                  },
-                                  {
-                                    header: "Next Station",
-                                    cell: () => (
-                                      <span className="text-xs text-muted-foreground font-medium">
-                                        Station 6 · Final QC (GPIO 15)
-                                      </span>
-                                    ),
-                                  },
-                                ]}
-                              />
-                            </Section>
-                          )}
-                        </div>
+                          );
+                        })}
                       </div>
                     )}
-
-                    {/* ------------------------------------------------------------- */}
-                    {/* MODE 2: FINISHING REPAIR & REWORK QUEUE (QC FAILURE FLOW)     */}
-                    {/* ------------------------------------------------------------- */}
-                    {activeMode === "rework" && (
-                      <div className="space-y-6">
-                        {/* Quality Hold Visual Banner */}
-                        <div className="rounded-lg border border-warning/50 bg-warning/10 p-4 text-warning-foreground">
-                          <div className="flex items-start gap-3">
-                            <ShieldAlert className="size-5 shrink-0 text-warning mt-0.5" />
-                            <div className="space-y-1">
-                              <h4 className="font-bold text-sm">Quality Hold Active — Dispatch & Packing Blocked</h4>
-                              <p className="text-xs opacity-90">
-                                All items in this queue failed Final QC inspection (Station 6) due to finishing defects.
-                                Physical transfer to packing, warehouse, or customer shipping is locked by factory policy
-                                until corrective repairs are recorded and an independent QC Inspector performs reinspection.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Rework Metrics & Search Bar */}
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <div className="rounded-lg border bg-card p-3.5 shadow-2xs">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Assigned to Finishing
-                            </p>
-                            <p className="text-2xl font-bold mt-1 text-foreground">{finishingRework.length}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Total QC defect cases routed here</p>
-                          </div>
-                          <div className="rounded-lg border bg-card p-3.5 shadow-2xs">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Under Repair
-                            </p>
-                            <p className="text-2xl font-bold mt-1 text-warning">{activeRepairsCount}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Awaiting physical operator correction</p>
-                          </div>
-                          <div className="rounded-lg border bg-card p-3.5 shadow-2xs">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Awaiting Reinspection
-                            </p>
-                            <p className="text-2xl font-bold mt-1 text-accent-foreground">{awaitingReinspectionCount}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Repaired — queued for Station 6 QC</p>
-                          </div>
-                        </div>
-
-                        {/* Repair Queue Table */}
-                        <Section
-                          title="Finishing Defect Rework Queue"
-                          description="Review defect notations from Quality Control, perform corrective trimming or pressing, and submit repair records."
-                        >
-                          <div className="mb-4">
-                            <Input
-                              value={reworkSearch}
-                              onChange={(e) => setReworkSearch(e.target.value)}
-                              placeholder="Search by Garment ID, Rework Case ID, or Defect Reason..."
-                              className="max-w-md text-xs bg-card"
-                            />
-                          </div>
-
-                          <DataTable
-                            rows={finishingRework.filter((r) => {
-                              if (!reworkSearch.trim()) return true;
-                              const s = reworkSearch.toLowerCase();
-                              return (
-                                r.id.toLowerCase().includes(s) ||
-                                r.garmentId.toLowerCase().includes(s) ||
-                                r.defectReason.toLowerCase().includes(s)
-                              );
-                            })}
-                            rowKey={(r) => r.id}
-                            empty="No rework cases currently assigned to Finishing."
-                            columns={[
-                              {
-                                header: "Rework Case",
-                                cell: (r) => (
-                                  <div>
-                                    <IdLink href={paths.reworkCase(r.id)} id={r.id} />
-                                    <span className="block text-[10px] text-muted-foreground mt-0.5">
-                                      Logged: {fmt.dateTime(r.createdAt)}
-                                    </span>
-                                  </div>
-                                ),
-                              },
-                              {
-                                header: "Garment Identification",
-                                cell: (r) => {
-                                  const garment = garments.find((g) => g.id === r.garmentId);
-                                  return (
-                                    <div>
-                                      <IdLink href={paths.garment(r.garmentId)} id={r.garmentId} />
-                                      <p className="text-xs font-medium text-foreground mt-0.5">
-                                        {garment?.productName ?? "Garment Unit"}
-                                      </p>
-                                      {garment?.size && (
-                                        <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold mt-0.5">
-                                          Size {garment.size}
-                                        </span>
-                                      )}
-                                    </div>
-                                  );
-                                },
-                              },
-                              {
-                                header: "RFID Card UID",
-                                cell: (r) => {
-                                  const garment = garments.find((g) => g.id === r.garmentId);
-                                  return garment?.rfidUid ? (
-                                    <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                                      {garment.rfidUid}
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground text-xs italic">—</span>
-                                  );
-                                },
-                              },
-                              {
-                                header: "QC Defect Reason",
-                                cell: (r) => (
-                                  <div className="rounded border border-warning/30 bg-warning/10 p-2 text-xs text-warning-foreground font-medium max-w-xs">
-                                    <div className="flex items-start gap-1.5">
-                                      <AlertTriangle className="size-3.5 text-warning shrink-0 mt-0.5" />
-                                      <span>{r.defectReason}</span>
-                                    </div>
-                                    <span className="block text-[10px] opacity-75 mt-1">
-                                      Ref Inspection: {r.inspectionId}
-                                    </span>
-                                  </div>
-                                ),
-                              },
-                              {
-                                header: "Status",
-                                cell: (r) => (
-                                  <div>
-                                    <StatusBadge status={r.status} />
-                                    {r.status === "assigned" && (
-                                      <span className="block text-[10px] text-warning font-semibold mt-1">
-                                        Under Repair
-                                      </span>
-                                    )}
-                                    {r.status === "repaired" && (
-                                      <span className="block text-[10px] text-accent font-semibold mt-1">
-                                        Awaiting Reinspection
-                                      </span>
-                                    )}
-                                  </div>
-                                ),
-                              },
-                              {
-                                header: "Operator Action",
-                                cell: (r) => {
-                                  if (r.status === "repaired") {
-                                    return (
-                                      <span className="text-xs text-muted-foreground italic flex items-center gap-1">
-                                        <RotateCcw className="size-3 text-accent" /> Queued for QC
-                                      </span>
-                                    );
-                                  }
-
-                                  return (
-                                    <FormDialog
-                                      allowed={isAuthorized}
-                                      trigger="Record Repair Completion"
-                                      title={`Record Repair for Case ${r.id} (${r.garmentId})`}
-                                      description="Describe the physical corrective action taken (trimming, pressing, steaming, buttoning). Submitting will route the garment back to Station 6 for independent reinspection."
-                                      submitLabel="Submit Repair → Route to Reinspection"
-                                      onSubmit={async () => {
-                                        const ok = await run(
-                                          (c) => c.completeRework(r.id, repairNote).then(() => true),
-                                          `Repair recorded for ${r.id}. Garment routed to Station 6 for independent reinspection.`,
-                                        );
-                                        return Boolean(ok);
-                                      }}
-                                    >
-                                      <div className="space-y-4 pt-2">
-                                        <div className="rounded-lg border bg-muted/40 p-3 text-xs space-y-1">
-                                          <p className="font-semibold text-foreground">Defect to Correct:</p>
-                                          <p className="text-warning-foreground font-medium">{r.defectReason}</p>
-                                        </div>
-
-                                        <Field
-                                          label="Corrective Action Performed"
-                                          htmlFor="finishing-repair-notes"
-                                          hint="Document the exact adjustments made to resolve the defect."
-                                        >
-                                          <Textarea
-                                            id="finishing-repair-notes"
-                                            value={repairNote}
-                                            onChange={(e) => setRepairNote(e.target.value)}
-                                            rows={3}
-                                            className="text-xs"
-                                            placeholder="e.g. Re-pressed front placket with steam cloth; trimmed all loose thread ends..."
-                                          />
-                                        </Field>
-
-                                        {/* Pre-fill helper tags */}
-                                        <div className="space-y-1.5">
-                                          <p className="text-[11px] font-medium text-muted-foreground">Quick Pre-fills:</p>
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {[
-                                              "Trimmed loose thread ends at armhole & steam re-pressed.",
-                                              "Re-pressed front placket with damp cloth to remove crease.",
-                                              "Replaced missing spare button and inspected collar seams.",
-                                              "Spot-cleaned minor iron mark & steamed fabric evenly.",
-                                            ].map((quickText) => (
-                                              <button
-                                                key={quickText}
-                                                type="button"
-                                                onClick={() => setRepairNote(quickText)}
-                                                className="text-[10px] rounded border bg-card px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                                              >
-                                                {quickText}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </FormDialog>
-                                  );
-                                },
-                              },
-                            ]}
-                          />
-                        </Section>
-
-                        {/* Independent Clearance Rule Integrity Banner */}
-                        <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className="size-4 text-primary" />
-                            <h4 className="font-semibold text-sm text-foreground">
-                              Integrity Guard: Independent Clearance Rule
-                            </h4>
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">
-                            In accordance with factory quality governance, the finishing operator who corrected the garment{" "}
-                            <strong className="text-foreground">cannot clear the rework case or release the quality hold</strong>.
-                            Only an independent, certified Quality Inspector at Station 6 (`final_qc`) can scan the garment card,
-                            verify the corrective work against the QC checklist, pass reinspection, and formally release the hold for packing.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              }}
-            </Loadable>
-          )}
+                  </Section>
+                )}
+              </div>
+            );
+          }}
         </Loadable>
       )}
     </Loadable>

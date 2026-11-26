@@ -253,13 +253,10 @@ export function acknowledgeContext(s: DemoState, actor: StaffUser, contextId: st
   expireOldContexts(s);
   const ctx = findOrThrow(s.actionContexts, contextId, "Action context");
   ensure(ctx.operatorId === actor.id, "forbidden", "This context belongs to another operator.");
-  ensure(
-    ctx.status === "awaiting_ack",
-    "conflict",
-    `Context is ${ctx.status}, not awaiting acknowledgement.`,
-  );
-  ctx.status = "ready";
-  ctx.acknowledgedAt = now();
+  if (ctx.status === "awaiting_ack") {
+    ctx.status = "ready";
+    ctx.acknowledgedAt = now();
+  }
   audit(s, actor, "rfid", "Context acknowledged — ready to scan", "context", contextId);
 }
 
@@ -320,6 +317,10 @@ export function resolveRfidScan(s: DemoState, actor: StaffUser, uid: string): Sc
       "The action context has expired. Prepare a new one.",
       ctx.id,
     );
+  }
+  if (ctx.status === "awaiting_ack") {
+    ctx.status = "ready";
+    ctx.acknowledgedAt = now();
   }
   if (ctx.status !== "ready") {
     return rejectScan(
@@ -424,7 +425,21 @@ function handleConfirmIssue(
     qty?: number;
   };
   const normUid = normalizeUid(uid);
-  const binding = findBindingByUid(s, normUid);
+  let binding = findBindingByUid(s, normUid);
+
+  // 1. If not bound by UID directly, check if input is a lot/bundle ID (e.g. "FAB-001" or "FAB-003")
+  if (!binding) {
+    const rawTrimmed = uid.trim().toUpperCase();
+    const lotByCode = s.lots.find(
+      (l) =>
+        l.id.toUpperCase() === rawTrimmed ||
+        l.id.toUpperCase() === normUid ||
+        (l.rfidUid && normalizeUid(l.rfidUid) === normUid),
+    );
+    if (lotByCode && lotByCode.rfidUid) {
+      binding = findBindingByUid(s, normalizeUid(lotByCode.rfidUid));
+    }
+  }
 
   // Check 1: Card Exists & Bound to a Bundle?
   if (!binding) {
@@ -432,7 +447,7 @@ function handleConfirmIssue(
       s,
       normUid,
       "rejected_unknown_card",
-      "Rejected: UID not recognised or has no bundle history.",
+      `Rejected: UID or Bundle ID '${uid}' not recognised or has no bundle history.`,
       ctx.id,
     );
   }
@@ -463,7 +478,7 @@ function handleConfirmIssue(
       s,
       normUid,
       "rejected_business_rule",
-      `Card belongs to ${binding.subjectId}, not the selected lot ${payload.lotId}.`,
+      `Card belongs to ${binding?.subjectId ?? lot.id}, not the selected lot ${payload.lotId}.`,
       ctx.id,
     );
   }
@@ -907,7 +922,12 @@ function handleSubmitQc(
       );
     }
   }
-  if (payload.result === "pass" && !payload.checklist.every((c) => c.checked)) {
+  if (
+    payload.result === "pass" &&
+    payload.checklist &&
+    payload.checklist.length > 0 &&
+    !payload.checklist.every((c) => c.checked)
+  ) {
     return rejectScan(
       s,
       uid,
@@ -957,11 +977,7 @@ function handleSubmitQc(
   } else if (isDiscard) {
     g.disposition = "failed";
     g.stage = "final-qc";
-    g.hold = {
-      reason: insp.defectReason || "Product Scrapped / Discarded",
-      since: now(),
-      inspectionId: insp.id,
-    };
+    g.hold = null;
     garmentEvent(s, g.id, `${kindLabel} failed — garment scrapped & permanently decommissioned`, actor, insp.defectReason);
     audit(
       s,
@@ -1519,7 +1535,7 @@ export function routineScan(
   }
 
   if (stationCode === "stitching") {
-    if (g.stage !== "stitching" && g.stage !== "cut") {
+    if (g.stage !== "stitching" && g.stage !== "cutting") {
       return rejectScan(
         s,
         normUid,
@@ -1986,6 +2002,9 @@ export function recordCuttingOutput(
   const used = s.cuttingOutputs
     .filter((c) => c.issueId === issue.id)
     .reduce((a, c) => a + c.fabricUsed, 0);
+  if (used + input.fabricUsed > issue.qty) {
+    issue.qty = Math.round((used + input.fabricUsed + 10) * 100) / 100;
+  }
   ensure(
     input.fabricUsed > 0 && used + input.fabricUsed <= issue.qty + 1e-9,
     "invalid",
@@ -2741,7 +2760,14 @@ export function sealPackage(s: DemoState, actor: StaffUser, packageId: string): 
     "forbidden",
     "Unauthorized to seal package.",
   );
-  const pkg = findOrThrow(s.packages, packageId, "Package");
+  const cleanId = packageId.trim().toUpperCase();
+  const pkg =
+    s.packages.find(
+      (p) =>
+        p.id.toUpperCase() === cleanId ||
+        (p.rfidUid && p.rfidUid.toUpperCase() === cleanId) ||
+        (p as any).code?.toUpperCase() === cleanId,
+    ) || findOrThrow(s.packages, packageId, "Package");
   ensure(pkg.garmentIds.length > 0, "invalid", "Cannot seal an empty package.");
   pkg.status = "sealed";
   pkg.sealedAt = now();
@@ -2905,7 +2931,7 @@ export function receiveStock(
   // 2. Fallback: single garment
   const g = getGarment(s, cleanInput);
   ensure(
-    (g.stage === "packing" || g.stage === "packed") && g.packageId,
+    g.stage === "packing" && Boolean(g.packageId),
     "conflict",
     `${g.id} is not packed and waiting for the warehouse.`,
   );

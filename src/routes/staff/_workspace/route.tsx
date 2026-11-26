@@ -1,12 +1,12 @@
 import { Outlet, createFileRoute, redirect, useMatches } from "@tanstack/react-router";
-import { getSessionUserId } from "@/app/session";
+import { getSessionUserId, getSessionUsername } from "@/app/session";
 import { StaffWorkspace } from "@/app/StaffWorkspace";
 import "@/app/route-static";
 
 // Mock guard: anonymous visits to protected staff URLs go to staff sign-in.
 export const Route = createFileRoute("/staff/_workspace")({
   beforeLoad: ({ location }) => {
-    if (!getSessionUserId())
+    if (!getSessionUserId() && !getSessionUsername())
       throw redirect({ to: "/staff/login", search: { redirect: location.pathname } });
   },
   component: WorkspaceLayout,

@@ -12,6 +12,7 @@ import { Loadable } from "@/components/wt/states";
 import type { LifecycleStage, ScanOutcome } from "@/domain/types";
 import { can } from "@/domain/permissions";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 import { NfcHubView } from "@/features/nfc/NfcHubView";
 
@@ -31,6 +32,7 @@ const stages: LifecycleStage[] = [
 
 export function GarmentsView() {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const isStitching = me?.department === "stitching" || me?.username === "stitching.demo";
   const isFinishing = me?.department === "finishing" || me?.username === "finishing.demo";
   const activeStationCode: "stitching" | "finishing" | null = isStitching
@@ -49,6 +51,7 @@ export function GarmentsView() {
   const [disposition, setDisposition] = useState("all");
   const [activeTab, setActiveTab] = useState<"register" | "nfc">("register");
   const [recentScanOutcome, setRecentScanOutcome] = useState<ScanOutcome | null>(null);
+  const [completedIds, setCompletedIds] = useState<Record<string, boolean>>({});
 
   // Poll hardware station data for Station 4 (Stitching) or Station 5 (Finishing)
   const qStation = useWtQuery(
@@ -125,7 +128,6 @@ export function GarmentsView() {
     <>
       <PageHeader
         title={effectiveTab === "nfc" ? "NFC Tag Programming & Localtunnel Hub" : "Garment Registry & Production Status"}
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Garments" }]}
         actions={
           canAccessNfc ? (
             <div className="flex items-center gap-2">
@@ -185,6 +187,23 @@ export function GarmentsView() {
           const releasedCount = gs.filter((g) => g.disposition === "released").length;
 
           const rows = gs.filter((g) => {
+            // For stitching operators: show only garments approved and cut by Cutting (or completed in session)
+            if (isStitching && stage === "all") {
+              const isRelevant =
+                (((g.stage as string) === "cut" || g.stage === "stitching" || g.stage === "stitched") ||
+                  Boolean(completedIds[g.id])) &&
+                Boolean(g.rfidUid);
+              if (!isRelevant) return false;
+            }
+            // For finishing operators: show only garments completed at Stitching (or completed in session)
+            if (isFinishing && stage === "all") {
+              const isRelevant =
+                ((g.stage === "stitched" || g.stage === "finishing" || g.stage === "finished") ||
+                  Boolean(completedIds[g.id])) &&
+                Boolean(g.rfidUid);
+              if (!isRelevant) return false;
+            }
+
             const matchesStage = stage === "all" || g.stage === stage;
             const matchesDisp =
               disposition === "all" ||
@@ -197,9 +216,20 @@ export function GarmentsView() {
             return matchesStage && matchesDisp && matchesSearch;
           });
 
+          // Find next garment ready for this station's operation
+          const nextReadyGarment = gs.find(
+            (g: Garment) =>
+              (activeStationCode === "finishing"
+                ? g.stage === "stitched" || g.stage === "finishing"
+                : (g.stage as string) === "cut" || g.stage === "stitching") &&
+              Boolean(g.rfidUid) &&
+              !g.hold &&
+              !completedIds[g.id],
+          );
+
           return (
             <div className="space-y-6">
-              {/* Station 4/5 Stitching & Finishing Live Hardware Reader Status */}
+              {/* Station 4/5 Stitching & Finishing Live Hardware Reader / Simulation Status */}
               {activeStationCode && (
                 <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -214,52 +244,119 @@ export function GarmentsView() {
                       <div>
                         <div className="flex items-center gap-2">
                           <h2 className="text-sm font-bold text-foreground">
-                            {activeStationCode === "finishing"
-                              ? "Station 5 — Finishing Line Reader (Live Scanner 5 Active)"
-                              : "Station 4 — Stitching Line Reader (Live Scanner 4 Active)"}
+                            {isMock
+                              ? activeStationCode === "finishing"
+                                ? "Station 5 — Finishing Line Simulation"
+                                : "Station 4 — Stitching Line Simulation"
+                              : activeStationCode === "finishing"
+                                ? "Station 5 — Finishing Line Reader (Live Scanner 5 Active)"
+                                : "Station 4 — Stitching Line Reader (Live Scanner 4 Active)"}
                           </h2>
-                          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-semibold text-success border border-success/30">
-                            Ready for Scans
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
+                              isMock
+                                ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                : "bg-success/15 text-success border-success/30"
+                            }`}
+                          >
+                            {isMock ? "Mock Simulation" : "Ready for Scans"}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {activeStationCode === "finishing"
-                            ? "Present physical garment tag to Scanner 5, or use the quick scan controls below."
-                            : "Present physical garment tag to Scanner 4, or use the quick scan controls below."}
+                          {isMock
+                            ? "Enter garment card UID or click Simulate Scan below to advance stitched garments to Finishing."
+                            : activeStationCode === "finishing"
+                              ? "Present physical garment tag to Scanner 5, or use the quick scan controls below."
+                              : "Present physical garment tag to Scanner 4, or use the quick scan controls below."}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        value={scanInput}
-                        onChange={(e) => setScanInput(e.target.value.toUpperCase())}
-                        placeholder="Scan or enter card UID..."
-                        className="h-8 w-44 font-mono text-xs bg-card"
-                      />
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
-                        disabled={pending}
-                        onClick={() => {
-                          const targetUid = scanInput.trim();
-                          if (targetUid) {
-                            void run(
-                              (c) => c.routineScan(targetUid, activeStationCode),
-                              (outcome) => {
-                                setScanInput("");
-                                setRecentScanOutcome(outcome);
-                                void q.refetch();
-                                const stationLabel = activeStationCode === "finishing" ? "Finishing" : "Stitching";
-                                if (outcome.resolution === "accepted") {
-                                  return activeStationCode === "finishing"
-                                    ? `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
-                                    : `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Stitching complete! Advanced to Finishing.`;
+                      {isMock ? (
+                        <>
+                          <Input
+                            value={scanInput}
+                            onChange={(e) => setScanInput(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const targetUid = scanInput.trim() || nextReadyGarment?.rfidUid || "";
+                                if (targetUid) {
+                                  void run(
+                                    (c) => c.routineScan(targetUid, activeStationCode),
+                                    (outcome) => {
+                                      setScanInput("");
+                                      setRecentScanOutcome(outcome);
+                                      void q.refetch();
+                                      if (outcome.resolution === "accepted") {
+                                        return activeStationCode === "finishing"
+                                          ? `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
+                                          : `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Stitching complete! Advanced to Finishing.`;
+                                      }
+                                      return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                    },
+                                  );
                                 }
-                                return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
                               }
-                            );
-                          } else {
+                            }}
+                            placeholder="Scan or enter card UID..."
+                            className="h-8 w-44 font-mono text-xs bg-card"
+                          />
+                          {nextReadyGarment && !scanInput && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs font-mono gap-1"
+                              onClick={() => setScanInput(nextReadyGarment.rfidUid || "")}
+                            >
+                              Pre-fill Next ({nextReadyGarment.id})
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
+                            disabled={pending}
+                            onClick={() => {
+                              const targetUid = scanInput.trim() || nextReadyGarment?.rfidUid || "";
+                              if (targetUid) {
+                                void run(
+                                  (c) => c.routineScan(targetUid, activeStationCode),
+                                  (outcome) => {
+                                    setScanInput("");
+                                    setRecentScanOutcome(outcome);
+                                    void q.refetch();
+                                    if (outcome.resolution === "accepted") {
+                                      return activeStationCode === "finishing"
+                                        ? `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
+                                        : `✓ Garment ${outcome.garmentCode ?? outcome.subjectId} Stitching complete! Advanced to Finishing.`;
+                                    }
+                                    return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
+                                  },
+                                );
+                              }
+                            }}
+                          >
+                            <ScanLine className="size-3.5" />
+                            Simulate Scan {scanInput.trim() ? `(${scanInput.trim()})` : nextReadyGarment ? `(${nextReadyGarment.id})` : ""}
+                          </Button>
+                          {scanInput && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs px-2"
+                              onClick={() => setScanInput("")}
+                            >
+                              Clear
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground"
+                          disabled={pending}
+                          onClick={() => {
                             setAwaitingHardware(true);
                             void run(
                               async (c) => {
@@ -275,7 +372,7 @@ export function GarmentsView() {
                                   await new Promise((r) => setTimeout(r, 1000));
                                 }
                                 throw new Error(
-                                  `No hardware scan detected on Scanner ${activeStationCode === "finishing" ? 5 : 4} within 35 seconds. Please tap tag on reader.`
+                                  `No hardware scan detected on Scanner ${activeStationCode === "finishing" ? 5 : 4} within 35 seconds. Please tap tag on reader.`,
                                 );
                               },
                               (outcome) => {
@@ -286,37 +383,23 @@ export function GarmentsView() {
                                     ? `✓ Scan accepted: Garment ${outcome.garmentCode ?? outcome.subjectId} Finished! Released to QC.`
                                     : `✓ Scan accepted: Garment ${outcome.garmentCode ?? outcome.subjectId} Stitched! Advanced to Finishing.`
                                   : `Scan outcome: ${outcome?.rejectReason ?? outcome?.resolution ?? "Completed"}`;
-                              }
+                              },
                             ).finally(() => setAwaitingHardware(false));
-                          }
-                        }}
-                      >
-                        {awaitingHardware ? (
-                          <>
-                            <span className="relative flex h-2 w-2 mr-1">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
-                            </span>
-                            Awaiting Card Tap on Scanner {activeStationCode === "finishing" ? 5 : 4}...
-                          </>
-                        ) : scanInput.trim() ? (
-                          <>
-                            <ScanLine className="size-3.5" /> Simulate Scan ({scanInput.trim()})
-                          </>
-                        ) : (
-                          <>
-                            <Radio className="size-3.5" /> Scan Product Tag (Hardware)
-                          </>
-                        )}
-                      </Button>
-                      {scanInput && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-xs px-2"
-                          onClick={() => setScanInput("")}
+                          }}
                         >
-                          Clear
+                          {awaitingHardware ? (
+                            <>
+                              <span className="relative flex h-2 w-2 mr-1">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+                              </span>
+                              Awaiting Card Tap on Scanner {activeStationCode === "finishing" ? 5 : 4}...
+                            </>
+                          ) : (
+                            <>
+                              <Radio className="size-3.5" /> Scan Product Tag (Hardware)
+                            </>
+                          )}
                         </Button>
                       )}
                     </div>
@@ -498,14 +581,21 @@ export function GarmentsView() {
                   {
                     header: "Actions",
                     cell: (g) => {
+                      const isDone = Boolean(completedIds[g.id]);
+                      if (isDone) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="size-3.5" /> Done
+                          </span>
+                        );
+                      }
+
                       const canStitch =
                         (activeStationCode === "stitching" || isStitching) &&
-                        (g.stage === "cut" || g.stage === "stitching");
+                        ((g.stage as string) === "cut" || g.stage === "cutting" || g.stage === "stitching");
                       const canFinish =
                         (activeStationCode === "finishing" || isFinishing) &&
-                        g.stage !== "warehouse" &&
-                        g.stage !== "dispatched" &&
-                        g.stage !== "packing";
+                        (g.stage === "stitched" || g.stage === "finishing");
 
                       return (
                         <div className="flex items-center gap-1.5">
@@ -522,6 +612,9 @@ export function GarmentsView() {
                                   (c) => c.routineScan(targetUid, "stitching"),
                                   (outcome) => {
                                     setRecentScanOutcome(outcome);
+                                    if (outcome.resolution === "accepted") {
+                                      setCompletedIds((prev) => ({ ...prev, [g.id]: true }));
+                                    }
                                     void q.refetch();
                                     if (outcome.resolution === "accepted") {
                                       return `✓ Garment ${g.id} Stitching complete! Advanced to Finishing.`;
@@ -531,7 +624,7 @@ export function GarmentsView() {
                                 );
                               }}
                             >
-                              <Radio className="size-3" /> Scan Product Tag
+                              <Radio className="size-3" /> Scan &amp; Complete
                             </Button>
                           )}
                           {canFinish && (
@@ -547,6 +640,9 @@ export function GarmentsView() {
                                   (c) => c.routineScan(targetUid, "finishing"),
                                   (outcome) => {
                                     setRecentScanOutcome(outcome);
+                                    if (outcome.resolution === "accepted") {
+                                      setCompletedIds((prev) => ({ ...prev, [g.id]: true }));
+                                    }
                                     void q.refetch();
                                     if (outcome.resolution === "accepted") {
                                       return `✓ Garment ${g.id} Finished! Released to QC.`;
@@ -556,7 +652,7 @@ export function GarmentsView() {
                                 );
                               }}
                             >
-                              <Radio className="size-3" /> Scan Product Tag
+                              <Radio className="size-3" /> Scan &amp; Finish
                             </Button>
                           )}
                           <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
@@ -564,11 +660,13 @@ export function GarmentsView() {
                               View <ArrowRight className="size-3 ml-1" />
                             </AppLink>
                           </Button>
-                          <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
-                            <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
-                              <ExternalLink className="size-3 mr-1" /> Passport
-                            </AppLink>
-                          </Button>
+                          {!isStitching && !isFinishing && (
+                            <Button asChild size="sm" variant="outline" className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5" title="Open NFC Digital Passport">
+                              <AppLink href={paths.publicJourney(g.publicId || g.id)} target="_blank" rel="noreferrer">
+                                <ExternalLink className="size-3 mr-1" /> Passport
+                              </AppLink>
+                            </Button>
+                          )}
                         </div>
                       );
                     },

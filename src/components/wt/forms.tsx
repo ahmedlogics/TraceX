@@ -41,20 +41,23 @@ export function NativeSelect({
   onChange,
   options,
   ariaLabel,
+  disabled,
 }: {
   id?: string | undefined;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   ariaLabel?: string | undefined;
+  disabled?: boolean | undefined;
 }) {
   return (
     <select
       id={id}
       aria-label={ariaLabel}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-ring"
+      className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

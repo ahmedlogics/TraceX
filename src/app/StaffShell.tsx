@@ -18,7 +18,7 @@ import { getDataMode, setDataMode } from "@/lib/data/provider";
 import { cn } from "@/lib/utils";
 import { useSignOut } from "./auth";
 import { AppLink, useAppNavigate, usePathname } from "./navigation";
-import { navGroups } from "./nav-items";
+import { getNavGroups } from "./nav-items";
 import { paths } from "./paths";
 
 function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => void }) {
@@ -29,7 +29,7 @@ function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => voi
       : pathname === href || pathname.startsWith(`${href}/`);
   return (
     <nav aria-label="Staff navigation" className="space-y-5">
-      {navGroups.map((g) => {
+      {getNavGroups(user).map((g) => {
         const items = g.items.filter((i) => canAccessRoute(user, i.key));
         if (!items.length) return null;
         return (
@@ -75,11 +75,24 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
   const signOut = useSignOut();
   const navigate = useAppNavigate();
   const dataMode = getDataMode();
+  const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
+  const isWarehouse =
+    user?.username?.toLowerCase() === "warehouse.demo" ||
+    user?.department?.toLowerCase() === "warehouse";
+  const isDispatch =
+    user?.username?.toLowerCase() === "dispatch.demo" ||
+    user?.department?.toLowerCase() === "dispatch";
+
+  const logoHref = isFinalQc
+    ? paths.quality
+    : isWarehouse || isDispatch
+    ? paths.workstation
+    : paths.home;
   return (
     <div className="flex min-h-screen w-full">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
         <div className="border-b px-4 py-4">
-          <AppLink href={paths.home} aria-label="TraceX staff home">
+          <AppLink href={logoHref} aria-label="TraceX staff home">
             <Logo height={26} />
           </AppLink>
           <p className="wt-eyebrow mt-1">Staff workspace</p>
@@ -113,7 +126,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               </div>
             </SheetContent>
           </Sheet>
-          <AppLink href={paths.home} className="lg:hidden" aria-label="TraceX staff home">
+          <AppLink href={logoHref} className="lg:hidden" aria-label="TraceX staff home">
             <Logo height={20} />
           </AppLink>
           <div className="ml-auto flex min-w-0 items-center gap-2">
@@ -154,7 +167,10 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
                 <DropdownMenuItem onSelect={() => navigate(paths.account)}>
                   My account
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setDataMode(dataMode === "live" ? "mock" : "live")}>
+                <DropdownMenuItem
+                  onSelect={() => setDataMode(dataMode === "live" ? "mock" : "live")}
+                  onClick={() => setDataMode(dataMode === "live" ? "mock" : "live")}
+                >
                   Switch to {dataMode === "live" ? "Mock Data" : "Live API"}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

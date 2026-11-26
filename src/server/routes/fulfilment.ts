@@ -69,32 +69,40 @@ fulfilmentRouter.use(resolveActor);
 
 fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
   try {
-    const packages = await listPackages(prisma as any);
-    const openShipments = await listShipments(prisma as any);
-
-    const allGarments = await prisma.garments.findMany({
-      include: {
-        cutting_jobs: {
-          include: {
-            production_orders: {
-              include: { product_spec_versions: true },
+    const [packages, openShipments, allGarments] = await Promise.all([
+      listPackages(prisma as any),
+      listShipments(prisma as any),
+      prisma.garments.findMany({
+        include: {
+          cutting_jobs: {
+            include: {
+              production_orders: {
+                include: { product_spec_versions: true },
+              },
             },
           },
-        },
-        package_items: {
-          include: {
-            packages: true,
+          package_items: {
+            where: { removed_at: null },
+            include: {
+              packages: {
+                include: {
+                  warehouse_stock: {
+                    include: { warehouse_bins: true },
+                  },
+                },
+              },
+            },
+          },
+          garment_holds: {
+            where: { released_at: null },
+          },
+          rfid_tag_bindings: {
+            where: { unbound_at: null },
           },
         },
-        garment_holds: {
-          where: { released_at: null },
-        },
-        rfid_tag_bindings: {
-          where: { unbound_at: null },
-        },
-      },
-      orderBy: { created_at: "desc" },
-    });
+        orderBy: { created_at: "desc" },
+      }),
+    ]);
 
     const mapGarment = (g: any) => {
       const activeBinding = g.rfid_tag_bindings?.[0];
@@ -115,12 +123,15 @@ fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
         hold: activeHold
           ? {
               id: activeHold.id,
-              reason: activeHold.hold_reason,
-              openedAt: activeHold.created_at.toISOString(),
-              releasedAt: activeHold.released_at?.toISOString() ?? null,
+              reason: activeHold.reason || (activeHold as any).hold_reason || "Quality Hold Active",
+              openedAt: (activeHold.opened_at ? new Date(activeHold.opened_at) : (activeHold.created_at ? new Date(activeHold.created_at) : new Date())).toISOString(),
+              releasedAt: activeHold.released_at ? new Date(activeHold.released_at).toISOString() : null,
             }
           : null,
         packageId: activePkgItem?.package_id ?? undefined,
+        packageCode: activePkgItem?.packages?.code ?? undefined,
+        binCode: activePkgItem?.packages?.warehouse_stock?.warehouse_bins?.code ?? undefined,
+        binLabel: activePkgItem?.packages?.warehouse_stock?.warehouse_bins?.label ?? undefined,
         shipmentId: g.shipment_id ?? undefined,
         rfidUid: activeBinding?.tag_uid ?? undefined,
       };
@@ -135,7 +146,7 @@ fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
       const g = mapGarment(raw);
       if (g.hold || g.disposition === "held" || g.disposition === "rejected") {
         blocked.push(g);
-      } else if (g.stage === "warehouse" || g.stage === "allocated") {
+      } else if (g.stage === "warehouse" || g.stage === "warehoused" || g.stage === "allocated") {
         inStock.push(g);
       } else if (g.packageId) {
         packedAwaitingReceipt.push(g);
@@ -144,12 +155,31 @@ fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
       }
     }
 
+    const mappedPackages = packages.map((p: any) => ({
+      id: p.id,
+      code: p.code,
+      status: p.status,
+      createdAt: (p.created_at ? new Date(p.created_at) : new Date()).toISOString(),
+      garmentIds: p.package_items.map((pi: any) => pi.garments?.code || pi.garment_id),
+      garmentDetails: p.package_items.map((pi: any) => ({
+        id: pi.garments?.id,
+        code: pi.garments?.code,
+        stage: pi.garments?.stage,
+        disposition: pi.garments?.quality_disposition,
+        size: pi.garments?.size_label,
+      })),
+      binId: p.warehouse_stock?.current_bin_id ?? undefined,
+      binCode: p.warehouse_stock?.warehouse_bins?.code ?? undefined,
+      binLabel: p.warehouse_stock?.warehouse_bins?.label ?? undefined,
+      operator: p.staff_users?.display_name || p.staff_users?.username,
+    }));
+
     const data = {
       awaitingPacking,
       packedAwaitingReceipt,
       inStock,
       blocked,
-      packages,
+      packages: mappedPackages,
       openShipments: openShipments.filter((s: any) => s.status !== "departed"),
     };
 

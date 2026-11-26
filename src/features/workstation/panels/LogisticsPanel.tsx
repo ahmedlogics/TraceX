@@ -22,6 +22,7 @@ import { EmptyState, Loadable } from "@/components/wt/states";
 import type { ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 const defaultBins = [
@@ -34,6 +35,7 @@ const defaultBins = [
 
 export function LogisticsPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const stationCode = stationData.stationCode as "packing" | "warehouse" | "dispatch";
 
@@ -342,35 +344,57 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                             Ready to scan! Present garment RFID card at Station{" "}
                             {stationData.stationName}.
                           </p>
-                          <div className="space-y-2">
-                            <Field label="Garment Card UID" htmlFor="log-uid">
-                              <Input
-                                id="log-uid"
-                                value={scanUid}
-                                onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                className="font-mono bg-card"
-                                placeholder="e.g. 04A7B8C9"
-                              />
-                            </Field>
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              <Button
-                                disabled={pending || !scanUid.trim()}
-                                onClick={() =>
-                                  void run(
-                                    async (c) => {
-                                      const outcome = await c.resolveRfidScan(scanUid.trim());
-                                      setLocalLastOutcome(outcome);
-                                      return outcome;
-                                    },
-                                    (outcome) =>
-                                      outcome.resolution === "accepted"
-                                        ? `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) confirmed at ${stationData.stationName}!`
-                                        : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
-                                  )
-                                }
-                              >
-                                <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
-                              </Button>
+                          {isMock ? (
+                            <div className="space-y-2">
+                              <Field label="Garment Card UID (Simulation)" htmlFor="log-uid">
+                                <Input
+                                  id="log-uid"
+                                  value={scanUid}
+                                  onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                  className="font-mono bg-card"
+                                  placeholder="e.g. 04A7B8C9"
+                                />
+                              </Field>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <Button
+                                  disabled={pending || !scanUid.trim()}
+                                  onClick={() =>
+                                    void run(
+                                      async (c) => {
+                                        const outcome = await c.resolveRfidScan(scanUid.trim());
+                                        setLocalLastOutcome(outcome);
+                                        return outcome;
+                                      },
+                                      (outcome) =>
+                                        outcome.resolution === "accepted"
+                                          ? `Garment ${outcome.garmentCode ?? outcome.subjectId} (${outcome.productName}) confirmed at ${stationData.stationName}!`
+                                          : `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`,
+                                    )
+                                  }
+                                >
+                                  <ScanLine className="size-4 mr-1.5" /> Simulate RFID Scan
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={pending}
+                                  onClick={() =>
+                                    void run(
+                                      (c) => c.cancelContext(activeCtx.id),
+                                      "Context cancelled.",
+                                    )
+                                  }
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-3 pt-1">
+                              <div className="flex items-center gap-2 text-primary text-xs font-medium">
+                                <Radio className="size-4 animate-pulse" />
+                                <span>Awaiting physical card tap on Station {stationData.stationName} reader...</span>
+                              </div>
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -385,7 +409,7 @@ export function LogisticsPanel({ stationData }: { stationData: RfidStationData }
                                 Cancel
                               </Button>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
 

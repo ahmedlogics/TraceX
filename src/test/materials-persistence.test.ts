@@ -811,7 +811,7 @@ describe("Member 2: Real Materials & Production Persistence Services", () => {
         db,
       );
       expect(stitch.accepted).toBe(true);
-      expect(stitch.stage).toBe("finished");
+      expect(stitch.stage).toBe("stitched");
       expect(stitch.nextExpectedStation).toBe("finishing");
 
       try {

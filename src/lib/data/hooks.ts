@@ -8,7 +8,7 @@ import { useClient } from "./provider";
 export function useWtQuery<T>(
   key: readonly unknown[],
   fn: (c: WearTrailClient) => Promise<T>,
-  options?: { refetchInterval?: number },
+  options?: { refetchInterval?: number; enabled?: boolean },
 ) {
   const client = useClient();
   const actor = useSessionUserId();
@@ -17,6 +17,7 @@ export function useWtQuery<T>(
     queryFn: () => fn(client),
     retry: false,
     ...(options?.refetchInterval ? { refetchInterval: options.refetchInterval } : {}),
+    ...(options?.enabled !== undefined ? { enabled: options.enabled } : {}),
   });
 }
 

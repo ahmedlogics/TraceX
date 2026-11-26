@@ -1,10 +1,10 @@
 /** Mock auth adapter: sign-in / sign-out wiring (no real credentials). */
 import { useQueryClient } from "@tanstack/react-query";
-import { useClient } from "@/lib/data/provider";
+import { clearDataMode, useClient } from "@/lib/data/provider";
 import { useWtQuery } from "@/lib/data/hooks";
 import { paths } from "./paths";
 import { useAppNavigate } from "./navigation";
-import { setSessionUserId, useSessionUserId } from "./session";
+import { clearSession, setSessionUserId, setSessionUsername, useSessionUserId } from "./session";
 
 export function useCurrentUser() {
   const id = useSessionUserId();
@@ -18,6 +18,7 @@ export function useSignIn() {
     await client.recordSignIn(userId);
     qc.clear();
     setSessionUserId(userId);
+    setSessionUsername(userId);
   };
 }
 
@@ -28,6 +29,7 @@ export function useAuthenticate() {
     const user = await client.authenticate(username, password);
     qc.clear();
     setSessionUserId(user.id);
+    setSessionUsername(user.username);
     return user;
   };
 }
@@ -37,10 +39,15 @@ export function useSignOut() {
   const qc = useQueryClient();
   const navigate = useAppNavigate();
   return async () => {
+    clearDataMode();
     await client.recordSignOut();
     await qc.cancelQueries();
     qc.clear();
-    setSessionUserId(null);
-    await navigate(paths.login, { replace: true });
+    clearSession();
+    if (typeof window !== "undefined") {
+      window.location.href = paths.login;
+    } else {
+      await navigate(paths.login, { replace: true });
+    }
   };
 }

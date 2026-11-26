@@ -77,7 +77,7 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return user.username === "manager.demo" || user.role === "M";
   }
 
-  // Stitching and Finishing operators: strictly Home, Garments, and Rework screens
+  // Stitching and Finishing operators: Home, Workstation, Garments, and Rework screens
   if (
     user.username === "stitching.demo" ||
     user.department?.toLowerCase() === "stitching" ||
@@ -88,6 +88,7 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       "account",
       "home",
       "tasks",
+      "workstation",
       "garments",
       "garment",
       "rework",
@@ -111,21 +112,37 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   ) {
     return false;
   }
-
-  // Warehouse operators only handle warehouse inventory and intake, not full factory garment production lists
+  // Warehouse operators: strictly Workstation and Fulfilment/Warehouse Stock
+  // (NO home, NO shipments, NO garments full factory list)
   if (
-    (user.username === "warehouse.demo" || user.department === "warehouse") &&
-    (key === "garments" || key === "garment")
+    user.username === "warehouse.demo" ||
+    user.department?.toLowerCase() === "warehouse"
   ) {
-    return false;
+    if (
+      key === "home" ||
+      key === "shipments" ||
+      key === "shipment" ||
+      key === "garments" ||
+      key === "garment"
+    ) {
+      return false;
+    }
   }
 
-  // Dispatch operators only handle outbound shipments and dock gate dispatch (strictly remove garments and fulfilment)
+  // Dispatch operators strictly operate at Station 9 Workstation dock gate (remove home, garments, fulfilment, and shipments)
   if (
     user.username === "dispatch.demo" ||
-    (user.role === "L" && user.department === "dispatch")
+    (user.role === "L" && user.department === "dispatch") ||
+    user.department?.toLowerCase() === "dispatch"
   ) {
-    if (key === "garments" || key === "garment" || key === "fulfilment") {
+    if (
+      key === "home" ||
+      key === "garments" ||
+      key === "garment" ||
+      key === "fulfilment" ||
+      key === "shipments" ||
+      key === "shipment"
+    ) {
       return false;
     }
   }
@@ -145,7 +162,6 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       return false;
     }
   }
-
   // Strict role + department scoping for Quality Inspector role (Q)
   if (user.role === "Q") {
     const isIncomingQc = user.username?.toLowerCase() === "qc.incoming";
@@ -163,15 +179,24 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
       return incomingAllowed.includes(key);
     }
 
-    // Line / Final QA Inspector (e.g. qc.demo): strictly Home, Quality, and Rework
-    const finalQcAllowed: RouteKey[] = [
-      "account",
-      "home",
-      "quality",
-      "inspection",
-      "rework",
-      "reworkCase",
-    ];
+    // Line / Final QA Inspector (e.g. qc.demo): strictly Quality and Rework (no Home screen)
+    const isFinalQc = user.username?.toLowerCase() === "qc.demo";
+    const finalQcAllowed: RouteKey[] = isFinalQc
+      ? [
+          "account",
+          "quality",
+          "inspection",
+          "rework",
+          "reworkCase",
+        ]
+      : [
+          "account",
+          "home",
+          "quality",
+          "inspection",
+          "rework",
+          "reworkCase",
+        ];
     return finalQcAllowed.includes(key);
   }
 

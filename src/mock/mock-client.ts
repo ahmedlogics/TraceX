@@ -35,7 +35,18 @@ const ok = <T>(v: T) => Promise.resolve(clone(v));
 export function createMockClient(getActorId: () => string | null): WearTrailClient {
   const actor = (s: DemoState = getState()): StaffUser => {
     const id = getActorId();
-    const u = id ? s.users.find((x) => x.id === id) : undefined;
+    const storedUsername =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("weartrail.staff-username")
+        : null;
+    const u = id
+      ? s.users.find(
+          (x) =>
+            x.id === id ||
+            (storedUsername && x.username === storedUsername) ||
+            x.username === id,
+        )
+      : undefined;
     if (!u) throw new DemoError("forbidden", "Sign in to continue.");
     if (u.status !== "active") throw new DemoError("forbidden", "This account is not active.");
     return u;
@@ -66,7 +77,20 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
 
   return {
     listDemoAccounts: () => ok(getState().users.filter((u) => u.username.endsWith(".demo"))),
-    getUser: (id) => ok(getState().users.find((u) => u.id === id) ?? null),
+    getUser: (id) => {
+      const s = getState();
+      const storedUsername =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("weartrail.staff-username")
+          : null;
+      const u = s.users.find(
+        (x) =>
+          x.id === id ||
+          (storedUsername && x.username === storedUsername) ||
+          x.username === id,
+      );
+      return ok(u ?? null);
+    },
     listDirectory: () => read((s) => s.users),
     checkCredentialToken: (token) => Promise.resolve(E.checkCredentialToken(getState(), token)),
     getCredentialTokenDetails: (token) => {
@@ -252,7 +276,7 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
               lotCode: i.lotId,
               materialName: s.lots.find((l) => l.id === i.lotId)?.material || "Fabric Roll",
               quantity: i.qty,
-              performedAt: i.issuedAt,
+              performedAt: (i as any).issuedAt || i.at,
             })),
           };
         }),
@@ -369,7 +393,10 @@ export function createMockClient(getActorId: () => string | null): WearTrailClie
     packGarment: (gid, pkgId) => act((s, u) => E.packGarment(s, u, gid, pkgId)),
     createPackage: (rfidUid, customId) => act((s, u) => E.createPackage(s, u, rfidUid, customId)),
     sealPackage: (packageId) => act((s, u) => E.sealPackage(s, u, packageId)),
-    receiveStock: (gid) => act((s, u) => E.receiveStock(s, u, gid)),
+    receiveStock: (gid) =>
+      act((s, u) => {
+        E.receiveStock(s, u, gid);
+      }),
     allocateStock: (gid, sid) => act((s, u) => E.allocateStock(s, u, gid, sid)),
     listShipments: () => read((s) => s.shipments),
     getShipment: (id) =>

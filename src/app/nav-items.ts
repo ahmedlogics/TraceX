@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { RouteKey } from "@/domain/permissions";
+import type { StaffUser } from "@/domain/types";
 import { paths } from "./paths";
 
 export interface NavItem {
@@ -33,6 +34,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Work",
     items: [
       { key: "home", label: "Home", href: paths.home, icon: Home },
+      { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
       { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
     ],
   },
@@ -40,7 +42,6 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Materials & production",
     items: [
       { key: "materialLots", label: "Material lots", href: paths.lots, icon: Boxes },
-      { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
       { key: "garments", label: "Garments", href: paths.garments, icon: Shirt },
       { key: "nfcHub", label: "NFC Tag Passports", href: paths.nfcHub, icon: Zap },
     ],
@@ -77,3 +78,82 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
 ];
 
 export const ActivityIcon = Activity;
+
+export function getNavGroups(user?: StaffUser | null): { label: string; items: NavItem[] }[] {
+  const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
+  if (isFinalQc) {
+    return navGroups.map((g) => ({
+      ...g,
+      items: g.items.filter((i) => i.key !== "home"),
+    }));
+  }
+
+  const isWarehouse =
+    user?.username?.toLowerCase() === "warehouse.demo" ||
+    user?.department?.toLowerCase() === "warehouse";
+
+  if (isWarehouse) {
+    return navGroups
+      .map((g) => {
+        if (g.label === "Work") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "home"),
+          };
+        }
+        if (g.label === "Logistics") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "shipments"),
+          };
+        }
+        return g;
+      })
+      .filter((g) => g.items.length > 0);
+  }
+
+  const isDispatch =
+    user?.username?.toLowerCase() === "dispatch.demo" ||
+    user?.department?.toLowerCase() === "dispatch";
+
+  if (isDispatch) {
+    return navGroups
+      .map((g) => {
+        if (g.label === "Work") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "home"),
+          };
+        }
+        if (g.label === "Logistics") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "shipments"),
+          };
+        }
+        return g;
+      })
+      .filter((g) => g.items.length > 0);
+  }
+
+  const isRawStore =
+    user?.username?.toLowerCase() === "rawstore.demo" || user?.department === "raw-store";
+
+  if (isRawStore) {
+    return navGroups.map((g) => {
+      if (g.label === "Work") {
+        return {
+          ...g,
+          items: [
+            { key: "home", label: "Home", href: paths.home, icon: Home },
+            { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
+            { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
+          ],
+        };
+      }
+      return g;
+    });
+  }
+
+  return navGroups;
+}
