@@ -259,6 +259,9 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
             inspections: {
               where: { outcome: "pass" },
             },
+            material_stock_movements: {
+              where: { kind: "accepted" },
+            },
           },
         },
       },
@@ -277,20 +280,22 @@ export class FabricIssueScanHandler implements DomainScanHandler<ScanOutcomeResu
 
     // Check 2: Did Lot Pass qc.incoming Inspection?
     const hasPassingInspection = (lot.inspections?.length ?? 0) > 0;
-    const availableQty = Number(lot.available_accepted_quantity);
+    const hasAcceptedMovement = (lot.material_stock_movements?.length ?? 0) > 0;
+    const isQcPassed = hasPassingInspection || hasAcceptedMovement;
 
-    if (!hasPassingInspection && availableQty <= 0) {
+    if (!isQcPassed) {
       throw ApiError.badRequest(
-        "Rejected: Lot has not passed Incoming QC inspection.",
+        `Rejected: Bundle tag ${tagUid} (Lot ${lot.code}) has not passed Incoming QC inspection. Only rolls present in the verified incoming QC queue can be allocated.`,
         { tagUid, lotCode: lot.code },
         "WT_ERR_QC_NOT_PASSED",
       );
     }
 
-    // Check 4a: Depletion check
+    // Check 3: Depletion check (Balance must be > 0m)
+    const availableQty = Number(lot.available_accepted_quantity);
     if (availableQty <= 0) {
       throw ApiError.badRequest(
-        "Rejected: Bundle fully consumed (Balance: 0m).",
+        `Rejected: Bundle tag ${tagUid} (Lot ${lot.code}) is fully consumed (Balance: 0m).`,
         { tagUid, lotCode: lot.code },
         "WT_ERR_DEPLETED",
       );

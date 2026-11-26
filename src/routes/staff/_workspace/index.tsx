@@ -33,12 +33,12 @@ function DashboardRoute() {
   useEffect(() => {
     if (isFinalQc) {
       void navigate(paths.quality, { replace: true });
-    } else if (isWarehouse || isDispatch || isFinishing || isRawStore) {
+    } else if (isWarehouse || isDispatch || isFinishing) {
       void navigate(paths.workstation, { replace: true });
     }
-  }, [isFinalQc, isWarehouse, isDispatch, isFinishing, isRawStore, navigate]);
+  }, [isFinalQc, isWarehouse, isDispatch, isFinishing, navigate]);
 
-  if (isFinalQc || isWarehouse || isDispatch || isFinishing || isRawStore) return null;
+  if (isFinalQc || isWarehouse || isDispatch || isFinishing) return null;
 
   return <DashboardView />;
 }

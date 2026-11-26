@@ -489,7 +489,18 @@ function handleConfirmIssue(
       s,
       normUid,
       "rejected_qc_not_passed",
-      "Rejected: Lot has not passed Incoming QC inspection.",
+      `Rejected: Bundle tag ${normUid} (Lot ${lot.id}) has not passed Incoming QC. Only rolls present in the verified incoming QC queue can be allocated.`,
+      ctx.id,
+    );
+  }
+
+  // Check 2b: Depletion check (Balance must be > 0m)
+  if (lot.balanceQty <= 0) {
+    return rejectScan(
+      s,
+      normUid,
+      "rejected_business_rule",
+      `Rejected: Bundle tag ${normUid} (Lot ${lot.id}) is fully consumed (Balance: 0m).`,
       ctx.id,
     );
   }

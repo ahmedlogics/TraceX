@@ -7,6 +7,7 @@ import {
   Cpu,
   FileClock,
   Home,
+  Layers,
   Link2,
   PackageCheck,
   Scissors,
@@ -42,6 +43,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Materials & production",
     items: [
       { key: "materialLots", label: "Material lots", href: paths.lots, icon: Boxes },
+      { key: "rawStore", label: "Raw Store & QC Queue", href: paths.rawStore, icon: Layers },
       { key: "garments", label: "Garments", href: paths.garments, icon: Shirt },
       { key: "nfcHub", label: "NFC Tag Passports", href: paths.nfcHub, icon: Zap },
     ],
@@ -160,20 +162,25 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
     user?.department?.toLowerCase() === "raw_store";
 
   if (isRawStore) {
-    return navGroups
-      .map((g) => {
-        if (g.label === "Work") {
-          return {
-            ...g,
-            items: [{ key: "workstation" as const, label: "Workstation", href: paths.workstation, icon: Cpu }],
-          };
-        }
-        return {
-          ...g,
-          items: g.items.filter((i) => i.key !== "materialLots"),
-        };
-      })
-      .filter((g) => g.items.length > 0);
+    return [
+      {
+        label: "Work",
+        items: [
+          {
+            key: "home" as const,
+            label: "Raw Store Overview",
+            href: paths.home,
+            icon: Boxes,
+          },
+          {
+            key: "workstation" as const,
+            label: "Station 2 (Fabric Issue)",
+            href: paths.workstation,
+            icon: Cpu,
+          },
+        ],
+      },
+    ];
   }
 
   return navGroups;

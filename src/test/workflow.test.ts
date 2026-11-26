@@ -295,4 +295,41 @@ describe("Nine-Reader RFID prototype workflow & behavioral rules", () => {
     // SHIRT-002 public journey shows hold
     expect(projectJourney(s, "shirt-002-demo")?.status).toBe("Temporarily on hold");
   });
+
+  it("Station 2 (Fabric Issue): strictly verifies bundle tag scan against passed incoming QC queue", () => {
+    const s = createSeed();
+    const manager = as(s, "manager.demo");
+
+    // Manager creates/plans an order
+    const orderId = E.planOrder(s, manager, {
+      product: "Linen Summer Shirt",
+      styleCode: "SPEC-SHIRT-03",
+      qty: 10,
+      dueDate: "2026-12-15",
+    });
+
+    // Case A: Manager attempts to issue an uninspected lot (FAB-002, awaiting-inspection, tag 04D4E5F6)
+    const ctxUnapproved = E.prepareActionContext(s, manager, "fabric_issue", "confirm_issue", {
+      kind: "confirm_issue",
+      orderId,
+      qty: 20,
+    });
+    E.acknowledgeContext(s, manager, ctxUnapproved);
+
+    const outcomeUnapproved = E.resolveRfidScan(s, manager, "04D4E5F6");
+    expect(outcomeUnapproved.resolution).toBe("rejected_qc_not_passed");
+    expect(outcomeUnapproved.rejectReason).toMatch(/has not passed Incoming QC/);
+
+    // Case B: Manager issues a lot that passed incoming QC (FAB-001, accepted, tag 04A1B2C3)
+    const ctxApproved = E.prepareActionContext(s, manager, "fabric_issue", "confirm_issue", {
+      kind: "confirm_issue",
+      orderId,
+      qty: 6,
+    });
+    E.acknowledgeContext(s, manager, ctxApproved);
+
+    const outcomeApproved = E.resolveRfidScan(s, manager, "04A1B2C3");
+    expect(outcomeApproved.resolution).toBe("accepted");
+    expect(outcomeApproved.orderId).toBe(orderId);
+  });
 });

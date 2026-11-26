@@ -21,6 +21,7 @@ export type RouteKey =
   | "home"
   | "tasks"
   | "workstation"
+  | "rawStore"
   | "materialLots"
   | "materialLot"
   | "productionOrders"
@@ -48,6 +49,7 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   home: ALL,
   tasks: ["M", "O", "P", "Q", "L"],
   workstation: ["M", "O", "P", "Q", "L"],
+  rawStore: ["M", "O", "Q", "A", "P", "L"],
   materialLots: ["M", "O", "Q"],
   materialLot: ["M", "O", "Q"],
   productionOrders: ["M", "A", "P", "O", "Q"],

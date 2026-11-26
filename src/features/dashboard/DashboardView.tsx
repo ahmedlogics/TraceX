@@ -31,6 +31,7 @@ import { StatusBadge, HoldBadge } from "@/components/wt/StatusBadge";
 import { ReceiveLotDialog } from "@/features/materials/LotsView";
 import { TasksSection } from "@/features/tasks/TasksView";
 import { QualityView } from "@/features/quality/QualityView";
+import { RawStoreDashboard } from "@/features/rawstore/RawStoreDashboard";
 import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
 
 const toneIcon = { danger: OctagonAlert, warning: AlertTriangle, info: Info } as const;
@@ -701,10 +702,15 @@ export function DashboardView() {
     return <StitchingDashboard />;
   }
 
+  const isRawStoreUser = me.department === "raw-store" || me.username === "rawstore.demo";
+
+  if (isRawStoreUser) {
+    return <RawStoreDashboard />;
+  }
+
   const q = useWtQuery(["dashboard"], (c) => c.getDashboard());
   const isReceivingUser = me.username === "receiving.demo" || me.department === "receiving";
   const isQualityUser = me.role === "Q";
-  const isRawStoreUser = me.department === "raw-store" || me.username === "rawstore.demo";
   const isCuttingUser = me.department === "cutting" || me.username === "cutting.demo";
 
   return (
@@ -713,11 +719,16 @@ export function DashboardView() {
         title={`Welcome back, ${me.displayName.split(" ")[0]}`}
         description={`${roleLabels[me.role]} · Department of ${departmentLabels[me.department]}`}
         actions={
-          (can.createLot(me) || can.receiveLot(me)) ? (
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <AppLink href={paths.rawStore}>
+                Raw Store &amp; QC Queue
+              </AppLink>
+            </Button>
+            {(can.createLot(me) || can.receiveLot(me)) && (
               <ReceiveLotDialog triggerLabel="+ New Fabric Lot" />
-            </div>
-          ) : undefined
+            )}
+          </div>
         }
       />
 

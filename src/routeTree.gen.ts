@@ -23,6 +23,7 @@ import { Route as StaffWorkspaceAuditRouteImport } from './routes/staff/_workspa
 import { Route as StaffWorkspaceFulfilmentRouteImport } from './routes/staff/_workspace/fulfilment'
 import { Route as StaffWorkspaceLedgerRouteImport } from './routes/staff/_workspace/ledger'
 import { Route as StaffWorkspaceNfcPassportsRouteImport } from './routes/staff/_workspace/nfc-passports'
+import { Route as StaffWorkspaceRawStoreRouteImport } from './routes/staff/_workspace/raw-store'
 import { Route as StaffWorkspaceReportsRouteImport } from './routes/staff/_workspace/reports'
 import { Route as StaffWorkspaceSettingsRouteImport } from './routes/staff/_workspace/settings'
 import { Route as StaffWorkspaceTasksRouteImport } from './routes/staff/_workspace/tasks'
@@ -113,6 +114,11 @@ const StaffWorkspaceNfcPassportsRoute =
     path: '/nfc-passports',
     getParentRoute: () => StaffWorkspaceRouteRoute,
   } as any)
+const StaffWorkspaceRawStoreRoute = StaffWorkspaceRawStoreRouteImport.update({
+  id: '/raw-store',
+  path: '/raw-store',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
 const StaffWorkspaceReportsRoute = StaffWorkspaceReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -230,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
+  '/staff/raw-store': typeof StaffWorkspaceRawStoreRoute
   '/staff/reports': typeof StaffWorkspaceReportsRoute
   '/staff/settings': typeof StaffWorkspaceSettingsRoute
   '/staff/tasks': typeof StaffWorkspaceTasksRoute
@@ -263,6 +270,7 @@ export interface FileRoutesByTo {
   '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
+  '/staff/raw-store': typeof StaffWorkspaceRawStoreRoute
   '/staff/reports': typeof StaffWorkspaceReportsRoute
   '/staff/settings': typeof StaffWorkspaceSettingsRoute
   '/staff/tasks': typeof StaffWorkspaceTasksRoute
@@ -297,6 +305,7 @@ export interface FileRoutesById {
   '/staff/_workspace/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/_workspace/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/_workspace/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
+  '/staff/_workspace/raw-store': typeof StaffWorkspaceRawStoreRoute
   '/staff/_workspace/reports': typeof StaffWorkspaceReportsRoute
   '/staff/_workspace/settings': typeof StaffWorkspaceSettingsRoute
   '/staff/_workspace/tasks': typeof StaffWorkspaceTasksRoute
@@ -332,6 +341,7 @@ export interface FileRouteTypes {
     | '/staff/fulfilment'
     | '/staff/ledger'
     | '/staff/nfc-passports'
+    | '/staff/raw-store'
     | '/staff/reports'
     | '/staff/settings'
     | '/staff/tasks'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/staff/fulfilment'
     | '/staff/ledger'
     | '/staff/nfc-passports'
+    | '/staff/raw-store'
     | '/staff/reports'
     | '/staff/settings'
     | '/staff/tasks'
@@ -398,6 +409,7 @@ export interface FileRouteTypes {
     | '/staff/_workspace/fulfilment'
     | '/staff/_workspace/ledger'
     | '/staff/_workspace/nfc-passports'
+    | '/staff/_workspace/raw-store'
     | '/staff/_workspace/reports'
     | '/staff/_workspace/settings'
     | '/staff/_workspace/tasks'
@@ -525,6 +537,13 @@ declare module '@tanstack/react-router' {
       path: '/nfc-passports'
       fullPath: '/staff/nfc-passports'
       preLoaderRoute: typeof StaffWorkspaceNfcPassportsRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/raw-store': {
+      id: '/staff/_workspace/raw-store'
+      path: '/raw-store'
+      fullPath: '/staff/raw-store'
+      preLoaderRoute: typeof StaffWorkspaceRawStoreRouteImport
       parentRoute: typeof StaffWorkspaceRouteRoute
     }
     '/staff/_workspace/reports': {
@@ -675,6 +694,7 @@ interface StaffWorkspaceRouteRouteChildren {
   StaffWorkspaceFulfilmentRoute: typeof StaffWorkspaceFulfilmentRoute
   StaffWorkspaceLedgerRoute: typeof StaffWorkspaceLedgerRoute
   StaffWorkspaceNfcPassportsRoute: typeof StaffWorkspaceNfcPassportsRoute
+  StaffWorkspaceRawStoreRoute: typeof StaffWorkspaceRawStoreRoute
   StaffWorkspaceReportsRoute: typeof StaffWorkspaceReportsRoute
   StaffWorkspaceSettingsRoute: typeof StaffWorkspaceSettingsRoute
   StaffWorkspaceTasksRoute: typeof StaffWorkspaceTasksRoute
@@ -701,6 +721,7 @@ const StaffWorkspaceRouteRouteChildren: StaffWorkspaceRouteRouteChildren = {
   StaffWorkspaceFulfilmentRoute: StaffWorkspaceFulfilmentRoute,
   StaffWorkspaceLedgerRoute: StaffWorkspaceLedgerRoute,
   StaffWorkspaceNfcPassportsRoute: StaffWorkspaceNfcPassportsRoute,
+  StaffWorkspaceRawStoreRoute: StaffWorkspaceRawStoreRoute,
   StaffWorkspaceReportsRoute: StaffWorkspaceReportsRoute,
   StaffWorkspaceSettingsRoute: StaffWorkspaceSettingsRoute,
   StaffWorkspaceTasksRoute: StaffWorkspaceTasksRoute,

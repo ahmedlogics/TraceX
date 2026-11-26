@@ -36,7 +36,7 @@ export function StaffWorkspace({
 
   const targetStationRedirect = isFinalQc
     ? paths.quality
-    : isWarehouse || isDispatch || isFinishing || isRawStore
+    : isWarehouse || isDispatch || isFinishing
     ? paths.workstation
     : null;
 

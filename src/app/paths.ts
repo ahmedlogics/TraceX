@@ -8,6 +8,7 @@ export const paths = {
   tasks: "/staff/tasks",
   workstation: "/staff/workstation",
   lots: "/staff/material-lots",
+  rawStore: "/staff/raw-store",
   lot: (id: string) => `/staff/material-lots/${encodeURIComponent(id)}`,
   orders: "/staff/production-orders",
   order: (id: string) => `/staff/production-orders/${encodeURIComponent(id)}`,
