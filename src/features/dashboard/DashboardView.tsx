@@ -1026,6 +1026,7 @@ export function DashboardView() {
   const isReceivingUser = me.username === "receiving.demo" || me.department === "receiving";
   const isQualityUser = me.role === "Q";
   const isRawStoreUser = me.department === "raw-store" || me.username === "rawstore.demo";
+  const isCuttingUser = me.department === "cutting" || me.username === "cutting.demo";
 
   return (
     <div className="space-y-6">
@@ -1103,12 +1104,14 @@ export function DashboardView() {
               <Section
                 title="Tasks & Work Queue"
                 description={
-                  me.role === "M"
+                  isCuttingUser
+                    ? undefined
+                    : me.role === "M"
                     ? "Factory-wide task queue. Review prerequisites, bottlenecks, and assign work to operators."
-                    : `Actionable work queue for ${departmentLabels[me.department]}.`
+                    : undefined
                 }
               >
-                <TasksSection />
+                <TasksSection hideHeader />
               </Section>
             )}
           </div>
