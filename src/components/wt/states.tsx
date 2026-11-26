@@ -46,9 +46,21 @@ export function EmptyState({
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const isPoolOrDbBusy =
+    message.includes("EMAXCONNSESSION") ||
+    message.includes("max clients reached") ||
+    message.includes("connection pool") ||
+    message.includes("temporarily busy");
+
+  const displayMessage = isPoolOrDbBusy
+    ? "The database connection pool is currently busy. Please click below to refresh."
+    : message.length > 150 && (message.includes("invocation in") || message.includes("Database error"))
+    ? "A temporary database connection error occurred. Please click below to try again."
+    : message;
+
   return (
     <StateBox icon={<AlertTriangle className="size-5" />} title="Something went wrong">
-      <p>{message}</p>
+      <p className="max-w-md mx-auto text-sm text-muted-foreground">{displayMessage}</p>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
           Try again

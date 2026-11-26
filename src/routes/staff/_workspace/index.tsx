@@ -25,16 +25,20 @@ function DashboardRoute() {
   const isDispatch =
     me.data?.username?.toLowerCase() === "dispatch.demo" ||
     me.data?.department?.toLowerCase() === "dispatch";
+  const isRawStore =
+    me.data?.username?.toLowerCase() === "rawstore.demo" ||
+    me.data?.department?.toLowerCase() === "raw-store" ||
+    me.data?.department?.toLowerCase() === "raw_store";
 
   useEffect(() => {
     if (isFinalQc) {
       void navigate(paths.quality, { replace: true });
-    } else if (isWarehouse || isDispatch || isFinishing) {
+    } else if (isWarehouse || isDispatch || isFinishing || isRawStore) {
       void navigate(paths.workstation, { replace: true });
     }
-  }, [isFinalQc, isWarehouse, isDispatch, isFinishing, navigate]);
+  }, [isFinalQc, isWarehouse, isDispatch, isFinishing, isRawStore, navigate]);
 
-  if (isFinalQc || isWarehouse || isDispatch || isFinishing) return null;
+  if (isFinalQc || isWarehouse || isDispatch || isFinishing || isRawStore) return null;
 
   return <DashboardView />;
 }

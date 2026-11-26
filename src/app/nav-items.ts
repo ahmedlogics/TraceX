@@ -160,18 +160,20 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
     user?.department?.toLowerCase() === "raw_store";
 
   if (isRawStore) {
-    return navGroups.map((g) => {
-      if (g.label === "Work") {
+    return navGroups
+      .map((g) => {
+        if (g.label === "Work") {
+          return {
+            ...g,
+            items: [{ key: "workstation" as const, label: "Workstation", href: paths.workstation, icon: Cpu }],
+          };
+        }
         return {
           ...g,
-          items: [
-            { key: "home", label: "Home", href: paths.home, icon: Home },
-            { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
-          ],
+          items: g.items.filter((i) => i.key !== "materialLots"),
         };
-      }
-      return g;
-    });
+      })
+      .filter((g) => g.items.length > 0);
   }
 
   return navGroups;

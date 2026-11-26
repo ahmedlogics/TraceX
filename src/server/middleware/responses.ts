@@ -131,10 +131,36 @@ export function sendError(
     });
   }
 
-  const message = err instanceof Error ? err.message : "An unexpected server error occurred";
-  const codeMatch = typeof message === "string" ? message.match(/^(WT_ERR_[A-Z0-9_]+):/) : null;
+  const rawMessage = err instanceof Error ? err.message : "An unexpected server error occurred";
+
+  // Gracefully handle pool saturation or transient limits
+  if (
+    rawMessage.includes("EMAXCONNSESSION") ||
+    rawMessage.includes("max clients reached") ||
+    rawMessage.includes("Connection pool timeout")
+  ) {
+    return res.status(503).json({
+      success: false,
+      error: {
+        code: "WT_ERR_SERVICE_UNAVAILABLE",
+        message: "The database connection pool is temporarily busy. Please try again in a moment.",
+      },
+      meta: {
+        requestId: reqId,
+        timestamp,
+      },
+    });
+  }
+
+  // Sanitize internal stack traces or Prisma file paths
+  const sanitizedMessage =
+    rawMessage.includes("Invalid `") && rawMessage.includes("invocation in")
+      ? "A temporary database query error occurred. Please try again."
+      : rawMessage;
+
+  const codeMatch = typeof sanitizedMessage === "string" ? sanitizedMessage.match(/^(WT_ERR_[A-Z0-9_]+):/) : null;
   const resolvedCode = codeMatch ? codeMatch[1] : fallbackCode;
-  const cleanMessage = codeMatch ? message.replace(/^(WT_ERR_[A-Z0-9_]+):\s*/, "") : message;
+  const cleanMessage = codeMatch ? sanitizedMessage.replace(/^(WT_ERR_[A-Z0-9_]+):\s*/, "") : sanitizedMessage;
   return res.status(fallbackStatusCode).json({
     success: false,
     error: {

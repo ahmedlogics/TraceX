@@ -80,13 +80,39 @@ export async function runInTransaction<T>(
     return callback(existingTx);
   }
   const client = getPrismaClient();
-  return client.$transaction(
-    async (tx) => {
-      return callback(tx as PrismaTransactionClient);
-    },
-    {
-      maxWait: 20000,
-      timeout: 60000,
-    },
-  );
+
+  let attempts = 0;
+  const maxAttempts = 3;
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      return await client.$transaction(
+        async (tx) => {
+          return callback(tx as PrismaTransactionClient);
+        },
+        {
+          maxWait: 10000,
+          timeout: 30000,
+        },
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTransient =
+        msg.includes("EMAXCONNSESSION") ||
+        msg.includes("max clients reached") ||
+        msg.includes("Connection pool timeout") ||
+        msg.includes("Connection closed") ||
+        msg.includes("57P01");
+
+      if (isTransient && attempts < maxAttempts) {
+        console.warn(
+          `[WearTrail DB Transient Pool Retry] Pool saturated, retrying attempt ${attempts}/${maxAttempts}...`,
+        );
+        await new Promise((r) => setTimeout(r, 200 * attempts));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Transaction execution failed after maximum retries.");
 }

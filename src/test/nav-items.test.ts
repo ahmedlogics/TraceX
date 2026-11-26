@@ -26,17 +26,21 @@ describe("Staff Navigation Items", () => {
     status: "active",
   };
 
-  it("removes production orders from navigation for rawstore.demo", () => {
+  it("removes home, materialLots, and production orders from navigation for rawstore.demo", () => {
     const groups = getNavGroups(rawStoreUser);
     const workGroup = groups.find((g) => g.label === "Work");
     expect(workGroup).toBeDefined();
 
     const keys = workGroup!.items.map((i) => i.key);
-    expect(keys).toEqual(["home", "workstation"]);
+    expect(keys).toEqual(["workstation"]);
+    expect(keys).not.toContain("home");
     expect(keys).not.toContain("productionOrders");
+
+    const materialLotsFound = groups.some((g) => g.items.some((i) => i.key === "materialLots"));
+    expect(materialLotsFound).toBe(false);
   });
 
-  it("removes production orders for any raw-store department staff", () => {
+  it("streamlines navigation for any raw-store department staff", () => {
     const customRawStoreStaff: StaffUser = {
       ...rawStoreUser,
       username: "john.store",
@@ -45,7 +49,8 @@ describe("Staff Navigation Items", () => {
     const groups = getNavGroups(customRawStoreStaff);
     const workGroup = groups.find((g) => g.label === "Work");
     const keys = workGroup!.items.map((i) => i.key);
-    expect(keys).toEqual(["home", "workstation"]);
+    expect(keys).toEqual(["workstation"]);
+    expect(keys).not.toContain("home");
     expect(keys).not.toContain("productionOrders");
   });
 
@@ -62,14 +67,13 @@ describe("Staff Navigation Items", () => {
     expect(defaultGroups).toEqual(navGroups);
   });
 
-  it("filters accessible items properly in the modified order for rawstore.demo", () => {
+  it("filters accessible items properly for rawstore.demo to only workstation", () => {
     const groups = getNavGroups(rawStoreUser);
     const workItems = groups
       .find((g) => g.label === "Work")!
       .items.filter((i) => canAccessRoute(rawStoreUser, i.key));
 
     expect(workItems.map((i) => i.label)).toEqual([
-      "Home",
       "Workstation",
     ]);
   });
