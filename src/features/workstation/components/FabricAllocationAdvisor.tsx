@@ -1,17 +1,8 @@
 import { useState, useMemo } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
-  Check,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Coins,
-  Layers,
-  Leaf,
-  Percent,
-  Radio,
-  Scissors,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -52,32 +43,20 @@ export function FabricAllocationAdvisor({
   return (
     <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-card via-card to-purple-500/5 p-4 sm:p-5 shadow-xs space-y-4">
       {/* Advisor Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/60 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400">
-            <Sparkles className="size-4 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                AI Smart Fabric Allocation &amp; Scrap-Minimizer
-              </span>
-              <span className="rounded-full bg-purple-500/15 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300">
-                Decision Support
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Analyzing warehouse rolls for {order.id} ({order.plannedQty} pcs · {optimization.requiredMeters}m required)
-            </p>
-          </div>
+          <Sparkles className="size-4 text-purple-600 dark:text-purple-400" />
+          <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+            AI Fabric Allocation
+          </span>
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="rounded-md border bg-muted/60 px-2.5 py-1 font-mono text-[11px] text-foreground font-semibold">
-            🎯 Target: {optimization.requiredMeters}m
+          <span className="rounded-md border bg-muted/60 px-2.5 py-0.5 font-mono text-[11px] text-foreground font-semibold">
+            Target: {optimization.requiredMeters}m
           </span>
           {optimization.detectedColor && (
-            <span className="rounded-md border border-primary/20 bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary capitalize">
+            <span className="rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary capitalize">
               Color: {optimization.detectedColor}
             </span>
           )}
@@ -86,9 +65,9 @@ export function FabricAllocationAdvisor({
 
       {/* Case 1: Best Recommendation Found */}
       {best ? (
-        <div className="rounded-xl border border-purple-500/40 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-3.5">
+        <div className="rounded-xl border border-purple-500/40 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 text-white px-2.5 py-0.5 text-xs font-bold shadow-xs">
                   <Sparkles className="size-3" /> AI Recommended Pick
@@ -109,16 +88,15 @@ export function FabricAllocationAdvisor({
 
             <Button
               size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-xs gap-1.5 h-8 px-4 shrink-0"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-xs h-8 px-4 shrink-0"
               onClick={() => onSelectRecommendedLot(best.lot)}
             >
-              <Check className="size-3.5" />
               Pre-fill Recommended Roll
             </Button>
           </div>
 
           {/* Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5 text-xs">
             <div className="rounded-lg border bg-background/90 p-2.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
                 Roll Balance
@@ -126,44 +104,32 @@ export function FabricAllocationAdvisor({
               <span className="font-bold text-sm text-foreground">
                 {best.balanceMeters} m
               </span>
-              <span className="text-[10px] text-muted-foreground block">
-                Cuts {optimization.requiredMeters}m
-              </span>
             </div>
 
             <div className="rounded-lg border bg-background/90 p-2.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
-                Expected Scrap
+                Remaining Balance
               </span>
               <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">
-                {best.scrapPercentage}% ({best.remnantMeters}m)
-              </span>
-              <span className="text-[10px] text-emerald-600/80 block">
-                Minimal end-of-roll offcut
+                {best.remnantMeters} m
               </span>
             </div>
 
             <div className="rounded-lg border bg-background/90 p-2.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
-                Fabric Efficiency
+                Batch Yield
               </span>
               <span className="font-bold text-sm text-purple-700 dark:text-purple-300">
-                {best.yieldPercentage}% Yield
-              </span>
-              <span className="text-[10px] text-muted-foreground block">
-                Single-batch cut
+                {best.yieldPercentage}%
               </span>
             </div>
 
             <div className="rounded-lg border bg-background/90 p-2.5 shadow-2xs">
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
-                Est. Savings vs Avg
+                Est. Savings
               </span>
               <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">
-                +{optimization.estimatedFabricSavedMeters}m (${optimization.estimatedCostSavedDollars})
-              </span>
-              <span className="text-[10px] text-muted-foreground block">
-                Fabric cost preserved
+                +{optimization.estimatedFabricSavedMeters}m
               </span>
             </div>
           </div>
@@ -189,10 +155,10 @@ export function FabricAllocationAdvisor({
           className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors cursor-pointer py-1"
         >
           <span>
-            Evaluated Warehouse Rolls ({optimization.totalEvaluatedLots} total · {optimization.recommendations.length} compatible)
+            Evaluated Rolls ({optimization.recommendations.length} compatible)
           </span>
           <span className="flex items-center gap-1 text-primary">
-            {showAllRolls ? "Hide Details" : "Inspect Why Other Rolls Were Ranked / Disqualified"}
+            {showAllRolls ? "Hide candidate rolls" : "View candidate rolls"}
             {showAllRolls ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
           </span>
         </button>
