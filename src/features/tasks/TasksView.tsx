@@ -154,7 +154,6 @@ export function TasksSection({
   showHeader?: boolean;
   hideHeader?: boolean;
 } = {}) {
-  const shouldShowHeader = showHeader && !hideHeader;
   const me = useMe();
   const qTasks = useWtQuery(["tasks"], (c) => c.listTasks());
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
@@ -198,7 +197,7 @@ export function TasksSection({
 
   return (
     <>
-      {shouldShowHeader && (
+      {showHeader && !hideHeader && (
         <PageHeader
           title="Tasks & Factory Work Queue"
           description={

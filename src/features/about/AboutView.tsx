@@ -186,22 +186,13 @@ export function AboutView() {
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
-            <div
-              style={{
-                background: "linear-gradient(135deg, #D4AF67 0%, #B88E4B 50%, #7A5B2B 100%)",
-                padding: "1.5px",
-              }}
-              className="flex size-9 items-center justify-center rounded-xl shadow-sm"
-            >
-              <div
-                style={{ backgroundColor: "#24150D" }}
-                className="flex size-full items-center justify-center rounded-[10px]"
-              >
-                <Scissors className="size-4 text-[#D4AF67] rotate-90" />
-              </div>
-            </div>
+            <img
+              src="/images/tracex-icon-dark-optimized.png"
+              alt="TraceX Logo"
+              className="size-9 object-contain drop-shadow-sm"
+            />
             <div>
-              <span className="text-lg font-black tracking-tight text-[#FAF4EA]">
+              <span className="text-xl font-black tracking-tight text-[#FAF4EA]">
                 Trace<span style={{ color: "#D4AF67" }}>X</span>
               </span>
               <span
@@ -210,7 +201,7 @@ export function AboutView() {
                   borderColor: "#5A3B28",
                   color: "#D4AF67",
                 }}
-                className="ml-2 hidden sm:inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                className="ml-2.5 hidden sm:inline-block rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
               >
                 Visitor Showcase
               </span>
@@ -257,32 +248,21 @@ export function AboutView() {
         className="relative overflow-hidden pt-12 pb-16 sm:pt-16 sm:pb-20"
       >
         <div className="relative mx-auto max-w-4xl px-4 sm:px-6 text-center space-y-6">
-          {/* Standee Shield Emblem */}
+          {/* Authentic TraceX Brand Emblem */}
           <div className="inline-flex flex-col items-center">
             <div
               style={{
                 backgroundColor: "#FFFBF4",
-                borderColor: "#24150D",
-                boxShadow: "0 12px 32px rgba(36,21,13,0.18)",
+                borderColor: "#3D2819",
+                boxShadow: "0 16px 40px rgba(36,21,13,0.16)",
               }}
-              className="relative flex size-24 sm:size-28 items-center justify-center rounded-[32px] border-2 p-2"
+              className="relative flex size-28 sm:size-36 items-center justify-center rounded-[32px] border-2 p-3 sm:p-4 hover:scale-105 transition-transform duration-300"
             >
-              <div
-                style={{
-                  background: "linear-gradient(180deg, #FAF2E3 0%, #F2E2C4 100%)",
-                  borderColor: "#D5B584",
-                }}
-                className="flex size-full flex-col items-center justify-center rounded-[24px] border"
-              >
-                <div className="flex items-center justify-center text-[#24150D]">
-                  <Scissors className="size-9 stroke-[2.4] text-[#24150D] rotate-90" />
-                </div>
-                <div className="flex items-center gap-1 mt-1">
-                  <span style={{ backgroundColor: "#B88E4B" }} className="size-1.5 rounded-full" />
-                  <span style={{ backgroundColor: "#7A5A30" }} className="h-0.5 w-4" />
-                  <span style={{ backgroundColor: "#B88E4B" }} className="size-1.5 rounded-full" />
-                </div>
-              </div>
+              <img
+                src="/images/tracex-icon.png"
+                alt="TraceX Logo"
+                className="size-full object-contain drop-shadow-md"
+              />
             </div>
           </div>
 
@@ -773,10 +753,20 @@ export function AboutView() {
           borderTop: "1px solid #D5B584",
           color: "#382414",
         }}
-        className="py-8 text-center text-xs space-y-1"
+        className="py-8 text-center text-xs space-y-2"
       >
-        <p style={{ color: "#22130B" }} className="font-black">
-          TraceX · Department of Software Engineering, NED University of Engineering &amp; Technology, Karachi
+        <div className="flex items-center justify-center gap-2">
+          <img
+            src="/images/tracex-icon.png"
+            alt="TraceX Logo"
+            className="size-5 object-contain"
+          />
+          <span style={{ color: "#22130B" }} className="font-black text-sm tracking-tight">
+            TraceX
+          </span>
+        </div>
+        <p style={{ color: "#22130B" }} className="font-bold">
+          Department of Software Engineering, NED University of Engineering &amp; Technology, Karachi
         </p>
         <p style={{ color: "#4A301C" }} className="text-[11px] font-semibold">
           Supervised by Dr. Kashif Mehboob Khan · Technology Showcase 2026
