@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Boxes,
   CheckCircle2,
   Clock,
   Cpu,
@@ -703,26 +704,7 @@ function StitchingDashboard() {
   );
 }
 
-export function DashboardView() {
-  const me = useMe();
-  const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
-
-  if (isIncomingQC) {
-    return <QualityView />;
-  }
-
-  const isStitchingUser = me.department === "stitching" || me.username === "stitching.demo";
-
-  if (isStitchingUser) {
-    return <StitchingDashboard />;
-  }
-
-  const isRawStoreUser = me.department === "raw-store" || me.username === "rawstore.demo";
-
-  if (isRawStoreUser) {
-    return <RawStoreDashboard />;
-  }
-
+function GeneralDashboard({ me }: { me: ReturnType<typeof useMe> }) {
   const q = useWtQuery(["dashboard"], (c) => c.getDashboard());
   const isReceivingUser = me.username === "receiving.demo" || me.department === "receiving";
   const isQualityUser = me.role === "Q";
@@ -824,4 +806,27 @@ export function DashboardView() {
       </Loadable>
     </div>
   );
+}
+
+export function DashboardView() {
+  const me = useMe();
+  const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
+
+  if (isIncomingQC) {
+    return <QualityView />;
+  }
+
+  const isStitchingUser = me.department === "stitching" || me.username === "stitching.demo";
+
+  if (isStitchingUser) {
+    return <StitchingDashboard />;
+  }
+
+  const isRawStoreUser = me.department === "raw-store" || me.username === "rawstore.demo";
+
+  if (isRawStoreUser) {
+    return <RawStoreDashboard />;
+  }
+
+  return <GeneralDashboard me={me} />;
 }
