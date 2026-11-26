@@ -36,6 +36,8 @@ import type {
   TriggerOutcome,
 } from "@/domain/types";
 import type { PublicJourney, PublicProof } from "@/domain/public-types";
+import { projectJourney, projectProof } from "@/mock/projection";
+import { getState } from "@/mock/store";
 import type {
   DashboardData,
   FulfilmentData,
@@ -1073,6 +1075,15 @@ export function createHttpClient(): WearTrailClient {
         if (err instanceof ApiError && err.status === 404) {
           return null;
         }
+        // If live backend is unreachable (e.g. mobile device, deployed showcase, or offline mode),
+        // gracefully fall back to client projection so the visitor journey never breaks.
+        if (err instanceof ApiError && (err.status === 0 || err.code === "WT_ERR_NETWORK")) {
+          try {
+            return projectJourney(getState(), publicId.trim());
+          } catch {
+            // Ignore fallback failure, throw original error
+          }
+        }
         throw err;
       }
     },
@@ -1084,6 +1095,14 @@ export function createHttpClient(): WearTrailClient {
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {
           return null;
+        }
+        // If live backend is unreachable, gracefully fall back to client proof projection
+        if (err instanceof ApiError && (err.status === 0 || err.code === "WT_ERR_NETWORK")) {
+          try {
+            return projectProof(getState(), publicId.trim());
+          } catch {
+            // Ignore fallback failure, throw original error
+          }
         }
         throw err;
       }

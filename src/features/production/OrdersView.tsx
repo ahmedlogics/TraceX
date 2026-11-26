@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, ClipboardCheck, Clock, FilePlus2, Package } from "lucide-react";
+import { ArrowRight, CheckCircle2, ClipboardCheck, Clock, FilePlus2, Package, Sparkles } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
@@ -107,15 +107,24 @@ export function PlanOrderDialog({
               </Field>
             </div>
 
-            {selectedSpecId && (() => {
+            {(() => {
               const matched = specs.find((s) => s.id === selectedSpecId);
-              if (!matched) return null;
-              const estFabric = Math.round(matched.standardConsumptionMeters * Number(qty) * 10) / 10;
+              const rate = matched?.standardConsumptionMeters ?? 2.0;
+              const estFabric = Math.round(rate * Number(qty || 1) * 10) / 10;
               return (
-                <div className="rounded-md border bg-muted/40 p-2.5 text-xs text-muted-foreground space-y-1">
-                  <p className="font-semibold text-foreground">Fabric Consumption Estimate:</p>
-                  <p>Standard rate: <span className="font-semibold">{matched.standardConsumptionMeters} m</span> per piece</p>
-                  <p>Total raw fabric required: <span className="font-semibold text-primary">{estFabric} m</span> ({matched.category})</p>
+                <div className="rounded-md border border-purple-500/20 bg-purple-500/5 p-2.5 text-xs text-muted-foreground space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      <Sparkles className="size-3 text-purple-600 dark:text-purple-400" />
+                      Fabric Consumption &amp; Allocation:
+                    </p>
+                    <span className="font-semibold text-purple-700 dark:text-purple-300 font-mono text-[11px]">
+                      ~{estFabric} m required
+                    </span>
+                  </div>
+                  <p className="text-[11px]">
+                    Standard rate: <span className="font-semibold text-foreground">{rate} m</span> / pc · AI Recommender will match lowest-scrap roll at Station 2.
+                  </p>
                 </div>
               );
             })()}

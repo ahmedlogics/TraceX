@@ -13,10 +13,21 @@ export function createCorsMiddleware() {
         return callback(null, true);
       }
 
-      const isAllowed =
-        serverConfig.corsAllowedOrigins.includes(origin) ||
-        (serverConfig.nodeEnv === "development" &&
-          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+      let isAllowed = false;
+      try {
+        const parsed = new URL(origin);
+        isAllowed =
+          serverConfig.corsAllowedOrigins.includes(origin) ||
+          parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "tracex-do.vercel.app" ||
+          parsed.hostname.endsWith(".vercel.app") ||
+          (serverConfig.nodeEnv === "development" &&
+            /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+      } catch {
+        isAllowed = serverConfig.corsAllowedOrigins.includes(origin);
+      }
+
       if (isAllowed) {
         return callback(null, true);
       }

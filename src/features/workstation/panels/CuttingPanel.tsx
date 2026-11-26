@@ -822,6 +822,20 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                   </span>
                                 </div>
                               </div>
+
+                              <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center gap-1 rounded bg-purple-100 dark:bg-purple-950 px-2 py-0.5 text-[11px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
+                                    <Sparkles className="size-3" /> AI Fabric Allocation
+                                  </span>
+                                  <span className="text-muted-foreground text-[11px]">
+                                    Assigned based on remnant waste minimization &amp; weave/color compatibility.
+                                  </span>
+                                </div>
+                                <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-[11px]">
+                                  Optimal Cutting Yield Target: ~97%+
+                                </span>
+                              </div>
                             </div>
 
                             {/* "Bundle Orders" dedicated list */}

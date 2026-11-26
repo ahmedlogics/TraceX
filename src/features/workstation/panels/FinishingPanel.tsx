@@ -34,7 +34,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
 
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 1000 });
 
-  const lastSeenScanRef = useRef<string | null>(null);
+  const lastSeenScanRef = useRef<string | null>(stationData.lastScanOutcome?.at || null);
 
   // Instant detection when StationShell prop updates
   useEffect(() => {

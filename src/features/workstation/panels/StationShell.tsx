@@ -196,7 +196,7 @@ export function StationShell() {
                 </div>
 
                 {/* Durable Scan Feedback */}
-                {lastOutcome && effectiveStation !== "finishing" && (
+                {lastOutcome && effectiveStation !== "finishing" && effectiveStation !== "stitching" && (
                   <div
                     className={`mt-4 rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
                       lastOutcome.resolution === "accepted"

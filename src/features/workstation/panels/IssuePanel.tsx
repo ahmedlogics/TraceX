@@ -30,6 +30,8 @@ import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { getDataMode } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 import { PlanOrderDialog } from "@/features/production/OrdersView";
+import { FabricAllocationAdvisor } from "../components/FabricAllocationAdvisor";
+import { optimizeFabricAllocation } from "@/domain/fabric-optimizer";
 
 function getRequiredFabric(order: ProductionOrder): number {
   return Math.round(order.plannedQty * 2.0 * 10) / 10;
@@ -587,6 +589,22 @@ export function IssuePanel({
                                 </div>
                               )}
 
+                              {/* AI Smart Fabric Allocation & Scrap-Minimization Recommender */}
+                              {targetOrder && (
+                                <FabricAllocationAdvisor
+                                  order={targetOrder}
+                                  availableLots={lots}
+                                  selectedLotId={scanUid}
+                                  onSelectRecommendedLot={(lot) => {
+                                    if (lot.rfidUid) {
+                                      setScanUid(lot.rfidUid);
+                                    } else {
+                                      setScanUid(lot.id);
+                                    }
+                                  }}
+                                />
+                              )}
+
                               <div className="space-y-2">
                                 <Field
                                   label="Bundle Card Tag UID"
@@ -639,50 +657,77 @@ export function IssuePanel({
                               </div>
 
                               {/* Quick Pre-fill Test Chips for Demonstration (Mock Mode Only) */}
-                              {!isLive && (
-                                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                                    One-Click Test Cards:
-                                  </p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {lots.map((l) => (
+                              {!isLive && (() => {
+                                const aiAdvice = targetOrder ? optimizeFabricAllocation(targetOrder, lots) : null;
+                                const bestLotId = aiAdvice?.bestRecommendation?.lot.id;
+
+                                return (
+                                  <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                        One-Click Test Cards:
+                                      </p>
+                                      {bestLotId && (
+                                        <span className="text-[10px] font-medium text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                                          <Sparkles className="size-3" /> AI recommends lot #{bestLotId}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {lots.map((l) => {
+                                        const isAiPick = bestLotId === l.id;
+                                        return (
+                                          <Button
+                                            key={l.id}
+                                            type="button"
+                                            variant={isAiPick ? "default" : "secondary"}
+                                            size="sm"
+                                            className={`h-7 text-xs font-mono transition-all ${
+                                              isAiPick
+                                                ? "bg-purple-600 hover:bg-purple-700 text-white font-bold ring-2 ring-purple-400 shadow-xs"
+                                                : ""
+                                            }`}
+                                            disabled={pending || !l.rfidUid}
+                                            onClick={() => {
+                                              if (l.rfidUid) {
+                                                setScanUid(l.rfidUid);
+                                                handleScan(l.rfidUid);
+                                              }
+                                            }}
+                                            title={`Status: ${l.status}, Balance: ${l.balanceQty}m${
+                                              isAiPick ? " · ✨ AI Recommended Pick (Lowest Scrap)" : ""
+                                            }`}
+                                          >
+                                            {isAiPick && <Sparkles className="size-3 mr-1 inline text-amber-300" />}
+                                            {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
+                                            {isAiPick && (
+                                              <span className="ml-1 rounded bg-purple-900/40 px-1 py-0.2 text-[9px] uppercase tracking-wide">
+                                                AI Pick
+                                              </span>
+                                            )}
+                                          </Button>
+                                        );
+                                      })}
                                       <Button
-                                        key={l.id}
                                         type="button"
-                                        variant="secondary"
+                                        variant="outline"
                                         size="sm"
-                                        className="h-7 text-xs font-mono"
-                                        disabled={pending || !l.rfidUid}
+                                        className="h-7 text-xs font-mono text-destructive border-destructive/30"
                                         onClick={() => {
-                                          if (l.rfidUid) {
-                                            setScanUid(l.rfidUid);
-                                            handleScan(l.rfidUid);
-                                          }
+                                          setScanUid("04999999");
+                                          handleScan("04999999");
                                         }}
-                                        title={`Status: ${l.status}, Balance: ${l.balanceQty}m`}
+                                        title="Unrecognised Card test"
                                       >
-                                        {l.id} ({l.rfidUid ?? "NO-CARD"}) {l.status === "accepted" ? "✓" : "⏳"}
+                                        04999999 (Unbound Card)
                                       </Button>
-                                    ))}
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 text-xs font-mono text-destructive border-destructive/30"
-                                      onClick={() => {
-                                        setScanUid("04999999");
-                                        handleScan("04999999");
-                                      }}
-                                      title="Unrecognised Card test"
-                                    >
-                                      04999999 (Unbound Card)
-                                    </Button>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Clicking a card immediately sends it to Scanner 2 to test validation, duplicate prevention, and QC clearance guards.
+                                    </p>
                                   </div>
-                                  <p className="text-[11px] text-muted-foreground">
-                                    Clicking a card immediately sends it to Scanner 2 to test validation, duplicate prevention, and QC clearance guards.
-                                  </p>
-                                </div>
-                              )}
+                                );
+                              })()}
                             </div>
                           </Section>
                         </div>
