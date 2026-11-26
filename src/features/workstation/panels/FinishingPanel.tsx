@@ -202,10 +202,10 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                   </Tabs>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-1 text-xs font-bold text-[#2B170E]">
                       <span className="relative flex size-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#C79C70] opacity-75" />
+                        <span className="relative inline-flex size-2 rounded-full bg-[#C79C70]" />
                       </span>
                       <span>Station 5 Ready</span>
                     </div>

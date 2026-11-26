@@ -218,8 +218,8 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                 <div className="rounded-lg border bg-card p-5 space-y-4">
                   {/* Scanner 8 Status */}
                   <div className="flex items-center justify-between text-xs pb-2 border-b">
-                    <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
-                      <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="inline-flex items-center gap-1.5 font-bold text-[#2B170E]">
+                      <span className="size-2 rounded-full bg-[#C79C70] animate-pulse" />
                       Scanner 8 {isArmed ? "Armed & Listening" : "Active"}
                     </span>
                     <span className="font-mono text-muted-foreground">
@@ -268,11 +268,11 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                           </p>
                         </div>
                       ) : (
-                        <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-4 space-y-3">
+                        <div className="rounded-xl border border-[#C79C70] bg-[#E2C8A8]/30 p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                              <Radio className="size-4 animate-spin text-emerald-600" />
-                              Scanner 8 Armed & Listening for Box Tag
+                            <div className="inline-flex items-center gap-2 text-xs font-bold text-[#2B170E]">
+                              <Radio className="size-4 animate-spin text-[#6E5748]" />
+                              Scanner 8 Armed &amp; Listening for Box Tag
                             </div>
                             <Button
                               variant="outline"
@@ -371,13 +371,13 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                       <div
                         className={`rounded-lg border p-4 shadow-sm transition-all ${
                           details.isAccepted
-                            ? "border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/20 text-foreground"
+                            ? "border-[#CDBBA8] bg-[#F2E4D2]/40 text-[#2B170E]"
                             : "border-destructive/40 bg-destructive/10 text-destructive"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           {details.isAccepted ? (
-                            <ShieldCheck className="size-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                            <ShieldCheck className="size-6 text-[#2B170E] shrink-0 mt-0.5" />
                           ) : (
                             <ShieldAlert className="size-6 text-destructive shrink-0 mt-0.5" />
                           )}
@@ -389,7 +389,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                               <span
                                 className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
                                   details.isAccepted
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/50 dark:text-emerald-200"
+                                    ? "bg-[#E2C8A8]/60 text-[#2B170E] border-[#CDBBA8]"
                                     : "bg-destructive/20 text-destructive border-destructive/40"
                                 }`}
                               >
@@ -541,7 +541,7 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                               {isMock && (
                                 <Button
                                   size="sm"
-                                  className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs"
+                                  className="h-7 text-xs gap-1.5 bg-[#D8B68F] hover:bg-[#C79C70] text-[#2B170E] border border-[#CDBBA8] font-semibold shadow-xs"
                                   disabled={pending || !isAuthorized}
                                   onClick={() => {
                                     setScanUid(targetTag);

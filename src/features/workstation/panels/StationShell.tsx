@@ -88,7 +88,7 @@ export function StationShell() {
               <select
                 value={effectiveStation}
                 onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                className="h-8 rounded-lg border border-[#CDBBA8] bg-[#FFFDFC] px-3 text-xs font-semibold text-[#2B170E] shadow-2xs focus:outline-none focus:border-[#C79C70] focus:ring-1 focus:ring-[#D8B68F]"
               >
                 {activeStations.map((code) => (
                   <option key={code} value={code}>
@@ -115,13 +115,7 @@ export function StationShell() {
               effectiveStation !== "dispatch" && (
               <section
                 aria-label="Active Station Context"
-                className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 shadow-xs ${
-                  effectiveStation === "stitching"
-                    ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
-                    : effectiveStation === "warehouse"
-                    ? "bg-gradient-to-r from-card via-card/95 to-amber-50/30 dark:to-card/85"
-                    : "bg-card"
-                }`}
+                className="relative overflow-hidden rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs"
               >
                 {/* Aesthetic stitching backdrop blend for stitching workstation */}
                 {effectiveStation === "stitching" && (
@@ -185,9 +179,9 @@ export function StationShell() {
 
                   <div className="flex flex-col items-start gap-2 md:items-end">
                     {stData.lastConfirmedSubjectId && (
-                      <div className="flex items-center gap-1.5 rounded-md bg-accent/60 px-2.5 py-1 text-xs">
-                        <span className="text-muted-foreground">Latest Subject:</span>
-                        <span className="wt-id font-bold text-accent-foreground">
+                      <div className="flex items-center gap-1.5 rounded-lg border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs text-[#2B170E]">
+                        <span className="text-[#6E5748]">Latest Subject:</span>
+                        <span className="wt-id font-bold text-[#2B170E]">
                           {stData.lastConfirmedSubjectId}
                         </span>
                       </div>
@@ -200,14 +194,14 @@ export function StationShell() {
                   <div
                     className={`mt-4 rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
                       lastOutcome.resolution === "accepted"
-                        ? "border-success/40 bg-success-soft text-foreground"
-                        : "border-destructive/40 bg-danger-soft text-foreground"
+                        ? "border-[#C79C70] bg-[#E2C8A8]/30 text-[#2B170E]"
+                        : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
                     }`}
                   >
                     {lastOutcome.resolution === "accepted" ? (
-                      <CheckCircle2 className="size-4 shrink-0 text-success mt-0.5" />
+                      <CheckCircle2 className="size-4 shrink-0 text-[#6E5748] mt-0.5" />
                     ) : (
-                      <XCircle className="size-4 shrink-0 text-destructive mt-0.5" />
+                      <XCircle className="size-4 shrink-0 text-[#8C5348] mt-0.5" />
                     )}
                     <div className="space-y-0.5">
                       <p className="font-semibold text-foreground">

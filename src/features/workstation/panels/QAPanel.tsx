@@ -597,15 +597,15 @@ export function QAPanel({
                           <span className="font-semibold">{g.id}</span>
                           <span className="text-[10px] opacity-80">({g.rfidUid})</span>
                           {isPassed ? (
-                            <span className="text-[9px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold rounded px-1 ml-0.5">
+                            <span className="text-[9px] bg-[#E2C8A8] text-[#2B170E] font-bold rounded px-1.5 ml-0.5 border border-[#C79C70]">
                               Passed
                             </span>
                           ) : g.hold ? (
-                            <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold rounded px-1 ml-0.5">
+                            <span className="text-[9px] bg-[#E8D7C2] text-[#2B170E] font-bold rounded px-1.5 ml-0.5 border border-[#BFA894]">
                               On Hold
                             </span>
                           ) : (
-                            <span className="text-[9px] bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold rounded px-1 ml-0.5">
+                            <span className="text-[9px] bg-[#F2E4D2] text-[#2B170E] font-bold rounded px-1.5 ml-0.5 border border-[#CDBBA8]">
                               Ready
                             </span>
                           )}

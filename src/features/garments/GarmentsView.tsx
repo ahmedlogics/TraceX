@@ -584,8 +584,8 @@ export function GarmentsView() {
                       const isDone = Boolean(completedIds[g.id]);
                       if (isDone) {
                         return (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                            <CheckCircle2 className="size-3.5" /> Done
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-[#2B170E]">
+                            <CheckCircle2 className="size-3.5 text-[#6E5748]" /> Done
                           </span>
                         );
                       }

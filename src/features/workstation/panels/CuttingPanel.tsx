@@ -500,8 +500,8 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                               </Button>
                             )}
 
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs font-bold text-[#2B170E]">
+                              <span className="size-2 rounded-full bg-[#C79C70] animate-pulse" />
                               Scanner 3 Online
                             </span>
                           </div>
@@ -512,16 +512,16 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                           <div
                             className={`rounded-lg border p-3.5 text-xs flex items-start gap-3 transition-all ${
                               alertMessage.type === "success"
-                                ? "border-emerald-500/30 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
+                                ? "border-[#C79C70] bg-[#E2C8A8]/30 text-[#2B170E]"
                                 : alertMessage.type === "error"
-                                  ? "border-destructive/30 bg-destructive/10 text-destructive dark:bg-destructive/20"
-                                  : "border-primary/30 bg-primary/5 text-foreground"
+                                  ? "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
+                                  : "border-[#CDBBA8] bg-[#FFFDFC] text-[#2B170E]"
                             }`}
                           >
                             <div className="mt-0.5 shrink-0">
-                              {alertMessage.type === "success" && <CheckCircle2 className="size-4 text-emerald-600" />}
-                              {alertMessage.type === "error" && <XCircle className="size-4 text-destructive" />}
-                              {alertMessage.type === "info" && <Sparkles className="size-4 text-primary" />}
+                              {alertMessage.type === "success" && <CheckCircle2 className="size-4 text-[#6E5748]" />}
+                              {alertMessage.type === "error" && <XCircle className="size-4 text-[#8C5348]" />}
+                              {alertMessage.type === "info" && <Sparkles className="size-4 text-[#C79C70]" />}
                             </div>
                             <div className="flex-1 space-y-0.5">
                               <p className="font-bold">{alertMessage.title}</p>

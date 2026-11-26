@@ -35,9 +35,9 @@ import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
 
 const toneIcon = { danger: OctagonAlert, warning: AlertTriangle, info: Info } as const;
 const toneClass = {
-  danger: "border-destructive/30 bg-danger-soft text-destructive",
-  warning: "border-warning/30 bg-warning-soft text-warning",
-  info: "border-accent bg-info-soft text-accent-foreground",
+  danger: "border-[#BFA894] bg-[#E8D7C2]/70 text-[#2B170E]",
+  warning: "border-[#C79C70] bg-[#F4EADA] text-[#2B170E]",
+  info: "border-[#CDBBA8] bg-[#EFE3D3] text-[#2B170E]",
 } as const;
 
 function ReceivingLotsQueue() {
@@ -50,11 +50,11 @@ function ReceivingLotsQueue() {
 
         if (unassigned.length === 0) {
           return (
-            <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-              <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
+            <div className="rounded-xl border border-dashed border-[#CDBBA8] p-6 text-center space-y-2 bg-[#FFFDFC]">
+              <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#F2E4D2] text-[#2B170E]">
                 <Radio className="size-4" />
               </div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-semibold text-[#2B170E]">
                 All lots have active bundle cards assigned
               </p>
             </div>
@@ -64,24 +64,24 @@ function ReceivingLotsQueue() {
         return (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <p className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">
                 Lots Awaiting RFID Assignment ({unassigned.length})
               </p>
             </div>
-            <div className="divide-y rounded-lg border bg-card">
+            <div className="divide-y divide-[#CDBBA8]/60 rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] overflow-hidden">
               {unassigned.map((lot) => (
                 <div
                   key={lot.id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-[#F2E4D2]/30 transition-colors"
                 >
                   <div className="space-y-0.5">
-                    <p className="font-semibold text-foreground">{lot.id} · {lot.material}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Supplier: <span className="font-medium">{lot.supplierRef}</span> · Amount: <span className="font-medium">{lot.receivedQty} {lot.unit ?? "m"}</span>
+                    <p className="font-bold text-[#2B170E]">{lot.id} · {lot.material}</p>
+                    <p className="text-xs text-[#6E5748]">
+                      Supplier: <span className="font-semibold text-[#2B170E]">{lot.supplierRef}</span> · Amount: <span className="font-semibold text-[#2B170E]">{lot.receivedQty} {lot.unit ?? "m"}</span>
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    <span className="inline-flex items-center rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-bold text-[#2B170E]">
                       Card Pending
                     </span>
                     <Button asChild size="sm" className="h-8 text-xs gap-1.5">
@@ -118,15 +118,15 @@ function IncomingQcQueue() {
         if (awaitingQc.length === 0) {
           if (awaitingReceiving.length > 0) {
             return (
-              <div className="rounded-xl border border-dashed p-6 text-center space-y-3 bg-muted/20">
-                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+              <div className="rounded-xl border border-dashed border-[#CDBBA8] p-6 text-center space-y-3 bg-[#FFFDFC]">
+                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#F2E4D2] text-[#2B170E]">
                   <Radio className="size-4" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="text-sm font-semibold text-[#2B170E]">
                     All tagged fabric rolls evaluated · {awaitingReceiving.length} lot(s) awaiting Receiving completion
                   </p>
-                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  <p className="text-xs text-[#6E5748] max-w-md mx-auto">
                     {awaitingReceiving.length} incoming fabric lot(s) are registered but pending bundle card assignment at Station 1 Receiving. Once tagged, they will automatically appear here for incoming QC evaluation.
                   </p>
                 </div>
@@ -147,14 +147,14 @@ function IncomingQcQueue() {
           }
 
           return (
-            <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-              <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/10 text-success">
+            <div className="rounded-xl border border-dashed border-[#CDBBA8] p-6 text-center space-y-2 bg-[#FFFDFC]">
+              <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#F2E4D2] text-[#2B170E]">
                 <CheckCircle2 className="size-4" />
               </div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-semibold text-[#2B170E]">
                 All scanned incoming fabric rolls have been evaluated
               </p>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              <p className="text-xs text-[#6E5748] max-w-md mx-auto">
                 No fabric rolls are currently awaiting incoming inspection in quarantine. New deliveries logged and tagged at Station 1 will appear here.
               </p>
             </div>
@@ -162,30 +162,30 @@ function IncomingQcQueue() {
         }
 
         return (
-          <div className="divide-y rounded-lg border bg-card">
+          <div className="divide-y divide-[#CDBBA8]/60 rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] overflow-hidden">
             {awaitingQc.map((lot) => (
               <div
                 key={lot.id}
-                className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30"
+                className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-[#F2E4D2]/30 transition-colors"
               >
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-foreground wt-id">{lot.id}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="font-medium text-foreground">{lot.material}</span>
-                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <span className="font-bold text-[#2B170E] wt-id">{lot.id}</span>
+                    <span className="text-[#6E5748]">·</span>
+                    <span className="font-semibold text-[#2B170E]">{lot.material}</span>
+                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-[#2B170E] bg-[#E2C8A8]/50 px-2 py-0.5 rounded border border-[#CDBBA8]">
                       <Radio className="size-2.5" /> Tag: {lot.rfidUid}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Supplier: <span className="font-medium text-foreground">{lot.supplierRef}</span> · Amount in Quarantine: <span className="font-medium text-foreground">{lot.receivedQty} {lot.unit ?? "m"}</span>
+                  <p className="text-xs text-[#6E5748]">
+                    Supplier: <span className="font-semibold text-[#2B170E]">{lot.supplierRef}</span> · Amount in Quarantine: <span className="font-semibold text-[#2B170E]">{lot.receivedQty} {lot.unit ?? "m"}</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex items-center rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-bold text-[#2B170E]">
                     Awaiting QC
                   </span>
-                  <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
+                  <Button asChild size="sm" className="h-8 text-xs gap-1.5">
                     <AppLink href={paths.quality}>
                       Evaluate &amp; Sign-Off <ArrowRight className="size-3" />
                     </AppLink>
@@ -242,62 +242,62 @@ function RawStoreDashboard() {
               <div className="space-y-6">
                 {/* 4 Summary Cards Across the Top */}
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                  <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Pending Fabric Issues</span>
-                      <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">Pending Fabric Issues</span>
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                         <Scissors className="size-3.5" />
                       </div>
                     </div>
-                    <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                       {pendingFabricOrders.length}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-[#6E5748]">
                       {pendingFabricOrders.length === 1 ? "1 order ready for Station 2" : `${pendingFabricOrders.length} orders ready for Station 2`}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                  <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Active Production Orders</span>
-                      <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">Active Production Orders</span>
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                         <Radio className="size-3.5" />
                       </div>
                     </div>
-                    <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                       {activeOrders.length}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-[#6E5748]">
                       {orders.filter((o) => o.status === "in-progress").length} in cutting &amp; assembly
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                  <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Issued Orders</span>
-                      <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">Issued Orders</span>
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                         <CheckCircle2 className="size-3.5" />
                       </div>
                     </div>
-                    <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                       {issuedOrders.length}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-[#6E5748]">
                       Fabric transferred to cutting table
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                  <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Available QC-Cleared Stock</span>
-                      <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">Available QC-Cleared Stock</span>
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                         <ShieldCheck className="size-3.5" />
                       </div>
                     </div>
-                    <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                       {availableStockM.toFixed(1)} m
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-[#6E5748]">
                       {acceptedLots.length} passed rolls · {quarantineLots.length} in quarantine
                     </p>
                   </div>
@@ -315,8 +315,8 @@ function RawStoreDashboard() {
                   }
                 >
                   {pendingFabricOrders.length === 0 ? (
-                    <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-                      <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <div className="rounded-xl border border-dashed border-[#CDBBA8] p-6 text-center space-y-2 bg-[#FFFDFC]">
+                      <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#F2E4D2] text-[#2B170E]">
                         <CheckCircle2 className="size-4" />
                       </div>
                       <p className="text-sm font-medium text-foreground">
@@ -356,7 +356,7 @@ function RawStoreDashboard() {
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                              <span className="inline-flex items-center rounded-full bg-[#F4EADA] border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#6E5748]">
                                 Ready to Issue
                               </span>
                               <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
@@ -502,47 +502,47 @@ function StitchingDashboard() {
                 <div className="space-y-6">
                   {/* 3 Summary KPI Cards */}
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                    <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">READY FOR STITCHING</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">READY FOR STITCHING</span>
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                           <Scissors className="size-3.5" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                      <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                         {readyQueue.length}
                       </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-[11px] text-[#6E5748]">
                         Scanned &amp; cut at Station 3
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                    <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">STITCHED TODAY</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">STITCHED TODAY</span>
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                           <CheckCircle2 className="size-3.5" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                      <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                         {completedQueue.length}
                       </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-[11px] text-[#6E5748]">
                         Ready for Station 5 Finishing
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                    <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">IN ASSEMBLY</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">IN ASSEMBLY</span>
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                           <Shirt className="size-3.5" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                      <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                         {totalInAssembly}
                       </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-[11px] text-[#6E5748]">
                         Total active production
                       </p>
                     </div>
@@ -581,7 +581,7 @@ function StitchingDashboard() {
                     <div className="space-y-3">
                       {filteredReady.length === 0 ? (
                         <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                          <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#F2E4D2] text-[#2B170E]">
                             <CheckCircle2 className="size-4" />
                           </div>
                           <p className="text-sm font-medium text-foreground">
@@ -620,12 +620,12 @@ function StitchingDashboard() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isDone ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#2B170E]">
                                       <CheckCircle2 className="size-3" /> Done · Stitched
                                     </span>
                                   ) : (
                                     <>
-                                      <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                      <span className="inline-flex items-center rounded-full bg-[#F4EADA] border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#6E5748]">
                                         Ready to Stitch
                                       </span>
                                       <Button
@@ -670,7 +670,7 @@ function StitchingDashboard() {
                                 </div>
                                 <p className="text-muted-foreground">Order: {g.orderId}</p>
                               </div>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 px-2 py-0.5 text-xs font-bold text-[#2B170E] border border-[#CDBBA8]">
                                 <CheckCircle2 className="size-3" /> Done · Advanced to Finishing
                               </span>
                             </div>
@@ -809,47 +809,47 @@ function FinishingDashboard() {
             <div className="space-y-6">
               {/* 3 Summary KPI Cards */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">READY FOR FINISHING</span>
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">READY FOR FINISHING</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                       <Sparkles className="size-3.5" />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                     {readyQueue.length}
                   </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-[11px] text-[#6E5748]">
                     Stitched at Station 4
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">FINISHED TODAY</span>
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">FINISHED TODAY</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                       <CheckCircle2 className="size-3.5" />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                     {completedQueue.length}
                   </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-[11px] text-[#6E5748]">
                     Advanced to Station 6 QC
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                <div className="rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">AT FINAL QC GATE</span>
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <span className="text-xs font-semibold text-[#6E5748] uppercase tracking-wider">AT FINAL QC GATE</span>
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-[#F2E4D2] text-[#2B170E]">
                       <ShieldCheck className="size-3.5" />
                     </div>
                   </div>
-                  <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                  <p className="mt-2 text-3xl font-bold tracking-tight text-[#2B170E]">
                     {releasedToQcCount}
                   </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-[11px] text-[#6E5748]">
                     Under Station 6 inspection
                   </p>
                 </div>
@@ -897,7 +897,7 @@ function FinishingDashboard() {
                 <div className="space-y-3">
                   {filteredReady.length === 0 ? (
                     <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                      <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#F2E4D2] text-[#2B170E]">
                         <CheckCircle2 className="size-4" />
                       </div>
                       <p className="text-sm font-medium text-foreground">
@@ -936,12 +936,12 @@ function FinishingDashboard() {
                             </div>
                             <div className="flex items-center gap-2">
                               {isDone ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#2B170E]">
                                   <CheckCircle2 className="size-3" /> Done · Finished
                                 </span>
                               ) : (
                                 <>
-                                  <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                  <span className="inline-flex items-center rounded-full bg-[#F4EADA] border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#6E5748]">
                                     Ready to Finish
                                   </span>
                                   <Button
@@ -986,7 +986,7 @@ function FinishingDashboard() {
                             </div>
                             <p className="text-muted-foreground">Order: {g.orderId}</p>
                           </div>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 px-2 py-0.5 text-xs font-bold text-[#2B170E] border border-[#CDBBA8]">
                             <CheckCircle2 className="size-3" /> Done · Released to QC Gate
                           </span>
                         </div>

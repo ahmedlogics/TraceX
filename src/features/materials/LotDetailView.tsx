@@ -93,7 +93,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       Unassigned (Dashboard Verified)
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                    <span className="text-xs font-semibold text-[#6E5748] bg-[#F4EADA] border border-[#CDBBA8] px-2 py-0.5 rounded">
                       Card Pending (Station 1)
                     </span>
                   )}
@@ -111,7 +111,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       </Button>
                     ) : (
                       canAccessRoute(me, "workstation") && (
-                        <Button asChild size="sm" variant="outline" className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                        <Button asChild size="sm" variant="outline" className="text-[#2B170E] border-[#CDBBA8] bg-[#FFFDFC] hover:bg-[#F2E4D2]">
                           <AppLink href={paths.workstation}>
                             Assign Card at Station 1 <ArrowRight className="size-3.5 ml-1" />
                           </AppLink>
@@ -186,7 +186,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       ) : lot.status === "accepted" ? (
                         <span className="text-muted-foreground italic">Unassigned (Dashboard Verified)</span>
                       ) : (
-                        <span className="text-amber-600 font-medium">None (bind at Station 1)</span>
+                        <span className="text-[#6E5748] font-medium">None (bind at Station 1)</span>
                       ),
                     },
                     {

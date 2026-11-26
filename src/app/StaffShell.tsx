@@ -34,8 +34,8 @@ function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => voi
         if (!items.length) return null;
         return (
           <div key={g.label}>
-            <p className="wt-eyebrow mb-1.5 px-2">{g.label}</p>
-            <ul className="space-y-0.5">
+            <p className="wt-eyebrow mb-1.5 px-2.5 text-[#6E5748] font-bold">{g.label}</p>
+            <ul className="space-y-1">
               {items.map((i) => (
                 <li key={i.key}>
                   <AppLink
@@ -43,12 +43,12 @@ function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => voi
                     onClick={onNavigate}
                     aria-current={isActive(i.href) ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                      isActive(i.href) && "bg-accent font-medium text-accent-foreground",
+                      "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#6E5748] transition-colors hover:bg-[#E2C8A8]/60 hover:text-[#2B170E]",
+                      isActive(i.href) && "bg-[#E2C8A8] font-bold text-[#2B170E] shadow-2xs",
                     )}
                   >
-                    <i.icon className="size-4 shrink-0" aria-hidden />
-                    {i.label}
+                    <i.icon className="size-4 shrink-0 text-[#2B170E]" aria-hidden />
+                    <span>{i.label}</span>
                   </AppLink>
                 </li>
               ))}
@@ -62,10 +62,10 @@ function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => voi
 
 export function RoleChip({ user }: { user: StaffUser }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs">
-      <span className="wt-id rounded bg-primary px-1 text-primary-foreground">{user.role}</span>
-      <span className="font-medium">{roleLabels[user.role]}</span>
-      <span className="text-muted-foreground">· {departmentLabels[user.department]}</span>
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#CDBBA8] bg-[#FFFDFC] px-2.5 py-1 text-xs shadow-2xs text-[#2B170E]">
+      <span className="wt-id rounded bg-[#E2C8A8] px-1.5 py-0.5 font-bold text-[#2B170E]">{user.role}</span>
+      <span className="font-semibold text-[#2B170E]">{roleLabels[user.role]}</span>
+      <span className="text-[#6E5748]">· {departmentLabels[user.department]}</span>
     </span>
   );
 }
@@ -89,33 +89,33 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
     ? paths.workstation
     : paths.home;
   return (
-    <div className="flex min-h-screen w-full">
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
-        <div className="border-b px-4 py-4">
+    <div className="flex min-h-screen w-full bg-[#FBF6EE]">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-[#CDBBA8] bg-[#F2E4D2] lg:flex">
+        <div className="border-b border-[#CDBBA8] px-4 py-4 bg-[#F2E4D2]">
           <AppLink href={logoHref} aria-label="TraceX staff home">
             <Logo height={26} />
           </AppLink>
-          <p className="wt-eyebrow mt-1">Staff workspace</p>
+          <p className="wt-eyebrow mt-1 text-[#6E5748]">Staff workspace</p>
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-4">
           <NavList user={user} />
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-3 backdrop-blur sm:px-5">
+      <div className="flex min-w-0 flex-1 flex-col bg-[#FBF6EE]">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-[#CDBBA8] bg-[#FFFDFC]/95 px-3 backdrop-blur sm:px-5">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden"
+                className="lg:hidden text-[#2B170E] hover:bg-[#F2E4D2]"
                 aria-label="Open navigation"
               >
                 <Menu />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 overflow-y-auto">
+            <SheetContent side="left" className="w-72 overflow-y-auto bg-[#F2E4D2] border-r border-[#CDBBA8]">
               <SheetHeader>
                 <SheetTitle>
                   <Logo height={24} />
@@ -135,16 +135,16 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               onClick={() => setDataMode(dataMode === "live" ? "mock" : "live")}
               title={`Currently connected to ${dataMode === "live" ? "Live Database (PostgreSQL)" : "Mock Data (Fixtures)"}. Click to toggle.`}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer border",
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors cursor-pointer border",
                 dataMode === "live"
-                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20 dark:text-emerald-400"
-                  : "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20 dark:text-amber-400",
+                  ? "bg-[#E2C8A8] text-[#2B170E] border-[#CDBBA8] hover:bg-[#D8B68F]"
+                  : "bg-[#FBF6EE] text-[#6E5748] border-[#CDBBA8] hover:bg-[#F2E4D2]",
               )}
             >
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  dataMode === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500",
+                  dataMode === "live" ? "bg-[#2B170E] animate-pulse" : "bg-[#6E5748]",
                 )}
               />
               {dataMode === "live" ? "Live API" : "Mock Mode"}

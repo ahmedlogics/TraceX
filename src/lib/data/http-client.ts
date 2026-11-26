@@ -147,7 +147,7 @@ export async function httpRequest<T = unknown>(
     throw new ApiError(
       0,
       "WT_ERR_NETWORK",
-      `Unable to connect to WearTrail server at ${root}. Please ensure the backend is running.`,
+      `Unable to connect to TraceX server at ${root}. Please ensure the backend is running.`,
       netErr,
     );
   }

@@ -2,15 +2,15 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const tone = cva(
-  "inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium",
+  "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold",
   {
     variants: {
       tone: {
-        neutral: "border-border bg-muted text-muted-foreground",
-        info: "border-transparent bg-info-soft text-accent-foreground",
-        success: "border-transparent bg-success-soft text-success",
-        warning: "border-transparent bg-warning-soft text-warning",
-        danger: "border-transparent bg-danger-soft text-destructive",
+        neutral: "border-[#CDBBA8] bg-[#F2E4D2] text-[#2B170E]",
+        info: "border-[#CDBBA8] bg-[#EFE3D3] text-[#2B170E]",
+        success: "border-[#C79C70] bg-[#E2C8A8] text-[#2B170E]",
+        warning: "border-[#C79C70] bg-[#D8B68F]/40 text-[#2B170E]",
+        danger: "border-[#BFA894] bg-[#E8D7C2] text-[#2B170E]",
       },
     },
     defaultVariants: { tone: "neutral" },

@@ -124,7 +124,7 @@ export function NfcHubView() {
               <Input
                 value={tunnelUrl}
                 onChange={(e) => setTunnelUrl(e.target.value)}
-                placeholder="e.g. https://weartrail-demo.loca.lt or http://192.168.1.50:5173"
+                placeholder="e.g. https://tracex-demo.loca.lt or http://192.168.1.50:5173"
                 className="pl-9 font-mono text-xs h-9 bg-background shadow-xs font-medium"
               />
             </div>

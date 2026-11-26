@@ -384,7 +384,7 @@ export async function getPublicJourney(
   }
 
   const spec = garment.cutting_jobs?.production_orders?.product_spec_versions;
-  const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
+  const productName = spec?.product_name ?? "TraceX Handcrafted Garment";
   const productDescription =
     typeof spec?.specifications === "object" &&
       spec.specifications !== null &&
@@ -784,7 +784,7 @@ export async function publishPublicGarmentPayload(
   }
 
   const spec = garment.cutting_jobs?.production_orders?.product_spec_versions;
-  const productName = spec?.product_name ?? "WearTrail Handcrafted Garment";
+  const productName = spec?.product_name ?? "TraceX Handcrafted Garment";
 
   if (!tx.public_payload_versions) {
     return {

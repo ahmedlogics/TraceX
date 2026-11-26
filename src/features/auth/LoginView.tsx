@@ -86,7 +86,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
       {/* Ambient warm lighting overlay */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 bg-radial from-amber-50/40 via-transparent to-[#4a382a]/5"
+        className="pointer-events-none fixed inset-0 bg-radial from-[#FBF6EE]/60 via-transparent to-[#2B170E]/5"
       />
 
       <div className="relative z-10 w-full max-w-[460px]">

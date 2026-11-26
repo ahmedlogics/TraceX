@@ -209,11 +209,11 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                         {/* Hardware RFID Status */}
                         <div className="flex items-center gap-2 md:justify-end">
                           <span className="relative flex size-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full size-2.5 bg-emerald-500"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C79C70] opacity-75"></span>
+                            <span className="relative inline-flex rounded-full size-2.5 bg-[#C79C70]"></span>
                           </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                            <Radio className="size-3.5" />
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs font-bold text-[#2B170E]">
+                            <Radio className="size-3.5 text-[#6E5748]" />
                             {isArmed ? "Dock Reader: Armed & Listening" : "Dock Reader: Ready"}
                           </span>
                         </div>
@@ -224,15 +224,15 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                         <div
                           className={`mt-4 rounded-lg border p-4 text-xs transition-all shadow-xs ${
                             lastOutcome.resolution === "accepted"
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
-                              : "border-destructive/40 bg-destructive/10 text-destructive"
+                              ? "border-[#C79C70] bg-[#E2C8A8]/30 text-[#2B170E]"
+                              : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
                           }`}
                         >
                           <div className="flex items-start gap-3">
                             {lastOutcome.resolution === "accepted" ? (
-                              <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                              <CheckCircle2 className="size-5 shrink-0 text-[#6E5748] mt-0.5" />
                             ) : (
-                              <XCircle className="size-5 shrink-0 text-destructive mt-0.5" />
+                              <XCircle className="size-5 shrink-0 text-[#8C5348] mt-0.5" />
                             )}
                             <div className="space-y-1">
                               <p className="font-semibold text-sm">
@@ -283,10 +283,10 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                               Scan Box Tag on Hardware
                             </Button>
                           ) : (
-                            <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-4 flex items-center justify-between">
-                              <div className="inline-flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                                <Radio className="size-5 animate-spin text-emerald-600" />
-                                Scanner 9 Dock Reader Armed & Listening for Master Box Tag
+                            <div className="rounded-xl border border-[#C79C70] bg-[#E2C8A8]/30 p-4 flex items-center justify-between">
+                              <div className="inline-flex items-center gap-2 text-sm font-bold text-[#2B170E]">
+                                <Radio className="size-5 animate-spin text-[#6E5748]" />
+                                Scanner 9 Dock Reader Armed &amp; Listening for Master Box Tag
                               </div>
                               <Button
                                 variant="outline"

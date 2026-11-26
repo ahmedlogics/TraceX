@@ -276,8 +276,8 @@ export function OrdersView() {
                           </Button>
                         )}
                         {((o.lotCodes && o.lotCodes.length > 0) || (o.lotIds && o.lotIds.length > 0) || (o.issues && o.issues.length > 0)) && (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                            <CheckCircle2 className="size-2.5" /> Fabric Issued
+                          <span className="inline-flex items-center gap-1 rounded bg-[#E2C8A8]/60 px-2 py-0.5 text-[11px] font-bold text-[#2B170E] border border-[#CDBBA8]">
+                            <CheckCircle2 className="size-2.5 text-[#6E5748]" /> Fabric Issued
                           </span>
                         )}
                         <Button asChild size="sm" variant="ghost" className="h-7 text-xs">

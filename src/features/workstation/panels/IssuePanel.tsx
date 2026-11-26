@@ -430,11 +430,11 @@ export function IssuePanel({
                                   (o.issues && o.issues.length > 0) ||
                                   (o.status === "in-progress" && (o.lotIds?.length ?? 0) > 0);
                                 return hasIssued ? (
-                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                    <Check className="size-3" /> Issued ({o.lotCodes?.[0] || o.lotId || "Done"})
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 px-2.5 py-0.5 text-[11px] font-bold text-[#2B170E] border border-[#CDBBA8]">
+                                    <Check className="size-3 text-[#6E5748]" /> Issued ({o.lotCodes?.[0] || o.lotId || "Done"})
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#F2E4D2] px-2.5 py-0.5 text-[11px] font-semibold text-[#2B170E] border border-[#CDBBA8]">
                                     Awaiting Allocation
                                   </span>
                                 );

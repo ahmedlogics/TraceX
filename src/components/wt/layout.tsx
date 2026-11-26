@@ -35,14 +35,14 @@ export function PageHeader({
           <BreadcrumbList>
             {crumbs.map((c, i) => (
               <Fragment key={`${c.label}-${i}`}>
-                {i > 0 && <BreadcrumbSeparator />}
+                {i > 0 && <BreadcrumbSeparator className="text-[#6E5748]" />}
                 <BreadcrumbItem>
                   {c.href ? (
                     <BreadcrumbLink asChild>
-                      <AppLink href={c.href}>{c.label}</AppLink>
+                      <AppLink href={c.href} className="text-xs text-[#6E5748] hover:text-[#2B170E] font-medium">{c.label}</AppLink>
                     </BreadcrumbLink>
                   ) : (
-                    <BreadcrumbPage>{c.label}</BreadcrumbPage>
+                    <BreadcrumbPage className="text-xs font-semibold text-[#2B170E]">{c.label}</BreadcrumbPage>
                   )}
                 </BreadcrumbItem>
               </Fragment>
@@ -52,8 +52,8 @@ export function PageHeader({
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          <h1 className="text-2xl font-bold tracking-tight text-[#2B170E] sm:text-3xl">{title}</h1>
+          {description && <p className="text-sm text-[#6E5748]">{description}</p>}
           {meta && <div className="flex flex-wrap gap-2 pt-1">{meta}</div>}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
@@ -78,15 +78,15 @@ export function Section({
   contentClassName?: string | undefined;
 }) {
   return (
-    <section className={cn("rounded-lg border bg-card", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+    <section className={cn("rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] shadow-2xs overflow-hidden", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#CDBBA8] bg-[#F2E4D2]/25 px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
-          {description && <p className="text-xs text-muted-foreground">{description}</p>}
+          <h2 className="text-sm font-bold text-[#2B170E]">{title}</h2>
+          {description && <p className="text-xs text-[#6E5748]">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
       </div>
-      <div className={cn("p-4", contentClassName)}>{children}</div>
+      <div className={cn("p-4 sm:p-5", contentClassName)}>{children}</div>
     </section>
   );
 }
