@@ -93,7 +93,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-[#CDBBA8] bg-[#F2E4D2] lg:flex">
         <div className="border-b border-[#CDBBA8] px-4 py-4 bg-[#F2E4D2]">
           <AppLink href={logoHref} aria-label="TraceX staff home">
-            <Logo height={26} />
+            <Logo height={32} />
           </AppLink>
           <p className="wt-eyebrow mt-1 text-[#6E5748]">Staff workspace</p>
         </div>
@@ -118,7 +118,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
             <SheetContent side="left" className="w-72 overflow-y-auto bg-[#F2E4D2] border-r border-[#CDBBA8]">
               <SheetHeader>
                 <SheetTitle>
-                  <Logo height={24} />
+                  <Logo height={28} />
                 </SheetTitle>
               </SheetHeader>
               <div className="px-2 pb-6">
@@ -127,7 +127,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
             </SheetContent>
           </Sheet>
           <AppLink href={logoHref} className="lg:hidden" aria-label="TraceX staff home">
-            <Logo height={20} />
+            <Logo height={24} />
           </AppLink>
           <div className="ml-auto flex min-w-0 items-center gap-2">
             <button

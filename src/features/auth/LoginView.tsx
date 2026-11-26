@@ -125,13 +125,14 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
           <div className="text-center">
             <AppLink
               href={paths.home}
-              className="inline-flex items-center gap-2.5 transition-opacity hover:opacity-90"
+              className="inline-flex flex-col items-center gap-2 transition-transform hover:scale-[1.02]"
               aria-label="TraceX home"
             >
-              <TraceXMark className="h-9 w-auto text-[#8C6D53]" />
-              <span className="font-serif text-3xl sm:text-4xl font-normal tracking-tight text-[#4A382A]">
-                TraceX
-              </span>
+              <img
+                src="/images/tracex-logo.png"
+                alt="TraceX Logo"
+                className="h-28 w-auto object-contain mix-blend-multiply drop-shadow-xs select-none"
+              />
             </AppLink>
             <h1 className="mt-4 font-serif text-3xl sm:text-[32px] font-normal tracking-normal text-[#38281D]">
               Welcome back

@@ -279,24 +279,11 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             className="group flex items-center gap-2.5 transition-opacity hover:opacity-90"
             aria-label="TraceX home"
           >
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/15 border border-purple-400/25 text-purple-200">
-              <svg
-                width="16"
-                height="10"
-                viewBox="0 0 24 14"
-                fill="none"
-                className="text-white"
-                aria-hidden="true"
-              >
-                <path
-                  d="M1 7C3.5 2 6 2 8.5 7C11 12 13.5 12 16 7C18.5 2 21 2 23 7"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
+            <img
+              src="/images/tracex-logo.png"
+              alt="TraceX Logo"
+              className="size-8 object-contain rounded-lg border border-purple-400/25 bg-[#1F162B] p-0.5 shadow-md group-hover:scale-105 transition-transform"
+            />
             <span className="text-base font-bold tracking-tight text-white">TraceX</span>
           </AppLink>
 
@@ -320,6 +307,11 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       <footer className="relative z-10 border-t border-purple-500/15 bg-[#140D1E]/70 mt-10">
         <div className="mx-auto flex max-w-3xl flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-5 text-xs text-purple-300/60">
           <div className="flex items-center gap-2">
+            <img
+              src="/images/tracex-logo.png"
+              alt="TraceX Logo"
+              className="size-5 object-contain rounded bg-[#1F162B] p-0.5 border border-purple-500/20"
+            />
             <span className="font-semibold text-purple-200/90">TraceX</span>
             <span>· Public garment traceability</span>
           </div>
