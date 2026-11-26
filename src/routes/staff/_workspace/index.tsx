@@ -4,6 +4,7 @@ import { pageHead } from "@/app/head";
 import { paths } from "@/app/paths";
 import { useAppNavigate } from "@/app/navigation";
 import { useCurrentUser } from "@/app/auth";
+import { LoadingState } from "@/components/wt/states";
 import { DashboardView } from "@/features/dashboard/DashboardView";
 
 export const Route = createFileRoute("/staff/_workspace/")({
@@ -37,6 +38,14 @@ function DashboardRoute() {
       void navigate(paths.workstation, { replace: true });
     }
   }, [isFinalQc, isWarehouse, isDispatch, isFinishing, navigate]);
+
+  if (me.isPending || !me.data) {
+    return (
+      <div className="p-8">
+        <LoadingState label="Loading staff home…" />
+      </div>
+    );
+  }
 
   if (isFinalQc || isWarehouse || isDispatch || isFinishing) return null;
 

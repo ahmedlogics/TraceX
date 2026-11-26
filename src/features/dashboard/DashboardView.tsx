@@ -22,7 +22,7 @@ import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageHeader, Section, IdLink } from "@/components/wt/layout";
-import { EmptyState, Loadable } from "@/components/wt/states";
+import { EmptyState, Loadable, LoadingState } from "@/components/wt/states";
 import { can, canAccessRoute } from "@/domain/permissions";
 import { departmentLabels, roleLabels } from "@/domain/labels";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
@@ -41,7 +41,7 @@ const toneClass = {
 } as const;
 
 function ReceivingLotsQueue() {
-  const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
+  const qLots = useWtQuery(["lots"], (c) => c.listLots());
 
   return (
     <Loadable query={qLots}>
@@ -101,7 +101,7 @@ function ReceivingLotsQueue() {
 }
 
 function IncomingQcQueue() {
-  const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
+  const qLots = useWtQuery(["lots"], (c) => c.listLots());
 
   return (
     <Loadable query={qLots}>
@@ -201,173 +201,197 @@ function IncomingQcQueue() {
 }
 
 function RawStoreDashboard() {
-  const qOrders = useWtQuery(["orders"], (c) => c.listOrders(), { refetchInterval: 3000 });
-  const qLots = useWtQuery(["lots"], (c) => c.listLots(), { refetchInterval: 3000 });
+  const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
+  const qLots = useWtQuery(["lots"], (c) => c.listLots());
+
+  if (qOrders.isError || qLots.isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Home" description="Department of Raw Material Store" />
+        <div className="rounded-xl border border-dashed p-8 text-center space-y-3 bg-muted/10">
+          <AlertTriangle className="size-6 text-amber-500 mx-auto" />
+          <p className="text-sm font-medium text-foreground">
+            Unable to load warehouse bundles right now.
+          </p>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            The system is reconnecting to the database. Please click below to refresh.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void qOrders.refetch();
+              void qLots.refetch();
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (qOrders.isPending || qLots.isPending || !qOrders.data || !qLots.data) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Home" description="Department of Raw Material Store" />
+        <LoadingState label="Loading available bundles…" />
+      </div>
+    );
+  }
+
+  const orders = qOrders.data;
+  const lots = qLots.data;
+
+  // 1. Available QC-Cleared Fabric Stock (Passed incoming QC)
+  const acceptedLots = lots.filter(
+    (l) => l.status === "accepted" && (Number(l.balanceQty) > 0 || Number(l.receivedQty) > 0),
+  );
+  const availableStockM = acceptedLots.reduce(
+    (sum, l) => sum + (Number(l.balanceQty) || 0),
+    0,
+  );
+  const totalStockM = lots.reduce(
+    (sum, l) => sum + (Number(l.balanceQty) || 0),
+    0,
+  );
+  const quarantineLots = lots.filter((l) => l.status === "awaiting-inspection");
+
+  // 2. Pending Fabric Issues: approved orders awaiting fabric allocation
+  const pendingFabricOrders = orders.filter(
+    (o) =>
+      (o.status === "approved" || o.status === "planned") &&
+      (!o.lotCodes || o.lotCodes.length === 0) &&
+      (!o.issues || o.issues.length === 0),
+  );
+
+  // 3. Active Production Orders: approved, planned, or in-progress
+  const activeOrders = orders.filter(
+    (o) => o.status === "approved" || o.status === "in-progress" || o.status === "planned",
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Home"
-        description="Department of Raw Material Store · Verified Incoming QC Queue & Fabric Issuance"
+        description="Department of Raw Material Store"
       />
 
-      <Loadable query={qOrders}>
-        {(orders) => (
-          <Loadable query={qLots}>
-            {(lots) => {
-              // 1. Available QC-Cleared Fabric Stock (Passed incoming QC)
-              const acceptedLots = lots.filter(
-                (l) => l.status === "accepted" && (Number(l.balanceQty) > 0 || Number(l.receivedQty) > 0),
-              );
-              const availableStockM = acceptedLots.reduce(
-                (sum, l) => sum + (Number(l.balanceQty) || 0),
-                0,
-              );
-              const totalStockM = lots.reduce(
-                (sum, l) => sum + (Number(l.balanceQty) || 0),
-                0,
-              );
-              const quarantineLots = lots.filter((l) => l.status === "awaiting-inspection");
+      {/* 4 Summary Cards Across the Top */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Available Bundles</span>
+            <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="size-3.5" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+            {acceptedLots.length}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {availableStockM.toFixed(1)} m available
+          </p>
+        </div>
 
-              // 2. Pending Fabric Issues: approved orders awaiting fabric allocation
-              const pendingFabricOrders = orders.filter(
-                (o) =>
-                  (o.status === "approved" || o.status === "planned") &&
-                  (!o.lotCodes || o.lotCodes.length === 0) &&
-                  (!o.issues || o.issues.length === 0),
-              );
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Total Stock</span>
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Boxes className="size-3.5" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+            {totalStockM.toFixed(1)} m
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {lots.length} rolls in store
+          </p>
+        </div>
 
-              // 3. Active Production Orders: approved, planned, or in-progress
-              const activeOrders = orders.filter(
-                (o) => o.status === "approved" || o.status === "in-progress" || o.status === "planned",
-              );
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Awaiting Incoming QC</span>
+            <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Clock className="size-3.5" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+            {quarantineLots.length}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {quarantineLots.reduce((acc, l) => acc + (Number(l.balanceQty) || 0), 0).toFixed(1)} m pending
+          </p>
+        </div>
 
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Active Orders</span>
+            <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              <Scissors className="size-3.5" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+            {activeOrders.length}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {pendingFabricOrders.length} awaiting fabric
+          </p>
+        </div>
+      </div>
+
+      {/* Section: Available Bundles (only bundles that passed qc.incoming) */}
+      <Section title="Available bundles">
+        {acceptedLots.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
+            <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="size-4" />
+            </div>
+            <p className="text-sm font-medium text-foreground">
+              No available bundles cleared by qc.incoming yet
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y rounded-lg border bg-card overflow-hidden">
+            {acceptedLots.map((lot) => {
               return (
-                <div className="space-y-6">
-                  {/* 4 Summary Cards Across the Top */}
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Available Bundles</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="size-3.5" />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-                        {acceptedLots.length}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {availableStockM.toFixed(1)} m cleared by qc.incoming
-                      </p>
+                <div
+                  key={lot.id}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-foreground wt-id">{lot.id}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="font-medium text-foreground">{lot.material}</span>
+                      {lot.rfidUid && (
+                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          <Radio className="size-2.5" /> Tag: {lot.rfidUid}
+                        </span>
+                      )}
                     </div>
-
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Total Warehouse Stock</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <Boxes className="size-3.5" />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                        {totalStockM.toFixed(1)} m
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {lots.length} total rolls in raw store
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Awaiting Incoming QC</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                          <Clock className="size-3.5" />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
-                        {quarantineLots.length}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {quarantineLots.reduce((acc, l) => acc + (Number(l.balanceQty) || 0), 0).toFixed(1)} m in quarantine
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Active Production Orders</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                          <Scissors className="size-3.5" />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-                        {activeOrders.length}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {pendingFabricOrders.length} awaiting fabric issue
-                      </p>
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Available Balance: <strong className="text-foreground">{lot.balanceQty} {lot.unit ?? "m"}</strong> ·{" "}
+                      Received: <span className="font-medium text-foreground">{lot.receivedQty} {lot.unit ?? "m"}</span> ·{" "}
+                      Supplier: <span className="font-medium text-foreground">{lot.supplierRef}</span>
+                    </p>
                   </div>
-
-                  {/* Section: Available Bundles (only bundles that passed qc.incoming) */}
-                  <Section title="Available bundles">
-                    {acceptedLots.length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="size-4" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          No available bundles cleared by qc.incoming yet
-                        </p>
-                        <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                          Bundles that have passed incoming inspection will automatically appear in this queue ready for Station 2 allocation.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
-                        {acceptedLots.map((lot) => {
-                          return (
-                            <div
-                              key={lot.id}
-                              className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-foreground wt-id">{lot.id}</span>
-                                  <span className="text-muted-foreground">·</span>
-                                  <span className="font-medium text-foreground">{lot.material}</span>
-                                  {lot.rfidUid && (
-                                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                      <Radio className="size-2.5" /> Tag: {lot.rfidUid}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Available Balance: <strong className="text-foreground">{lot.balanceQty} {lot.unit ?? "m"}</strong> ·{" "}
-                                  Total Received: <span className="font-medium text-foreground">{lot.receivedQty} {lot.unit ?? "m"}</span> ·{" "}
-                                  Supplier: <span className="font-medium text-foreground">{lot.supplierRef}</span>
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                  <CheckCircle2 className="size-3" /> Passed qc.incoming
-                                </span>
-                                <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
-                                  <AppLink href={paths.workstation}>
-                                    Issue at Station 2 <ArrowRight className="size-3" />
-                                  </AppLink>
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Section>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="size-3" /> Passed qc.incoming
+                    </span>
+                    <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
+                      <AppLink href={paths.workstation}>
+                        Issue at Station 2 <ArrowRight className="size-3" />
+                      </AppLink>
+                    </Button>
+                  </div>
                 </div>
               );
-            }}
-          </Loadable>
+            })}
+          </div>
         )}
-      </Loadable>
+      </Section>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { runInTransaction } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
@@ -94,18 +94,17 @@ function isAuthorizedForIssue(role: string, dept: string): boolean {
 export async function listSuppliers(
   tx?: PrismaTransactionClient,
 ): Promise<SupplierDTO[]> {
-  return runInTransaction(async (db) => {
-    const suppliers = await db.suppliers.findMany({
-      where: { active: true },
-      orderBy: { name: "asc" },
-    });
-    return suppliers.map((s) => ({
-      id: s.id,
-      code: s.code,
-      name: s.name,
-      active: s.active,
-    }));
-  }, tx);
+  const db = tx ?? prisma;
+  const suppliers = await db.suppliers.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+  });
+  return suppliers.map((s) => ({
+    id: s.id,
+    code: s.code,
+    name: s.name,
+    active: s.active,
+  }));
 }
 
 export async function getOrCreateSupplier(
@@ -145,8 +144,8 @@ export async function listLots(
   filters?: { status?: string | undefined; supplierId?: string | undefined },
   tx?: PrismaTransactionClient,
 ): Promise<MaterialLotDTO[]> {
-  return runInTransaction(async (db) => {
-    const lots = await db.material_lots.findMany({
+  const db = tx ?? prisma;
+  const lots = await db.material_lots.findMany({
       where: {
         ...(filters?.supplierId ? { supplier_id: filters.supplierId } : {}),
         code: { notIn: EXCLUDED_LOT_CODES },
@@ -220,7 +219,6 @@ export async function listLots(
         defectReason: latestIncomingInsp?.defect_reason ?? null,
       };
     });
-  }, tx);
 }
 
 export async function getLotDetail(

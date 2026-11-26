@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { runInTransaction } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
@@ -234,60 +234,59 @@ export async function listOrders(
   filters?: { status?: string | undefined },
   tx?: PrismaTransactionClient,
 ): Promise<ProductionOrderDTO[]> {
-  return runInTransaction(async (db) => {
-    const orders = await db.production_orders.findMany({
-      include: {
-        product_spec_versions: true,
-        workflow_versions: true,
-        staff_users_production_orders_created_byTostaff_users: true,
-        staff_users_production_orders_approved_byTostaff_users: true,
-        material_stock_movements: {
-          where: {
-            kind: "issued",
-            material_lots: { code: { notIn: EXCLUDED_LOT_CODES } },
-          },
-          include: {
-            material_lots: {
-              select: { id: true, code: true, material_name: true },
-            },
+  const db = tx ?? prisma;
+  const orders = await db.production_orders.findMany({
+    include: {
+      product_spec_versions: true,
+      workflow_versions: true,
+      staff_users_production_orders_created_byTostaff_users: true,
+      staff_users_production_orders_approved_byTostaff_users: true,
+      material_stock_movements: {
+        where: {
+          kind: "issued",
+          material_lots: { code: { notIn: EXCLUDED_LOT_CODES } },
+        },
+        include: {
+          material_lots: {
+            select: { id: true, code: true, material_name: true },
           },
         },
       },
-      orderBy: { created_at: "desc" },
-    });
+    },
+    orderBy: { created_at: "desc" },
+  });
 
-    return orders.map((o) => ({
-      id: o.id,
-      code: o.code,
-      workflowVersionId: o.workflow_version_id,
-      productSpecVersionId: o.product_spec_version_id,
-      productName: o.product_spec_versions.product_name,
-      styleCode: o.product_spec_versions.style_code,
-      plannedQuantity: o.planned_quantity,
-      status: o.status,
-      plannedFor: o.planned_for ? o.planned_for.toISOString() : null,
-      createdBy: o.created_by,
-      createdByName:
-        o.staff_users_production_orders_created_byTostaff_users?.display_name ?? null,
-      createdAt: o.created_at.toISOString(),
-      approvedBy: o.approved_by,
-      approvedByName:
-        o.staff_users_production_orders_approved_byTostaff_users?.display_name ?? null,
-      approvedAt: o.approved_at ? o.approved_at.toISOString() : null,
-      revision: o.revision,
-      lotIds: o.material_stock_movements?.map((m) => m.material_lot_id) ?? [],
-      lotCodes: o.material_stock_movements?.map((m) => m.material_lots?.code).filter(Boolean) ?? [],
-      issues:
-        o.material_stock_movements?.map((m) => ({
-          id: m.id,
-          lotId: m.material_lot_id,
-          lotCode: m.material_lots?.code ?? m.material_lot_id,
-          materialName: m.material_lots?.material_name ?? "Fabric Roll",
-          quantity: Number(m.quantity),
-          performedAt: m.performed_at.toISOString(),
-        })) ?? [],
-    }));
-  }, tx);
+  return orders.map((o) => ({
+    id: o.id,
+    code: o.code,
+    workflowVersionId: o.workflow_version_id,
+    productSpecVersionId: o.product_spec_version_id,
+    productName: o.product_spec_versions.product_name,
+    styleCode: o.product_spec_versions.style_code,
+    plannedQuantity: o.planned_quantity,
+    status: o.status,
+    plannedFor: o.planned_for ? o.planned_for.toISOString() : null,
+    createdBy: o.created_by,
+    createdByName:
+      o.staff_users_production_orders_created_byTostaff_users?.display_name ?? null,
+    createdAt: o.created_at.toISOString(),
+    approvedBy: o.approved_by,
+    approvedByName:
+      o.staff_users_production_orders_approved_byTostaff_users?.display_name ?? null,
+    approvedAt: o.approved_at ? o.approved_at.toISOString() : null,
+    revision: o.revision,
+    lotIds: o.material_stock_movements?.map((m) => m.material_lot_id) ?? [],
+    lotCodes: o.material_stock_movements?.map((m) => m.material_lots?.code).filter(Boolean) ?? [],
+    issues:
+      o.material_stock_movements?.map((m) => ({
+        id: m.id,
+        lotId: m.material_lot_id,
+        lotCode: m.material_lots?.code ?? m.material_lot_id,
+        materialName: m.material_lots?.material_name ?? "Fabric Roll",
+        quantity: Number(m.quantity),
+        performedAt: m.performed_at.toISOString(),
+      })) ?? [],
+  }));
 }
 
 export async function getOrderDetail(

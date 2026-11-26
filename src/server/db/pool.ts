@@ -39,10 +39,10 @@ export function getPgPool(options?: DatabasePoolOptions): pg.Pool {
       database: parsed.database ?? undefined,
       user: parsed.user ?? undefined,
       password: parsed.password ?? undefined,
-      max: options?.maxConnections ?? (maxVal ? Math.min(Number.parseInt(maxVal, 10), 8) : 8),
-      idleTimeoutMillis: options?.idleTimeoutMillis ?? 5000,
+      max: options?.maxConnections ?? (maxVal ? Math.min(Number.parseInt(maxVal, 10), 4) : 4),
+      idleTimeoutMillis: options?.idleTimeoutMillis ?? 2000,
       connectionTimeoutMillis:
-        options?.connectionTimeoutMillis ?? (timeoutVal ? Number.parseInt(timeoutVal, 10) : 15000),
+        options?.connectionTimeoutMillis ?? (timeoutVal ? Number.parseInt(timeoutVal, 10) : 10000),
       keepAlive: true,
       keepAliveInitialDelayMillis: 10000,
       ssl: ca ? { ca, rejectUnauthorized: true } : (parsed.ssl ? { rejectUnauthorized: false } : undefined),
