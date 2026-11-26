@@ -182,7 +182,9 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                     {
                       label: "Active Bundle RFID Card",
                       value: lot.rfidUid ? (
-                        <span className="font-mono font-bold text-success">{lot.rfidUid}</span>
+                        <span className="inline-flex items-center gap-1 font-mono font-bold text-[#134441] bg-[#E6F0EE] border border-[#99C5C1] px-2 py-0.5 rounded shadow-2xs">
+                          <Radio className="size-3 text-[#1B5E5A]" /> {lot.rfidUid}
+                        </span>
                       ) : lot.status === "accepted" ? (
                         <span className="text-muted-foreground italic">Unassigned (Dashboard Verified)</span>
                       ) : (

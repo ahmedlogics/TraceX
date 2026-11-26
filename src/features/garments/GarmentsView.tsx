@@ -407,27 +407,27 @@ export function GarmentsView() {
 
                   {activeOutcome && (
                     <div
-                      className={`rounded-lg border p-3 text-xs flex items-center justify-between gap-3 ${
+                      className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-sm transition-all ${
                         activeOutcome.resolution === "accepted"
-                          ? "border-success/40 bg-success-soft text-foreground"
+                          ? "border-[#134441] bg-[#1B5E5A] text-white"
                           : "border-destructive/40 bg-danger-soft text-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
                         {activeOutcome.resolution === "accepted" ? (
-                          <CheckCircle2 className="size-4 text-success shrink-0" />
+                          <CheckCircle2 className="size-4 text-[#A3E5DE] shrink-0" />
                         ) : (
                           <OctagonAlert className="size-4 text-destructive shrink-0" />
                         )}
                         <div>
-                          <span className="font-bold">
+                          <span className="font-bold text-white">
                             {activeOutcome.resolution === "accepted"
                               ? `Scan Confirmed: ${activeOutcome.garmentCode ?? activeOutcome.subjectId}${
                                   activeOutcome.productName ? ` · ${activeOutcome.productName}` : ""
                                 }`
                               : `Scan Rejected (${activeOutcome.uid})`}
                           </span>
-                          <span className="text-muted-foreground ml-2">
+                          <span className={activeOutcome.resolution === "accepted" ? "text-white/85 ml-2 font-medium" : "text-muted-foreground ml-2"}>
                             {activeOutcome.resolution === "accepted"
                               ? activeStationCode === "finishing"
                                 ? "· Finishing Complete → Status Updated to Finished"
@@ -436,9 +436,15 @@ export function GarmentsView() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
-                        <span>Tag: {activeOutcome.uid}</span>
-                        {activeOutcome.at && <span>· {fmt.dateTime(activeOutcome.at)}</span>}
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span className={activeOutcome.resolution === "accepted" ? "font-mono text-white/90 bg-white/15 px-2 py-0.5 rounded border border-white/20" : "font-mono text-muted-foreground"}>
+                          Tag: {activeOutcome.uid}
+                        </span>
+                        {activeOutcome.at && (
+                          <span className={activeOutcome.resolution === "accepted" ? "text-white/70 hidden sm:inline" : "text-muted-foreground"}>
+                            · {fmt.dateTime(activeOutcome.at)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}

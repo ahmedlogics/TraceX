@@ -108,158 +108,165 @@ export function StationShell() {
           return (
             <div className="space-y-6">
               {/* Station Status Banner (Dedicated panels for Stations 2, 3, 6, 7, 9 handle their own layout) */}
-            {effectiveStation !== "fabric_issue" &&
-              effectiveStation !== "cutting" &&
-              effectiveStation !== "final_qc" &&
-              effectiveStation !== "packing" &&
-              effectiveStation !== "dispatch" && (
-              <section
-                aria-label="Active Station Context"
-                className="relative overflow-hidden rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs"
-              >
-                {/* Aesthetic stitching backdrop blend for stitching workstation */}
-                {effectiveStation === "stitching" && (
-                  <div
-                    className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center justify-end select-none overflow-hidden pr-1"
-                    style={{
-                      maskImage:
-                        "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
-                      WebkitMaskImage:
-                        "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
-                    }}
+              {effectiveStation !== "fabric_issue" &&
+                effectiveStation !== "cutting" &&
+                effectiveStation !== "final_qc" &&
+                effectiveStation !== "packing" &&
+                effectiveStation !== "dispatch" && (
+                  <section
+                    aria-label="Active Station Context"
+                    className="relative overflow-hidden rounded-xl border border-[#CDBBA8] bg-[#FFFDFC] p-5 shadow-2xs"
                   >
-                    <img
-                      src="/images/stitching/vintage-sewing-aesthetic.jpg"
-                      alt="Vintage stitching machine"
-                      aria-hidden="true"
-                      className="h-full w-auto max-w-[260px] object-contain object-right opacity-90 brightness-105 contrast-105"
-                    />
-                  </div>
-                )}
-
-                {/* Aesthetic warehouse backdrop blend for warehouse workstation */}
-                {effectiveStation === "warehouse" && (
-                  <div
-                    className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center justify-end select-none overflow-hidden pr-1"
-                    style={{
-                      maskImage:
-                        "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
-                      WebkitMaskImage:
-                        "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
-                    }}
-                  >
-                    <img
-                      src="/images/warehouse/aesthetic-warehouse.jpg"
-                      alt="Artisanal warehouse shelves"
-                      aria-hidden="true"
-                      className="h-full w-auto max-w-[280px] object-cover object-right opacity-80 brightness-105 contrast-100"
-                    />
-                  </div>
-                )}
-
-                <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="wt-eyebrow">
-                        {activeStations.length > 1
-                          ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
-                          : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
-                      </p>
-                    </div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                      {stData.stationName}
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                      Assigned department:{" "}
-                      <span className="font-medium text-foreground">
-                        {stationDepartment[effectiveStation]}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col items-start gap-2 md:items-end">
-                    {stData.lastConfirmedSubjectId && (
-                      <div className="flex items-center gap-1.5 rounded-lg border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs text-[#2B170E]">
-                        <span className="text-[#6E5748]">Latest Subject:</span>
-                        <span className="wt-id font-bold text-[#2B170E]">
-                          {stData.lastConfirmedSubjectId}
-                        </span>
+                    {/* Aesthetic stitching backdrop blend for stitching workstation */}
+                    {effectiveStation === "stitching" && (
+                      <div
+                        className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center justify-end select-none overflow-hidden pr-1"
+                        style={{
+                          maskImage:
+                            "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
+                          WebkitMaskImage:
+                            "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
+                        }}
+                      >
+                        <img
+                          src="/images/stitching/vintage-sewing-aesthetic.jpg"
+                          alt="Vintage stitching machine"
+                          aria-hidden="true"
+                          className="h-full w-auto max-w-[260px] object-contain object-right opacity-90 brightness-105 contrast-105"
+                        />
                       </div>
                     )}
-                  </div>
-                </div>
 
-                {/* Durable Scan Feedback */}
-                {lastOutcome && (
-                  <div
-                    className={`mt-4 rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
-                      lastOutcome.resolution === "accepted"
-                        ? "border-[#C79C70] bg-[#E2C8A8]/30 text-[#2B170E]"
-                        : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
-                    }`}
-                  >
-                    {lastOutcome.resolution === "accepted" ? (
-                      <CheckCircle2 className="size-4 shrink-0 text-[#6E5748] mt-0.5" />
-                    ) : (
-                      <XCircle className="size-4 shrink-0 text-[#8C5348] mt-0.5" />
-                    )}
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-foreground">
-                        {lastOutcome.resolution === "accepted"
-                          ? `Scan confirmed (${lastOutcome.uid}): ${
-                              lastOutcome.lotCode ?? lastOutcome.garmentCode ?? lastOutcome.subjectId
-                            }${lastOutcome.productName ? ` · ${lastOutcome.productName}` : ""}`
-                          : `Scan rejected (${lastOutcome.uid}): ${
-                              lastOutcome.rejectReason ?? lastOutcome.resolution
-                            }`}
-                      </p>
-                      <p className="text-[11px] text-foreground/80 font-medium">
-                        Timestamp: {fmt.dateTime(lastOutcome.at)}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Feature-owned Panel Switch */}
-            {effectiveStation === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
-            {effectiveStation === "fabric_issue" && (
-              <IssuePanel
-                stationData={stData}
-                headerActions={
-                  activeStations.length > 1 ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        Station:
-                      </span>
-                      <select
-                        value={effectiveStation}
-                        onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
-                        className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                    {/* Aesthetic warehouse backdrop blend for warehouse workstation */}
+                    {effectiveStation === "warehouse" && (
+                      <div
+                        className="pointer-events-none absolute right-0 top-0 bottom-0 flex items-center justify-end select-none overflow-hidden pr-1"
+                        style={{
+                          maskImage:
+                            "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
+                          WebkitMaskImage:
+                            "linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0.2) 85%, transparent 100%)",
+                        }}
                       >
-                        {activeStations.map((code) => (
-                          <option key={code} value={code}>
-                            {rfidStationLabels[code]} ({code})
-                          </option>
-                        ))}
-                      </select>
+                        <img
+                          src="/images/warehouse/aesthetic-warehouse.jpg"
+                          alt="Artisanal warehouse shelves"
+                          aria-hidden="true"
+                          className="h-full w-auto max-w-[280px] object-cover object-right opacity-80 brightness-105 contrast-100"
+                        />
+                      </div>
+                    )}
+
+                    <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="wt-eyebrow">
+                            {activeStations.length > 1
+                              ? `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`
+                              : `Station #${rfidStationCodes.indexOf(effectiveStation) + 1} of 9`}
+                          </p>
+                        </div>
+                        <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                          {stData.stationName}
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                          Assigned department:{" "}
+                          <span className="font-medium text-foreground">
+                            {stationDepartment[effectiveStation]}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-start gap-2 md:items-end">
+                        {stData.lastConfirmedSubjectId && (
+                          <div className="flex items-center gap-1.5 rounded-lg border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs text-[#2B170E]">
+                            <span className="text-[#6E5748]">Latest Subject:</span>
+                            <span className="wt-id font-bold text-[#2B170E]">
+                              {stData.lastConfirmedSubjectId}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ) : undefined
-                }
-              />
-            )}
-            {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
-            {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
-            {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
-            {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
-            {effectiveStation === "dispatch" && <DispatchPanel stationData={stData} />}
-            {effectiveStation === "packing" && <PackingPanel stationData={stData} />}
-            {effectiveStation === "warehouse" && <WarehousePanel stationData={stData} />}
-          </div>
-        );
-      }}
-    </Loadable>
-  </div>
-);
+
+                    {/* Durable Scan Feedback */}
+                    {lastOutcome && (
+                      <div
+                        className={`mt-4 rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-sm ${
+                          lastOutcome.resolution === "accepted"
+                            ? "border-[#134441] bg-[#1B5E5A] text-white"
+                            : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {lastOutcome.resolution === "accepted" ? (
+                            <CheckCircle2 className="size-4 shrink-0 text-[#A3E5DE]" />
+                          ) : (
+                            <XCircle className="size-4 shrink-0 text-[#8C5348]" />
+                          )}
+                          <div className="space-y-0.5">
+                            <p className="font-bold text-white">
+                              {lastOutcome.resolution === "accepted"
+                                ? `Scan Confirmed (${lastOutcome.uid}): ${lastOutcome.lotCode ?? lastOutcome.garmentCode ?? lastOutcome.subjectId}${
+                                    lastOutcome.productName ? ` · ${lastOutcome.productName}` : ""
+                                  }`
+                                : `Scan Rejected (${lastOutcome.uid}): ${
+                                    lastOutcome.rejectReason ?? lastOutcome.resolution
+                                  }`}
+                            </p>
+                            <p className={lastOutcome.resolution === "accepted" ? "text-[11px] text-white/80 font-medium" : "text-[11px] text-foreground/80 font-medium"}>
+                              Timestamp: {fmt.dateTime(lastOutcome.at)}
+                            </p>
+                          </div>
+                        </div>
+                        {lastOutcome.resolution === "accepted" && (
+                          <span className="font-mono text-white/90 bg-white/15 px-2 py-0.5 rounded text-[11px] border border-white/20 shrink-0">
+                            Tag: {lastOutcome.uid}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+              {/* Feature-owned Panel Switch */}
+              {effectiveStation === "fabric_receiving" && <ReceivingPanel stationData={stData} />}
+              {effectiveStation === "fabric_issue" && (
+                <IssuePanel
+                  stationData={stData}
+                  headerActions={
+                    activeStations.length > 1 ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Station:
+                        </span>
+                        <select
+                          value={effectiveStation}
+                          onChange={(e) => setStationCode(e.target.value as RfidStationCode)}
+                          className="h-8 rounded-lg border border-input bg-background px-3 text-xs font-semibold shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        >
+                          {activeStations.map((code) => (
+                            <option key={code} value={code}>
+                              {rfidStationLabels[code]} ({code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : undefined
+                  }
+                />
+              )}
+              {effectiveStation === "cutting" && <CuttingPanel stationData={stData} />}
+              {effectiveStation === "stitching" && <StitchingPanel stationData={stData} />}
+              {effectiveStation === "finishing" && <FinishingPanel stationData={stData} />}
+              {effectiveStation === "final_qc" && <QAPanel stationData={stData} />}
+              {effectiveStation === "dispatch" && <DispatchPanel stationData={stData} />}
+              {effectiveStation === "packing" && <PackingPanel stationData={stData} />}
+              {effectiveStation === "warehouse" && <WarehousePanel stationData={stData} />}
+            </div>
+          );
+        }}
+      </Loadable>
+    </div>
+  );
 }

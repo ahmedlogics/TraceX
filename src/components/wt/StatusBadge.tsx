@@ -2,15 +2,15 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const tone = cva(
-  "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold shadow-2xs",
   {
     variants: {
       tone: {
-        neutral: "border-[#CDBBA8] bg-[#F2E4D2] text-[#2B170E]",
+        neutral: "border-[#CDBBA8] bg-[#F4EADA] text-[#6E5748]",
         info: "border-[#CDBBA8] bg-[#EFE3D3] text-[#2B170E]",
-        success: "border-[#C79C70] bg-[#E2C8A8] text-[#2B170E]",
-        warning: "border-[#C79C70] bg-[#D8B68F]/40 text-[#2B170E]",
-        danger: "border-[#BFA894] bg-[#E8D7C2] text-[#2B170E]",
+        success: "border-[#99C5C1] bg-[#E6F0EE] text-[#134441]",
+        warning: "border-[#CDBBA8] bg-[#F4EADA] text-[#6E5748]",
+        danger: "border-[#D9B7B0] bg-[#F7ECE9] text-[#7A3528]",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -84,8 +84,12 @@ export function StatusBadge({
   tone?: Tone | undefined;
   className?: string | undefined;
 }) {
+  const currentTone = forced ?? toneFor[status] ?? "neutral";
   return (
-    <span className={cn(tone({ tone: forced ?? toneFor[status] ?? "neutral" }), className)}>
+    <span className={cn(tone({ tone: currentTone }), className)}>
+      {currentTone === "success" && (
+        <span className="size-1.5 rounded-full bg-[#1B5E5A] shrink-0" />
+      )}
       {label && <span className="opacity-70">{label}:</span>}
       {pretty(status)}
     </span>

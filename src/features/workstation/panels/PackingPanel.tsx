@@ -497,16 +497,16 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                         <div className="space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E2C8A8]/60 px-2.5 py-0.5 text-xs font-semibold text-[#2B170E] border border-[#CDBBA8]">
-                              <span className="size-2 rounded-full bg-[#C79C70] animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E6F0EE] px-2.5 py-0.5 text-xs font-semibold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                              <span className="size-2 rounded-full bg-[#1B5E5A] animate-pulse" />
                               Station 7 · Packaging & Aggregation (Scanner 7)
                             </span>
                             <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
                               Hardware Reader: Armed
                             </span>
                             {isBoxOpen ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-[#E2C8A8]/60 px-2.5 py-0.5 text-xs font-bold text-[#2B170E] border border-[#CDBBA8]">
-                                <Box className="size-3.5" />
+                              <span className="inline-flex items-center gap-1 rounded-md bg-[#E6F0EE] px-2.5 py-0.5 text-xs font-bold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                                <Box className="size-3.5 text-[#1B5E5A]" />
                                 Packing Mode: {activeBox.id}
                               </span>
                             ) : isWaitingForBoxScan ? (
@@ -554,11 +554,9 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       {feedback.type !== "idle" && (
                         <div className="mt-4 pt-4 border-t">
                           <div
-                            className={`relative rounded-lg border p-4 shadow-xs transition-all duration-200 ${
-                              feedback.type === "accepted_box" || feedback.type === "accepted_product"
-                                ? "border-[#CDBBA8] bg-[#F2E4D2]/40 text-[#2B170E]"
-                                : feedback.type === "sealed"
-                                ? "border-primary/40 bg-primary/10 text-foreground"
+                            className={`relative rounded-xl border p-4 shadow-sm transition-all duration-200 ${
+                              feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
+                                ? "border-[#134441] bg-[#1B5E5A] text-white"
                                 : feedback.type === "rejected"
                                 ? "border-destructive/40 bg-destructive/10 text-destructive dark:text-destructive-foreground"
                                 : feedback.type === "waiting_box"
@@ -569,7 +567,11 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             <button
                               type="button"
                               onClick={() => setFeedback({ type: "idle", title: "", message: "" })}
-                              className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
+                              className={`absolute top-3 right-3 p-1 rounded-md transition-colors ${
+                                feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
+                                  ? "text-white/70 hover:text-white hover:bg-white/10"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
                               aria-label="Dismiss message"
                             >
                               <X className="size-4" />
@@ -577,9 +579,9 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
 
                             <div className="flex items-start gap-3 pr-6">
                               {feedback.type === "accepted_box" || feedback.type === "accepted_product" ? (
-                                <ShieldCheck className="size-6 text-[#2B170E] shrink-0 mt-0.5" />
+                                <ShieldCheck className="size-6 text-[#A3E5DE] shrink-0 mt-0.5" />
                               ) : feedback.type === "sealed" ? (
-                                <PackageCheck className="size-6 text-primary shrink-0 mt-0.5" />
+                                <PackageCheck className="size-6 text-[#A3E5DE] shrink-0 mt-0.5" />
                               ) : feedback.type === "rejected" ? (
                                 <ShieldAlert className="size-6 text-destructive shrink-0 mt-0.5" />
                               ) : (
@@ -588,44 +590,43 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
 
                               <div className="flex-1 space-y-1">
                                 <div className="flex items-center justify-between gap-2">
-                                  <h3 className="text-sm font-bold tracking-tight">
+                                  <h3 className={`text-sm font-bold tracking-tight ${
+                                    feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed" ? "text-white" : ""
+                                  }`}>
                                     {feedback.title}
                                   </h3>
                                   {feedback.timestamp && (
-                                    <span className="text-[11px] font-mono text-muted-foreground">
+                                    <span className={`text-[11px] font-mono ${
+                                      feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed" ? "text-white/80" : "text-muted-foreground"
+                                    }`}>
                                       {feedback.timestamp}
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-xs font-medium leading-relaxed opacity-95">
+                                <p className={`text-xs font-medium leading-relaxed ${
+                                  feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed" ? "text-white/90" : "opacity-95"
+                                }`}>
                                   {feedback.message}
                                 </p>
 
                                 {/* Details Chips */}
                                 <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono">
                                   {feedback.boxId && (
-                                    <span className="rounded bg-background/80 px-2 py-0.5 border shadow-2xs font-semibold">
+                                    <span className={`rounded px-2 py-0.5 border shadow-2xs font-semibold ${
+                                      feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
+                                        ? "bg-white/15 text-white border-white/25"
+                                        : "bg-background/80"
+                                    }`}>
                                       Box: {feedback.boxId}
                                     </span>
                                   )}
-                                  {feedback.tagUid && (
-                                    <span className="rounded bg-background/80 px-2 py-0.5 border shadow-2xs">
-                                      UID: {feedback.tagUid}
-                                    </span>
-                                  )}
-                                  {feedback.garmentCode && (
-                                    <span className="rounded bg-background/80 px-2 py-0.5 border shadow-2xs font-semibold">
-                                      Garment: {feedback.garmentCode}
-                                    </span>
-                                  )}
-                                  {feedback.productStyle && (
-                                    <span className="rounded bg-background/80 px-2 py-0.5 border shadow-2xs text-muted-foreground">
-                                      Style: {feedback.productStyle} ({feedback.size ?? "M"})
-                                    </span>
-                                  )}
-                                  {feedback.totalPacked !== undefined && (
-                                    <span className="rounded bg-[#E2C8A8]/60 text-[#2B170E] font-bold px-2 py-0.5 border border-[#CDBBA8]">
-                                      Carton Total: {feedback.totalPacked} units
+                                  {feedback.garmentId && (
+                                    <span className={`rounded px-2 py-0.5 border shadow-2xs font-semibold ${
+                                      feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
+                                        ? "bg-white/15 text-white border-white/25"
+                                        : "bg-background/80"
+                                    }`}>
+                                      Item: {feedback.garmentId}
                                     </span>
                                   )}
                                 </div>
@@ -777,8 +778,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 </div>
                               </div>
 
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-3 py-1 text-xs font-bold text-[#2B170E]">
-                                <span className="size-2 rounded-full bg-[#C79C70] animate-pulse" />
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E6F0EE] border border-[#99C5C1] px-3 py-1 text-xs font-bold text-[#134441] shadow-2xs">
+                                <span className="size-2 rounded-full bg-[#1B5E5A] animate-pulse" />
                                 open / packing
                               </span>
                             </div>
@@ -820,18 +821,18 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                               </div>
                             ) : !isMock ? (
                               /* Live API Mode: Continuous Hardware Scanning Beacon */
-                              <div className="rounded-xl border border-[#CDBBA8] bg-[#F2E4D2]/40 p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
+                              <div className="rounded-xl border border-[#99C5C1] bg-[#E6F0EE]/60 p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="relative flex size-10 items-center justify-center rounded-xl bg-[#E2C8A8]/60 text-[#2B170E] border border-[#CDBBA8]">
-                                    <Radio className="size-5 animate-pulse" />
-                                    <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-[#C79C70] animate-ping" />
+                                  <div className="relative flex size-10 items-center justify-center rounded-xl bg-[#E6F0EE] text-[#134441] border border-[#99C5C1]">
+                                    <Radio className="size-5 text-[#1B5E5A] animate-pulse" />
+                                    <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-[#1B5E5A] animate-ping" />
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-bold text-[#2B170E]">
+                                      <span className="text-sm font-bold text-[#134441]">
                                         Scanner 7 Hardware Listening — Continuous Product Scan Active
                                       </span>
-                                      <span className="rounded-full bg-[#E2C8A8]/60 px-2 py-0.5 text-[10px] font-bold text-[#2B170E] uppercase tracking-wide border border-[#CDBBA8]">
+                                      <span className="rounded-full bg-[#E6F0EE] px-2 py-0.5 text-[10px] font-bold text-[#134441] uppercase tracking-wide border border-[#99C5C1]">
                                         Live
                                       </span>
                                     </div>
@@ -983,8 +984,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                   header: "Quality Clearance",
                                   cell: (g) => (
                                     <div className="flex items-center gap-1.5">
-                                      <span className="inline-flex items-center gap-1 rounded bg-[#E2C8A8]/60 px-2 py-0.5 text-xs font-semibold text-[#2B170E] border border-[#CDBBA8]">
-                                        <CheckCircle2 className="size-3 text-[#2B170E]" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-[#E6F0EE] px-2 py-0.5 text-xs font-semibold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                                        <CheckCircle2 className="size-3 text-[#1B5E5A]" />
                                         Final QC: Passed
                                       </span>
                                       {g.hold && <HoldBadge />}
@@ -1002,8 +1003,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 {
                                   header: "Status",
                                   cell: () => (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 px-2 py-0.5 text-xs font-medium text-[#2B170E] border border-[#CDBBA8]">
-                                      <Box className="size-3" />
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] px-2 py-0.5 text-xs font-medium text-[#134441] border border-[#99C5C1] shadow-2xs">
+                                      <Box className="size-3 text-[#1B5E5A]" />
                                       Packed in {activeBox.id}
                                     </span>
                                   ),

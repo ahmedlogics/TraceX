@@ -43,6 +43,10 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
+  --color-teal: #1B5E5A;
+  --color-teal-soft: #E6F0EE;
+  --color-teal-border: #99C5C1;
+  --color-teal-dark: #134441;
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning-soft: var(--warning-soft);
@@ -87,9 +91,13 @@
   --accent-foreground: #2B170E; /* dark coffee brown */
   --destructive: #8C5348; /* warm muted terracotta/coffee */
   --destructive-foreground: #FFFDFC;
-  --success: #6E5748; /* warm mocha */
-  --success-foreground: #2B170E;
-  --success-soft: #F4EADA; /* pale warm tan */
+  --success: #1B5E5A; /* deep teal secondary accent */
+  --success-foreground: #FFFFFF;
+  --success-soft: #E6F0EE; /* pale soft teal */
+  --teal-accent: #1B5E5A;
+  --teal-soft: #E6F0EE;
+  --teal-border: #99C5C1;
+  --teal-dark: #134441;
   --warning: #C79C70; /* deeper coffee beige */
   --warning-foreground: #2B170E;
   --warning-soft: #F4EADA;
@@ -131,6 +139,16 @@
   :focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
+  }
+
+  /* Browser autofill harmonization to prevent harsh blue background */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #FFFDFC inset !important;
+    -webkit-text-fill-color: #2B170E !important;
+    transition: background-color 5000s ease-in-out 0s;
   }
 }
 

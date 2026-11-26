@@ -154,32 +154,32 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                 {/* Live Scan Outcome Banner */}
                 {lastOutcome && (
                   <div
-                    className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-xs ${
+                    className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-sm transition-all ${
                       lastOutcome.resolution === "accepted"
-                        ? "border-success/40 bg-success-soft text-foreground"
+                        ? "border-[#134441] bg-[#1B5E5A] text-white"
                         : "border-destructive/40 bg-danger-soft text-foreground"
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       {lastOutcome.resolution === "accepted" ? (
-                        <CheckCircle2 className="size-4 shrink-0 text-success" />
+                        <CheckCircle2 className="size-4 shrink-0 text-[#A3E5DE]" />
                       ) : (
                         <XCircle className="size-4 shrink-0 text-destructive" />
                       )}
                       <div>
-                        <span className="font-bold">
+                        <span className="font-bold text-white">
                           {lastOutcome.resolution === "accepted"
                             ? `Scan Confirmed: ${lastOutcome.garmentCode ?? lastOutcome.subjectId}`
                             : `Scan Rejected (${lastOutcome.uid})`}
                         </span>
-                        <span className="text-muted-foreground ml-2">
+                        <span className={lastOutcome.resolution === "accepted" ? "text-white/85 ml-2 font-medium" : "text-muted-foreground ml-2"}>
                           {lastOutcome.resolution === "accepted"
                             ? "· Stitching Complete → Advanced to Finishing"
                             : `· ${lastOutcome.rejectReason ?? lastOutcome.resolution}`}
                         </span>
                       </div>
                     </div>
-                    <span className="font-mono text-muted-foreground text-[11px]">
+                    <span className={lastOutcome.resolution === "accepted" ? "font-mono text-white/90 bg-white/15 px-2 py-0.5 rounded text-[11px] border border-white/20" : "font-mono text-muted-foreground text-[11px]"}>
                       Tag: {lastOutcome.uid}
                     </span>
                   </div>
@@ -202,10 +202,10 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                   </Tabs>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1.5 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-1 text-xs font-bold text-[#2B170E]">
+                    <div className="flex items-center gap-1.5 rounded-full bg-[#E6F0EE] border border-[#99C5C1] px-2.5 py-1 text-xs font-bold text-[#134441] shadow-2xs">
                       <span className="relative flex size-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#C79C70] opacity-75" />
-                        <span className="relative inline-flex size-2 rounded-full bg-[#C79C70]" />
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1B5E5A] opacity-75" />
+                        <span className="relative inline-flex size-2 rounded-full bg-[#1B5E5A]" />
                       </span>
                       <span>Station 4 Ready</span>
                     </div>
@@ -258,7 +258,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                   >
                     {stitchingQueue.length === 0 ? (
                       <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A]">
                           <CheckCircle2 className="size-4" />
                         </div>
                         <p className="text-sm font-medium text-foreground">
@@ -298,12 +298,12 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
 
                               <div className="flex items-center gap-2">
                                 {isDone ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#2B170E]">
-                                    <CheckCircle2 className="size-3" /> Done · Stitched
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] border border-[#99C5C1] px-2.5 py-0.5 text-xs font-semibold text-[#134441] shadow-2xs">
+                                    <CheckCircle2 className="size-3 text-[#1B5E5A]" /> Done · Stitched
                                   </span>
                                 ) : (
                                   <>
-                                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                    <span className="inline-flex items-center rounded-full bg-[#F4EADA] border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#6E5748]">
                                       Ready to Stitch
                                     </span>
                                     <Button
@@ -333,7 +333,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                   >
                     {stitchingRework.length === 0 ? (
                       <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A]">
                           <CheckCircle2 className="size-4" />
                         </div>
                         <p className="text-sm font-medium text-foreground">
@@ -368,8 +368,8 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
 
                               <div className="flex items-center gap-2">
                                 {isRepaired ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#2B170E]">
-                                    <CheckCircle2 className="size-3" /> Repaired · Returned to QC
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] border border-[#99C5C1] px-2.5 py-0.5 text-xs font-semibold text-[#134441] shadow-2xs">
+                                    <CheckCircle2 className="size-3 text-[#1B5E5A]" /> Repaired · Returned to QC
                                   </span>
                                 ) : (
                                   <Button

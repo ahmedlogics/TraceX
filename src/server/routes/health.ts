@@ -26,7 +26,7 @@ healthRouter.get("/", (_req, res) => {
       <html>
         <head><title>TraceX Express API</title></head>
         <body style="font-family: system-ui, -apple-system, sans-serif; padding: 40px; line-height: 1.6; max-width: 600px; margin: 40px auto; color: #1e293b;">
-          <h2 style="color: #0f172a;">WearTrail / TraceX Express REST API</h2>
+          <h2 style="color: #2B170E;">TraceX Express REST API</h2>
           <p>The backend API service is running on <strong>port 4000</strong>.</p>
           <div style="margin: 24px 0; padding: 16px; background: #f1f5f9; border-radius: 8px;">
             <p style="margin: 0 0 8px 0; font-size: 14px; color: #64748b;">To open the frontend web application, navigate to:</p>
@@ -38,7 +38,7 @@ healthRouter.get("/", (_req, res) => {
     `);
   }
   return sendSuccess(res, {
-    service: "WearTrail / TraceX Express REST API",
+    service: "TraceX Express REST API",
     status: "online",
     apiPort: 4000,
     websiteUrl: "http://localhost:8080",

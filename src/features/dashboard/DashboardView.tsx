@@ -620,8 +620,8 @@ function StitchingDashboard() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isDone ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#2B170E]">
-                                      <CheckCircle2 className="size-3" /> Done · Stitched
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] border border-[#99C5C1] px-2.5 py-0.5 text-xs font-semibold text-[#134441] shadow-2xs">
+                                      <CheckCircle2 className="size-3 text-[#1B5E5A]" /> Done · Stitched
                                     </span>
                                   ) : (
                                     <>
@@ -670,8 +670,8 @@ function StitchingDashboard() {
                                 </div>
                                 <p className="text-muted-foreground">Order: {g.orderId}</p>
                               </div>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 px-2 py-0.5 text-xs font-bold text-[#2B170E] border border-[#CDBBA8]">
-                                <CheckCircle2 className="size-3" /> Done · Advanced to Finishing
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] px-2 py-0.5 text-xs font-bold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                                <CheckCircle2 className="size-3 text-[#1B5E5A]" /> Done · Advanced to Finishing
                               </span>
                             </div>
                           ))}
@@ -936,8 +936,8 @@ function FinishingDashboard() {
                             </div>
                             <div className="flex items-center gap-2">
                               {isDone ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2.5 py-0.5 text-xs font-semibold text-[#2B170E]">
-                                  <CheckCircle2 className="size-3" /> Done · Finished
+                                <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] border border-[#99C5C1] px-2.5 py-0.5 text-xs font-semibold text-[#134441] shadow-2xs">
+                                  <CheckCircle2 className="size-3 text-[#1B5E5A]" /> Done · Finished
                                 </span>
                               ) : (
                                 <>
@@ -986,8 +986,8 @@ function FinishingDashboard() {
                             </div>
                             <p className="text-muted-foreground">Order: {g.orderId}</p>
                           </div>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#E2C8A8]/60 px-2 py-0.5 text-xs font-bold text-[#2B170E] border border-[#CDBBA8]">
-                            <CheckCircle2 className="size-3" /> Done · Released to QC Gate
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F0EE] px-2 py-0.5 text-xs font-bold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                            <CheckCircle2 className="size-3 text-[#1B5E5A]" /> Done · Released to QC Gate
                           </span>
                         </div>
                       ))}

@@ -209,11 +209,11 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                         {/* Hardware RFID Status */}
                         <div className="flex items-center gap-2 md:justify-end">
                           <span className="relative flex size-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C79C70] opacity-75"></span>
-                            <span className="relative inline-flex rounded-full size-2.5 bg-[#C79C70]"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#1B5E5A] opacity-75"></span>
+                            <span className="relative inline-flex rounded-full size-2.5 bg-[#1B5E5A]"></span>
                           </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs font-bold text-[#2B170E]">
-                            <Radio className="size-3.5 text-[#6E5748]" />
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99C5C1] bg-[#E6F0EE] px-2.5 py-1 text-xs font-bold text-[#134441] shadow-2xs">
+                            <Radio className="size-3.5 text-[#1B5E5A]" />
                             {isArmed ? "Dock Reader: Armed & Listening" : "Dock Reader: Ready"}
                           </span>
                         </div>
@@ -222,31 +222,33 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                       {/* Live Scan Feedback Banner */}
                       {lastOutcome && (
                         <div
-                          className={`mt-4 rounded-lg border p-4 text-xs transition-all shadow-xs ${
+                          className={`mt-4 rounded-xl border p-4 text-xs transition-all shadow-sm ${
                             lastOutcome.resolution === "accepted"
-                              ? "border-[#C79C70] bg-[#E2C8A8]/30 text-[#2B170E]"
+                              ? "border-[#134441] bg-[#1B5E5A] text-white"
                               : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
                           }`}
                         >
                           <div className="flex items-start gap-3">
                             {lastOutcome.resolution === "accepted" ? (
-                              <CheckCircle2 className="size-5 shrink-0 text-[#6E5748] mt-0.5" />
+                              <CheckCircle2 className="size-5 shrink-0 text-[#A3E5DE] mt-0.5" />
                             ) : (
                               <XCircle className="size-5 shrink-0 text-[#8C5348] mt-0.5" />
                             )}
                             <div className="space-y-1">
-                              <p className="font-semibold text-sm">
+                              <p className="font-bold text-sm text-white">
                                 {lastOutcome.resolution === "accepted"
                                   ? `Accepted: Container ${lastOutcome.garmentCode ?? lastOutcome.subjectId} Dispatched`
                                   : `Rejected: ${lastOutcome.rejectReason ?? "Dispatch Gate Rejected Scan"}`}
                               </p>
-                              <p className="text-xs opacity-90">
+                              <p className={lastOutcome.resolution === "accepted" ? "text-xs text-white/90 font-medium" : "text-xs opacity-90"}>
                                 {lastOutcome.resolution === "accepted"
                                   ? `Box Scanned → All linked garments updated to 'dispatched'.`
                                   : lastOutcome.rejectReason}
                               </p>
-                              <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-muted-foreground">
-                                <span>Scanned UID / ID: {lastOutcome.uid}</span>
+                              <div className={lastOutcome.resolution === "accepted" ? "flex items-center gap-2 pt-1 font-mono text-[11px] text-white/80" : "flex items-center gap-2 pt-1 font-mono text-[11px] text-muted-foreground"}>
+                                <span className={lastOutcome.resolution === "accepted" ? "bg-white/15 px-2 py-0.5 rounded border border-white/20 text-white" : ""}>
+                                  Scanned UID / ID: {lastOutcome.uid}
+                                </span>
                                 <span>·</span>
                                 <span>Gate: Station 9 Dock</span>
                                 <span>·</span>
@@ -457,8 +459,8 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                 return holds ? (
                                   <HoldBadge />
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                    <CheckCircle2 className="size-3.5" /> Clear
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#134441] bg-[#E6F0EE] border border-[#99C5C1] px-2 py-0.5 rounded-full shadow-2xs">
+                                    <CheckCircle2 className="size-3.5 text-[#1B5E5A]" /> Clear
                                   </span>
                                 );
                               },

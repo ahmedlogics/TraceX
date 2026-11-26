@@ -437,7 +437,7 @@ export function SettingsView() {
                   The Express backend owns the physical USB serial connection (`/dev/ttyUSB0` or
                   `COM3`), authenticates the hardware credentials, and broadcasts real-time tag tap
                   events via Server-Sent Events (SSE). The React client interfaces through the typed
-                  `WearTrailClient` boundary.
+                  `TraceXClient` boundary.
                 </p>
               </div>
             </TabsContent>

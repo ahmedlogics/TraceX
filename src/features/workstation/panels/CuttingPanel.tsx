@@ -500,8 +500,8 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                               </Button>
                             )}
 
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-1 text-xs font-bold text-[#2B170E]">
-                              <span className="size-2 rounded-full bg-[#C79C70] animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99C5C1] bg-[#E6F0EE] px-2.5 py-1 text-xs font-bold text-[#134441] shadow-2xs">
+                              <span className="size-2 rounded-full bg-[#1B5E5A] animate-pulse" />
                               Scanner 3 Online
                             </span>
                           </div>
@@ -510,28 +510,28 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                         {/* Alert / Notification Banner */}
                         {alertMessage && (
                           <div
-                            className={`rounded-lg border p-3.5 text-xs flex items-start gap-3 transition-all ${
+                            className={`rounded-xl border p-3.5 text-xs flex items-start gap-3 transition-all shadow-sm ${
                               alertMessage.type === "success"
-                                ? "border-[#C79C70] bg-[#E2C8A8]/30 text-[#2B170E]"
+                                ? "border-[#134441] bg-[#1B5E5A] text-white"
                                 : alertMessage.type === "error"
                                   ? "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
                                   : "border-[#CDBBA8] bg-[#FFFDFC] text-[#2B170E]"
                             }`}
                           >
                             <div className="mt-0.5 shrink-0">
-                              {alertMessage.type === "success" && <CheckCircle2 className="size-4 text-[#6E5748]" />}
+                              {alertMessage.type === "success" && <CheckCircle2 className="size-4 text-[#A3E5DE]" />}
                               {alertMessage.type === "error" && <XCircle className="size-4 text-[#8C5348]" />}
                               {alertMessage.type === "info" && <Sparkles className="size-4 text-[#C79C70]" />}
                             </div>
                             <div className="flex-1 space-y-0.5">
-                              <p className="font-bold">{alertMessage.title}</p>
-                              <p className="opacity-90">{alertMessage.message}</p>
+                              <p className={`font-bold ${alertMessage.type === "success" ? "text-white" : ""}`}>{alertMessage.title}</p>
+                              <p className={alertMessage.type === "success" ? "text-white/90 font-medium" : "opacity-90"}>{alertMessage.message}</p>
                             </div>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => setAlertMessage(null)}
-                              className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                              className={`h-6 w-6 p-0 shrink-0 ${alertMessage.type === "success" ? "text-white/70 hover:text-white hover:bg-white/10" : "text-muted-foreground hover:text-foreground"}`}
                             >
                               ✕
                             </Button>
@@ -745,7 +745,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                       <Package className="size-3 text-primary" />
                                       <span>{lot.id}</span>
                                       <span className="text-muted-foreground">({lot.rfidUid})</span>
-                                      <span className="text-emerald-600 font-bold">✓</span>
+                                      <span className="text-[#1B5E5A] font-bold">✓</span>
                                     </Button>
                                   ))}
                                 </div>
@@ -817,8 +817,8 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                   <span className="text-muted-foreground block text-[10px] font-semibold uppercase">
                                     QC Clearance
                                   </span>
-                                  <span className="font-bold text-sm text-emerald-600 flex items-center gap-1">
-                                    <CheckCircle2 className="size-3.5" /> Approved at Dock
+                                  <span className="font-bold text-sm text-[#134441] flex items-center gap-1">
+                                    <CheckCircle2 className="size-3.5 text-[#1B5E5A]" /> Approved at Dock
                                   </span>
                                 </div>
                               </div>
@@ -863,7 +863,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                             </span>
                                             <StatusBadge status={order.status} />
                                             {isDone && (
-                                              <span className="rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 dark:bg-emerald-950 dark:text-emerald-300">
+                                              <span className="rounded bg-[#E6F0EE] text-[#134441] border border-[#99C5C1] text-[10px] font-bold px-2 py-0.5 shadow-2xs">
                                                 Cutting Complete
                                               </span>
                                             )}
@@ -944,7 +944,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
 
                                   <Button
                                     onClick={handleCompleteOrderCutting}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 text-xs font-bold h-8"
+                                    className="bg-[#1B5E5A] hover:bg-[#134441] text-white gap-2 text-xs font-bold h-8 shadow-xs"
                                   >
                                     <Check className="size-4" />
                                     All Products of this Order Scan Complete
@@ -964,7 +964,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                 </div>
                                 <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
                                   <div
-                                    className="h-full rounded-full bg-emerald-600 transition-all duration-300"
+                                    className="h-full rounded-full bg-[#1B5E5A] transition-all duration-300"
                                     style={{ width: `${progressPercent}%` }}
                                   />
                                 </div>
@@ -976,7 +976,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-3">
                                     <div>
                                       <div className="flex items-center gap-2">
-                                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span className="size-2 rounded-full bg-[#1B5E5A] animate-pulse" />
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
                                           Mock Simulation — Product Tag Scan (Scanner 3)
                                         </h4>
@@ -1157,8 +1157,8 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                     header: "Bound RFID UID",
                                     cell: (g) =>
                                       g.rfidUid ? (
-                                        <span className="font-mono text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 flex items-center gap-1 w-fit">
-                                          <Radio className="size-3" /> {g.rfidUid}
+                                        <span className="font-mono text-xs font-bold text-[#134441] bg-[#E6F0EE] px-2 py-0.5 rounded border border-[#99C5C1] flex items-center gap-1 w-fit">
+                                          <Radio className="size-3 text-[#1B5E5A]" /> {g.rfidUid}
                                         </span>
                                       ) : (
                                         <span className="text-xs italic text-muted-foreground">Unbound</span>
@@ -1172,7 +1172,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                         <ArrowRight className="size-3 text-muted-foreground" />
                                         <span className="text-foreground font-semibold">{selectedOrder.id}</span>
                                         <ArrowRight className="size-3 text-muted-foreground" />
-                                        <span className="text-emerald-600 font-semibold">{g.id}</span>
+                                        <span className="text-[#134441] font-semibold">{g.id}</span>
                                       </span>
                                     ),
                                   },
@@ -1192,7 +1192,7 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                                 <div className="pt-3 border-t flex justify-end">
                                   <Button
                                     onClick={handleCompleteOrderCutting}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-bold"
+                                    className="bg-[#1B5E5A] hover:bg-[#134441] text-white gap-2 font-bold shadow-xs"
                                   >
                                     <Check className="size-4" />
                                     All Products of this Order Scan Complete

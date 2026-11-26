@@ -280,9 +280,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             aria-label="TraceX home"
           >
             <img
-              src="/images/tracex-logo.png"
+              src="/images/tracex-emblem.png"
               alt="TraceX Logo"
-              className="size-8 object-contain rounded-lg border border-purple-400/25 bg-[#1F162B] p-0.5 shadow-md group-hover:scale-105 transition-transform"
+              className="size-8 object-contain shrink-0 group-hover:scale-105 transition-transform"
             />
             <span className="text-base font-bold tracking-tight text-white">TraceX</span>
           </AppLink>
@@ -308,9 +308,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-3xl flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-5 text-xs text-purple-300/60">
           <div className="flex items-center gap-2">
             <img
-              src="/images/tracex-logo.png"
+              src="/images/tracex-emblem.png"
               alt="TraceX Logo"
-              className="size-5 object-contain rounded bg-[#1F162B] p-0.5 border border-purple-500/20"
+              className="size-5 object-contain shrink-0"
             />
             <span className="font-semibold text-purple-200/90">TraceX</span>
             <span>· Public garment traceability</span>

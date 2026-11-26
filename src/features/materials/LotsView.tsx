@@ -210,7 +210,7 @@ export function LotsView() {
                           <div className="h-2 w-full rounded-full bg-muted/80 overflow-hidden shadow-inner">
                             <div
                               className={`h-full rounded-full transition-all duration-300 ${
-                                l.balanceQty > 0 ? "bg-gradient-to-r from-primary to-primary/80" : "bg-muted-foreground"
+                                l.balanceQty > 0 ? "bg-[#1B5E5A]" : "bg-muted-foreground"
                               }`}
                               style={{ width: `${pct}%` }}
                             />
@@ -224,8 +224,8 @@ export function LotsView() {
                     cell: (l) => {
                       if (l.rfidUid) {
                         return (
-                          <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-success bg-success-soft px-2 py-0.5 rounded">
-                            <Radio className="size-3" /> {l.rfidUid}
+                          <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-[#134441] bg-[#E6F0EE] border border-[#99C5C1] px-2 py-0.5 rounded shadow-2xs">
+                            <Radio className="size-3 text-[#1B5E5A]" /> {l.rfidUid}
                           </span>
                         );
                       }

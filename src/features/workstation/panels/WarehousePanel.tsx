@@ -218,8 +218,8 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                 <div className="rounded-lg border bg-card p-5 space-y-4">
                   {/* Scanner 8 Status */}
                   <div className="flex items-center justify-between text-xs pb-2 border-b">
-                    <span className="inline-flex items-center gap-1.5 font-bold text-[#2B170E]">
-                      <span className="size-2 rounded-full bg-[#C79C70] animate-pulse" />
+                    <span className="inline-flex items-center gap-1.5 font-bold text-[#134441] bg-[#E6F0EE] px-2.5 py-0.5 rounded-full border border-[#99C5C1] shadow-2xs">
+                      <span className="size-2 rounded-full bg-[#1B5E5A] animate-pulse" />
                       Scanner 8 {isArmed ? "Armed & Listening" : "Active"}
                     </span>
                     <span className="font-mono text-muted-foreground">
@@ -371,25 +371,24 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                       <div
                         className={`rounded-lg border p-4 shadow-sm transition-all ${
                           details.isAccepted
-                            ? "border-[#CDBBA8] bg-[#F2E4D2]/40 text-[#2B170E]"
+                            ? "border-[#99C5C1] bg-[#E6F0EE]/80 text-[#134441]"
                             : "border-destructive/40 bg-destructive/10 text-destructive"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           {details.isAccepted ? (
-                            <ShieldCheck className="size-6 text-[#2B170E] shrink-0 mt-0.5" />
+                            <ShieldCheck className="size-6 text-[#A3E5DE] shrink-0 mt-0.5" />
                           ) : (
                             <ShieldAlert className="size-6 text-destructive shrink-0 mt-0.5" />
                           )}
                           <div className="space-y-2.5 flex-1">
                             <div className="flex items-center justify-between">
-                              <p className="text-sm font-bold tracking-tight">
+                              <p className={`text-sm font-bold tracking-tight ${details.isAccepted ? "text-white" : ""}`}>
                                 {details.title}
                               </p>
                               <span
                                 className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
-                                  details.isAccepted
-                                    ? "bg-[#E2C8A8]/60 text-[#2B170E] border-[#CDBBA8]"
+                                  details.isAccepted ? "bg-white/15 text-white border-white/25"
                                     : "bg-destructive/20 text-destructive border-destructive/40"
                                 }`}
                               >
@@ -399,15 +398,15 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
 
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               <div>
-                                <span className="text-muted-foreground font-medium">Box ID:</span>{" "}
-                                <span className="font-mono font-bold text-foreground">
+                                <span className={details.isAccepted ? "text-white/75 font-medium" : "text-muted-foreground font-medium"}>Box ID:</span>{" "}
+                                <span className={details.isAccepted ? "font-mono font-bold text-white bg-white/15 px-1.5 py-0.5 rounded" : "font-mono font-bold text-foreground"}>
                                   {details.cartonId}
                                 </span>
                               </div>
 
                               <div>
-                                <span className="text-muted-foreground font-medium">Garments:</span>{" "}
-                                <span className="font-semibold text-foreground">
+                                <span className={details.isAccepted ? "text-white/75 font-medium" : "text-muted-foreground font-medium"}>Garments:</span>{" "}
+                                <span className={details.isAccepted ? "font-semibold text-white" : "font-semibold text-foreground"}>
                                   {details.garmentCount !== undefined
                                     ? `${details.garmentCount} garment${details.garmentCount !== 1 ? "s" : ""}`
                                     : "—"}

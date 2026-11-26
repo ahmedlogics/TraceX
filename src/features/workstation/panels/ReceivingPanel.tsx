@@ -364,18 +364,18 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                     )}
 
                     {isReadyToScan && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDBBA8] bg-[#E2C8A8]/60 px-2.5 py-0.5 text-xs font-semibold text-[#2B170E] shadow-2xs">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99C5C1] bg-[#E6F0EE] px-2.5 py-0.5 text-xs font-semibold text-[#134441] shadow-2xs">
                         <span className="relative flex size-2">
-                          <span className="animate-ping absolute inline-flex size-full rounded-full bg-[#D8B68F] opacity-75"></span>
-                          <span className="relative inline-flex rounded-full size-2 bg-[#C79C70]"></span>
+                          <span className="animate-ping absolute inline-flex size-full rounded-full bg-[#1B5E5A] opacity-75"></span>
+                          <span className="relative inline-flex rounded-full size-2 bg-[#1B5E5A]"></span>
                         </span>
                         Ready to Scan
                       </span>
                     )}
 
                     {isScanSuccess && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CDBBA8] bg-[#E2C8A8]/40 px-2.5 py-0.5 text-xs font-bold text-[#2B170E]">
-                        <CheckCircle2 className="size-3.5 text-[#2B170E]" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99C5C1] bg-[#E6F0EE] px-2.5 py-0.5 text-xs font-bold text-[#134441] shadow-2xs">
+                        <CheckCircle2 className="size-3.5 text-[#1B5E5A]" />
                         Card Bound
                       </span>
                     )}
@@ -412,7 +412,8 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                       <div className="mt-3.5 flex items-center justify-center gap-2 border-t pt-3 text-[10px] text-muted-foreground/80 font-mono">
                         <span>13.56 MHz ISO14443A</span>
                         <span>·</span>
-                        <span className="text-[#6E5748] font-medium">
+                        <span className="text-[#134441] font-semibold flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-[#1B5E5A] animate-pulse" />
                           Bridge Ready
                         </span>
                       </div>
@@ -474,19 +475,19 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                     <div className="flex flex-1 flex-col justify-between space-y-3.5 animate-fade-in-up">
                       <div className="space-y-3">
                         {/* Compact Scanning Beacon Banner */}
-                        <div className="flex items-center gap-3 rounded-xl border border-[#CDBBA8] bg-[#F2E4D2]/40 p-3">
-                          <div className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-[#D8B68F] text-[#2B170E] border border-[#CDBBA8] shadow-xs">
-                            <span className="absolute inset-0 rounded-full bg-[#E2C8A8]/40 animate-sonar" />
+                        <div className="flex items-center gap-3 rounded-xl border border-[#99C5C1] bg-[#E6F0EE]/70 p-3">
+                          <div className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-[#D1E6E3] text-[#1B5E5A] border border-[#99C5C1] shadow-xs">
+                            <span className="absolute inset-0 rounded-full bg-[#1B5E5A]/20 animate-sonar" />
                             <Radio className="size-5 relative z-10" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="size-2 rounded-full bg-[#C79C70] animate-ping" />
-                              <h3 className="text-xs font-bold text-[#2B170E]">
+                              <span className="size-2 rounded-full bg-[#1B5E5A] animate-ping" />
+                              <h3 className="text-xs font-bold text-[#134441]">
                                 Scanner 0 Armed &amp; Listening
                               </h3>
                             </div>
-                            <p className="text-[11px] text-[#6E5748] mt-0.5">
+                            <p className="text-[11px] text-[#285A56] mt-0.5">
                               Tap fabric bundle RFID card against Reader 0 to bind.
                             </p>
                           </div>
@@ -496,11 +497,11 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                         <div className="rounded-xl border border-border/80 bg-muted/20 p-3 space-y-2 text-xs">
                           <div className="flex items-center justify-between text-[11px]">
                             <span className="font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                              <Cpu className="size-3 text-[#2B170E]" />
+                              <Cpu className="size-3 text-[#1B5E5A]" />
                               Hardware Telemetry
                             </span>
-                            <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[#2B170E] font-semibold bg-[#E2C8A8]/60 px-2 py-0.5 rounded border border-[#CDBBA8]">
-                              <span className="size-1.5 rounded-full bg-[#C79C70] animate-pulse" />
+                            <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[#134441] font-semibold bg-[#E6F0EE] px-2 py-0.5 rounded border border-[#99C5C1]">
+                              <span className="size-1.5 rounded-full bg-[#1B5E5A] animate-pulse" />
                               Reader 0 Active
                             </span>
                           </div>
@@ -651,27 +652,27 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                     <div className="flex flex-1 flex-col justify-between space-y-3.5 animate-fade-in-up">
                       <div className="space-y-3">
                         {/* Success Header Banner */}
-                        <div className="flex items-start gap-2.5 rounded-xl border border-[#CDBBA8] bg-[#F2E4D2]/40 p-3">
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E2C8A8]/60 text-[#2B170E] border border-[#CDBBA8]">
+                        <div className="flex items-start gap-2.5 rounded-xl border border-[#134441] bg-[#1B5E5A] text-white p-3.5 shadow-sm">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-[#A3E5DE] border border-white/20">
                             <CheckCircle2 className="size-4.5" />
                           </div>
                           <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex items-center justify-between">
-                              <h3 className="text-xs font-bold text-[#2B170E]">
+                              <h3 className="text-xs font-bold text-white">
                                 RFID Card Successfully Bound!
                               </h3>
-                              <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
+                              <span className="text-[10px] text-white/80 font-mono flex items-center gap-1">
                                 <Clock className="size-3" />
                                 {fmt.dateTime(lastOutcome.at)}
                               </span>
                             </div>
-                            <p className="text-[11px] text-[#6E5748]">
+                            <p className="text-[11px] text-white/90">
                               Card UID{" "}
-                              <span className="font-mono font-bold text-[#2B170E]">
+                              <span className="font-mono font-bold text-white bg-white/15 px-1.5 py-0.5 rounded border border-white/20">
                                 {lastOutcome.uid}
                               </span>{" "}
                               linked to lot{" "}
-                              <span className="font-mono font-bold text-foreground">
+                              <span className="font-mono font-bold text-white">
                                 {boundLot?.id || lastOutcome.subjectId}
                               </span>
                               .
@@ -695,8 +696,8 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                               <span className="text-[10px] uppercase font-semibold text-muted-foreground block">
                                 Active Card UID
                               </span>
-                              <span className="font-mono font-bold text-[#2B170E] inline-flex items-center gap-1">
-                                <Radio className="size-3" />
+                              <span className="font-mono font-bold text-[#134441] inline-flex items-center gap-1">
+                                <Radio className="size-3 text-[#1B5E5A]" />
                                 {lastOutcome.uid}
                               </span>
                             </div>
@@ -868,8 +869,8 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                     header: "Bundle Card (Station 1)",
                     cell: (l) =>
                       l.rfidUid ? (
-                        <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-[#2B170E] bg-[#E2C8A8]/60 border border-[#CDBBA8] px-2 py-0.5 rounded shadow-2xs">
-                          <Radio className="size-3" /> {l.rfidUid}
+                        <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-[#134441] bg-[#E6F0EE] border border-[#99C5C1] px-2 py-0.5 rounded shadow-2xs">
+                          <Radio className="size-3 text-[#1B5E5A]" /> {l.rfidUid}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground italic bg-muted/60 px-2 py-0.5 rounded border border-dashed">

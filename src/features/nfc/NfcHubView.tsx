@@ -184,8 +184,8 @@ export function NfcHubView() {
           </p>
         </div>
         <div className="rounded-xl border bg-card p-3 shadow-xs">
-          <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs mb-1">
-            <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/10 text-[11px]">4</span>
+          <div className="flex items-center gap-2 text-[#134441] font-bold text-xs mb-1">
+            <span className="flex size-5 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1] text-[11px]">4</span>
             Touch Tag to Phone
           </div>
           <p className="text-[11px] text-muted-foreground leading-normal">
@@ -269,7 +269,7 @@ export function NfcHubView() {
 
                             <td className="py-3 px-3">
                               {g.rfidUid ? (
-                                <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+                                <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-[#134441] bg-[#E6F0EE] border border-[#99C5C1] px-2 py-0.5 rounded-full shadow-2xs">
                                   <Radio className="size-3" /> {g.rfidUid}
                                 </span>
                               ) : (
@@ -301,7 +301,7 @@ export function NfcHubView() {
                                 >
                                   {isCopied ? (
                                     <>
-                                      <Check className="size-3 mr-1 text-emerald-300" /> Copied!
+                                      <Check className="size-3 mr-1 text-[#1B5E5A]" /> Copied!
                                     </>
                                   ) : (
                                     <>

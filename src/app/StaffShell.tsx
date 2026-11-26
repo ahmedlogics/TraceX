@@ -44,10 +44,10 @@ function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => voi
                     aria-current={isActive(i.href) ? "page" : undefined}
                     className={cn(
                       "flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-[#6E5748] transition-colors hover:bg-[#E2C8A8]/60 hover:text-[#2B170E]",
-                      isActive(i.href) && "bg-[#E2C8A8] font-bold text-[#2B170E] shadow-2xs",
+                      isActive(i.href) && "bg-[#E2C8A8] font-bold text-[#2B170E] shadow-2xs border-l-[3px] border-[#1B5E5A] rounded-l-none pl-2",
                     )}
                   >
-                    <i.icon className="size-4 shrink-0 text-[#2B170E]" aria-hidden />
+                    <i.icon className={cn("size-4 shrink-0 transition-colors", isActive(i.href) ? "text-[#1B5E5A]" : "text-[#6E5748]")} aria-hidden />
                     <span>{i.label}</span>
                   </AppLink>
                 </li>
@@ -135,16 +135,16 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               onClick={() => setDataMode(dataMode === "live" ? "mock" : "live")}
               title={`Currently connected to ${dataMode === "live" ? "Live Database (PostgreSQL)" : "Mock Data (Fixtures)"}. Click to toggle.`}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors cursor-pointer border",
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors cursor-pointer border shadow-2xs",
                 dataMode === "live"
-                  ? "bg-[#E2C8A8] text-[#2B170E] border-[#CDBBA8] hover:bg-[#D8B68F]"
+                  ? "bg-[#E6F0EE] text-[#134441] border-[#99C5C1] hover:bg-[#D1E6E3]"
                   : "bg-[#FBF6EE] text-[#6E5748] border-[#CDBBA8] hover:bg-[#F2E4D2]",
               )}
             >
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  dataMode === "live" ? "bg-[#2B170E] animate-pulse" : "bg-[#6E5748]",
+                  dataMode === "live" ? "bg-[#1B5E5A] animate-pulse" : "bg-[#6E5748]",
                 )}
               />
               {dataMode === "live" ? "Live API" : "Mock Mode"}

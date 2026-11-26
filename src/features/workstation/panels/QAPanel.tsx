@@ -597,7 +597,7 @@ export function QAPanel({
                           <span className="font-semibold">{g.id}</span>
                           <span className="text-[10px] opacity-80">({g.rfidUid})</span>
                           {isPassed ? (
-                            <span className="text-[9px] bg-[#E2C8A8] text-[#2B170E] font-bold rounded px-1.5 ml-0.5 border border-[#C79C70]">
+                            <span className="text-[9px] bg-[#E6F0EE] text-[#134441] font-bold rounded px-1.5 ml-0.5 border border-[#99C5C1] shadow-2xs">
                               Passed
                             </span>
                           ) : g.hold ? (

@@ -516,8 +516,8 @@ export function IssuePanel({
                                     activeCtx.stationCode === "fabric_issue" &&
                                     (activeCtx.payload as any)?.orderId === targetOrderId &&
                                     activeCtx.status === "ready" && (
-                                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                        <Check className="size-3" /> Armed
+                                      <span className="inline-flex items-center gap-1 rounded bg-[#E6F0EE] px-2 py-0.5 font-semibold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                                        <Check className="size-3 text-[#1B5E5A]" /> Armed
                                       </span>
                                     )}
                                 </div>
@@ -530,7 +530,7 @@ export function IssuePanel({
                                 <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs">
                                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-primary/15 pb-3">
                                     <div className="flex items-center gap-2">
-                                      <span className="inline-flex size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span className="inline-flex size-2 rounded-full bg-[#1B5E5A] animate-pulse" />
                                       <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                                         Selected Order for Issue:
                                       </span>
@@ -539,8 +539,8 @@ export function IssuePanel({
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                                        <CheckCircle2 className="size-3.5" /> Ready for Scan
+                                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E6F0EE] px-2.5 py-0.5 text-xs font-semibold text-[#134441] border border-[#99C5C1] shadow-2xs">
+                                        <CheckCircle2 className="size-3.5 text-[#1B5E5A]" /> Ready for Scan
                                       </span>
                                       <Button
                                         type="button"
@@ -690,15 +690,15 @@ export function IssuePanel({
                     {/* Live Scan Feedback Box */}
                     {showFeedback && lastOutcome && (
                       <div
-                        className={`rounded-xl border p-4 text-xs shadow-xs transition-all duration-200 ${
+                        className={`rounded-xl border p-4 text-xs shadow-sm transition-all duration-200 ${
                           lastOutcome.resolution === "accepted"
-                            ? "border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100"
+                            ? "border-[#134441] bg-[#1B5E5A] text-white"
                             : "border-rose-400/50 bg-rose-50 dark:bg-rose-950/30 text-rose-950 dark:text-rose-100"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           {lastOutcome.resolution === "accepted" ? (
-                            <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                            <CheckCircle2 className="size-5 shrink-0 text-[#A3E5DE] mt-0.5" />
                           ) : (
                             <XCircle className="size-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
                           )}
@@ -707,7 +707,7 @@ export function IssuePanel({
                               <p
                                 className={`font-bold text-sm tracking-tight ${
                                   lastOutcome.resolution === "accepted"
-                                    ? "text-emerald-900 dark:text-emerald-200"
+                                    ? "text-white"
                                     : "text-rose-900 dark:text-rose-200"
                                 }`}
                               >
@@ -719,7 +719,7 @@ export function IssuePanel({
                                 <span
                                   className={`text-[11px] font-mono ${
                                     lastOutcome.resolution === "accepted"
-                                      ? "text-emerald-800/80 dark:text-emerald-300/80"
+                                      ? "text-white/80"
                                       : "text-rose-800/80 dark:text-rose-300/80"
                                   }`}
                                 >
@@ -730,7 +730,7 @@ export function IssuePanel({
                                   onClick={() => setActiveOutcome(null)}
                                   className={`inline-flex size-6 items-center justify-center rounded-full transition-colors cursor-pointer ${
                                     lastOutcome.resolution === "accepted"
-                                      ? "text-emerald-700 hover:bg-emerald-500/20 hover:text-emerald-950 dark:text-emerald-300 dark:hover:text-emerald-100"
+                                      ? "text-white/70 hover:text-white hover:bg-white/10"
                                       : "text-rose-700 hover:bg-rose-500/20 hover:text-rose-950 dark:text-rose-300 dark:hover:text-rose-100"
                                   }`}
                                   aria-label="Dismiss scan notification"
@@ -742,41 +742,36 @@ export function IssuePanel({
                             </div>
 
                             {lastOutcome.resolution === "accepted" ? (
-                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-lg border border-emerald-500/20 bg-background/80 p-2.5 mt-2 text-foreground">
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-lg border border-white/20 bg-white/10 p-2.5 mt-2 text-white">
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                  <span className="text-[10px] uppercase font-semibold text-white/75">
                                     Order ID
                                   </span>
-                                  <p className="font-bold wt-id">{lastOutcome.orderId ?? targetOrderId}</p>
+                                  <p className="font-bold wt-id text-white">{lastOutcome.orderId ?? targetOrderId}</p>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                  <span className="text-[10px] uppercase font-semibold text-white/75">
                                     Matched Lot ID
                                   </span>
-                                  <p className="font-bold wt-id text-primary">{lastOutcome.lotCode ?? lastOutcome.subjectId}</p>
+                                  <p className="font-bold wt-id text-white">{lastOutcome.lotCode ?? lastOutcome.subjectId}</p>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                  <span className="text-[10px] uppercase font-semibold text-white/75">
                                     Issued Meterage
                                   </span>
-                                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{lastOutcome.issuedQty ?? targetRequiredFabric} m</p>
+                                  <p className="font-bold text-[#A3E5DE]">{lastOutcome.issuedQty ?? targetRequiredFabric} m</p>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-muted-foreground">
+                                  <span className="text-[10px] uppercase font-semibold text-white/75">
                                     Remaining Balance
                                   </span>
-                                  <p className="font-bold">{lastOutcome.remainingBalance ?? 0} m</p>
+                                  <p className="font-bold text-white">{lastOutcome.remainingBalance ?? 0} m</p>
                                 </div>
                               </div>
                             ) : (
-                              <div className="space-y-1 pt-0.5">
-                                <p className="font-semibold text-rose-700 dark:text-rose-300 text-xs">
-                                  {lastOutcome.rejectReason ?? lastOutcome.resolution}
-                                </p>
-                                <p className="text-[11px] text-rose-950/80 dark:text-rose-200/85">
-                                  Card UID scanned: <span className="font-mono font-bold text-foreground">{lastOutcome.uid}</span>. Target order {targetOrderId} remains open awaiting valid fabric roll.
-                                </p>
-                              </div>
+                              <p className="text-xs font-medium text-rose-950 dark:text-rose-100 pt-1">
+                                {lastOutcome.rejectReason ?? "Hardware scan on Scanner 2 was rejected by workstation rules."}
+                              </p>
                             )}
                           </div>
                         </div>

@@ -10,13 +10,10 @@ export function TraceXMark({
 }) {
   return (
     <img
-      src="/images/tracex-logo.png"
-      alt="TraceX Logo"
+      src="/images/tracex-emblem.png"
+      alt="TraceX Emblem"
       style={{ height: size, width: size }}
-      className={cn(
-        "object-contain rounded-lg p-0.5 shrink-0 select-none",
-        className,
-      )}
+      className={cn("object-contain shrink-0 select-none", className)}
     />
   );
 }
@@ -40,10 +37,10 @@ export function Logo({
     >
       {showIcon && (
         <img
-          src="/images/tracex-logo.png"
+          src="/images/tracex-emblem.png"
           alt="TraceX Emblem"
           style={{ height, width: height }}
-          className="object-contain rounded-lg bg-[#FFFDFC] p-0.5 border border-[#CDBBA8]/80 shadow-2xs shrink-0"
+          className="object-contain shrink-0 select-none"
         />
       )}
       {showText && (

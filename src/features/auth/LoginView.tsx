@@ -74,10 +74,10 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
     <div
       className="relative flex min-h-screen items-center justify-center p-4 sm:p-6"
       style={{
-        backgroundColor: "#F2ECE2",
+        backgroundColor: "#FBF6EE",
         backgroundImage: `
-          radial-gradient(#dfd4c5 0.75px, transparent 0.75px),
-          radial-gradient(#dfd4c5 0.75px, #F2ECE2 0.75px)
+          radial-gradient(#E2C8A8 0.75px, transparent 0.75px),
+          radial-gradient(#E2C8A8 0.75px, #FBF6EE 0.75px)
         `,
         backgroundSize: "24px 24px",
         backgroundPosition: "0 0, 12px 12px",
@@ -86,13 +86,13 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
       {/* Ambient warm lighting overlay */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 bg-radial from-[#FBF6EE]/60 via-transparent to-[#2B170E]/5"
+        className="pointer-events-none fixed inset-0 bg-radial from-[#FFFDFC]/70 via-transparent to-[#2B170E]/5"
       />
 
       <div className="relative z-10 w-full max-w-[460px]">
         {/* Active Session Notification (if already signed in) */}
         {me.data && (
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-[#D9CEBF] bg-[#FAF6F0]/90 p-3.5 text-xs text-[#5C4535] backdrop-blur-sm shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-[#CDBBA8] bg-[#FFFDFC]/90 p-3.5 text-xs text-[#5C4535] backdrop-blur-sm shadow-sm">
             <div className="flex items-center gap-2 truncate">
               <CheckCircle2 className="size-4 shrink-0 text-[#8C6D53]" aria-hidden />
               <span className="truncate">
@@ -111,7 +111,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                 size="sm"
                 variant="outline"
                 onClick={() => void signOut()}
-                className="h-7 text-xs border-[#D9CEBF] text-[#5C4535] hover:bg-[#EAE1D3]"
+                className="h-7 text-xs border-[#CDBBA8] text-[#5C4535] hover:bg-[#F2E4D2]"
               >
                 Sign out
               </Button>
@@ -120,7 +120,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
         )}
 
         {/* Primary TraceX Card */}
-        <section className="rounded-[28px] border border-[#E4D9CB] bg-[#FAF6F0] p-8 sm:p-11 shadow-[0_22px_55px_-12px_rgba(70,45,25,0.08)]">
+        <section className="rounded-[28px] border border-[#CDBBA8] bg-[#FFFDFC] p-8 sm:p-11 shadow-[0_22px_55px_-12px_rgba(43,23,14,0.07)]">
           {/* Brand Logo & Header */}
           <div className="text-center">
             <AppLink
@@ -131,13 +131,13 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
               <img
                 src="/images/tracex-logo.png"
                 alt="TraceX Logo"
-                className="h-28 w-auto object-contain mix-blend-multiply drop-shadow-xs select-none"
+                className="h-28 w-auto object-contain select-none"
               />
             </AppLink>
-            <h1 className="mt-4 font-serif text-3xl sm:text-[32px] font-normal tracking-normal text-[#38281D]">
+            <h1 className="mt-4 font-serif text-3xl sm:text-[32px] font-normal tracking-normal text-[#2B170E]">
               Welcome back
             </h1>
-            <p className="mt-1 text-xs sm:text-sm text-[#8A7969]">
+            <p className="mt-1 text-xs sm:text-sm text-[#6E5748]">
               Sign in to continue to TraceX
             </p>
           </div>
@@ -146,7 +146,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
           <form onSubmit={onFormSubmit} className="mt-7 space-y-4" autoComplete="off">
             {/* Username Input */}
             <div className="space-y-1.5">
-              <div className="flex h-12 w-full items-center gap-3 rounded-xl border border-[#D8CCBD] bg-[#EFE7DC] px-3.5 transition-all focus-within:border-[#8C6D53] focus-within:bg-[#FAF6F0] focus-within:ring-2 focus-within:ring-[#8C6D53]/15">
+              <div className="flex h-12 w-full items-center gap-3 rounded-xl border border-[#CDBBA8] bg-[#FBF6EE]/60 px-3.5 transition-all focus-within:border-[#C79C70] focus-within:bg-[#FFFDFC] focus-within:ring-2 focus-within:ring-[#C79C70]/15">
                 <User className="size-4 shrink-0 text-[#8C7A6B]" aria-hidden />
                 <input
                   id="login-username"
@@ -157,7 +157,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                     if (errorMsg) setErrorMsg(null);
                   }}
                   placeholder="Enter your username"
-                  className="w-full bg-transparent text-sm text-[#38281D] placeholder:text-[#A49484] focus:outline-none"
+                  className="w-full bg-transparent text-sm text-[#2B170E] placeholder:text-[#A49484] focus:outline-none"
                   autoComplete="username"
                   disabled={isSubmitting}
                 />
@@ -166,7 +166,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
 
             {/* Password Input */}
             <div className="space-y-1.5">
-              <div className="flex h-12 w-full items-center gap-3 rounded-xl border border-[#D8CCBD] bg-[#EFE7DC] px-3.5 transition-all focus-within:border-[#8C6D53] focus-within:bg-[#FAF6F0] focus-within:ring-2 focus-within:ring-[#8C6D53]/15">
+              <div className="flex h-12 w-full items-center gap-3 rounded-xl border border-[#CDBBA8] bg-[#FBF6EE]/60 px-3.5 transition-all focus-within:border-[#C79C70] focus-within:bg-[#FFFDFC] focus-within:ring-2 focus-within:ring-[#C79C70]/15">
                 <Lock className="size-4 shrink-0 text-[#8C7A6B]" aria-hidden />
                 <input
                   id="login-password"
@@ -177,14 +177,14 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                     if (errorMsg) setErrorMsg(null);
                   }}
                   placeholder="••••••••"
-                  className="w-full bg-transparent text-sm text-[#38281D] placeholder:text-[#A49484] focus:outline-none"
+                  className="w-full bg-transparent text-sm text-[#2B170E] placeholder:text-[#A49484] focus:outline-none"
                   autoComplete="current-password"
                   disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-[#8C7A6B] transition-colors hover:text-[#5C4535] cursor-pointer"
+                  className="text-[#8C7A6B] transition-colors hover:text-[#2B170E] cursor-pointer"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   tabIndex={-1}
                 >
@@ -197,14 +197,14 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
             <div className="flex items-center justify-between pt-1 text-xs">
               <label
                 htmlFor="remember-me"
-                className="flex items-center gap-2 text-[#7A695B] select-none cursor-pointer"
+                className="flex items-center gap-2 text-[#6E5748] select-none cursor-pointer"
               >
                 <input
                   type="checkbox"
                   id="remember-me"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="size-4 rounded border-[#C8BCAC] text-[#8C6D53] accent-[#8C6D53] focus:ring-[#8C6D53]"
+                  className="size-4 rounded border-[#CDBBA8] text-[#8C6D53] accent-[#8C6D53] focus:ring-[#8C6D53]"
                 />
                 <span>Remember me</span>
               </label>
@@ -212,7 +212,7 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
               <button
                 type="button"
                 onClick={() => toast.info("Contact factory manager or admin to reset staff password.")}
-                className="text-[#5C4535] underline underline-offset-2 hover:text-[#38281D] transition-colors cursor-pointer"
+                className="text-[#6E5748] underline underline-offset-2 hover:text-[#2B170E] transition-colors cursor-pointer"
               >
                 Forgot password?
               </button>
@@ -247,11 +247,11 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
                   setPassword("weartrail123!");
                   if (errorMsg) setErrorMsg(null);
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-[#D8CCBD] bg-[#EFE7DC] px-4 py-1.5 text-xs text-[#6B5747] transition-all hover:bg-[#E5DACD] hover:border-[#8C6D53] hover:text-[#38281D] cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-2 rounded-full border border-[#CDBBA8] bg-[#F2E4D2]/60 px-4 py-1.5 text-xs text-[#6E5748] transition-all hover:bg-[#E2C8A8] hover:border-[#8C6D53] hover:text-[#2B170E] cursor-pointer shadow-xs"
               >
                 <span className="size-1.5 rounded-full bg-[#8C6D53]" />
                 <span>Demo Account:</span>
-                <code className="font-mono font-medium text-[#4A382A]">admin.demo</code>
+                <code className="font-mono font-medium text-[#2B170E]">admin.demo</code>
                 <span className="text-[#A49484]">·</span>
                 <span className="font-medium underline underline-offset-2">Auto-fill</span>
               </button>
