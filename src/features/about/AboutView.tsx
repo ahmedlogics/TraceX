@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Cpu,
   ExternalLink,
+  Factory,
   Layers,
   Lock,
   Package,
@@ -19,527 +20,574 @@ import {
   Sparkles,
   Truck,
   Warehouse,
-  Zap,
 } from "lucide-react";
 
 interface JourneyStage {
   step: number;
   title: string;
+  sub: string;
   station: string;
-  tagline: string;
-  description: string;
-  badge: string;
+  narrative: string;
+  side: "left" | "right";
   icon: typeof Boxes;
-  align: "left" | "right";
-  linkHref?: string;
-  linkText?: string;
+  badge: string;
 }
 
-const STAGES: JourneyStage[] = [
+const JOURNEY_STAGES: JourneyStage[] = [
   {
     step: 1,
-    title: "Fabric Receiving",
+    title: "FABRIC RECEIVING",
+    sub: "Raw roll logging",
     station: "Station 1 · Intake Dock",
-    tagline: "Raw roll logging & physical RFID binding",
-    description:
+    narrative:
       "The journey begins at fabric receiving, where the material manager enters fabric roll specifications into the dashboard and scans an RFID card at the intake scanner to digitally bind the material details to that physical bundle.",
-    badge: "Intake RFID Card",
+    side: "left",
     icon: Boxes,
-    align: "left",
+    badge: "Intake RFID Card",
   },
   {
     step: 2,
-    title: "Incoming QC",
+    title: "INCOMING QC",
+    sub: "Quality checks",
     station: "Station 1 QC · Quality Gate",
-    tagline: "Quality checks against technical standards",
-    description:
+    narrative:
       "The bundle automatically routes to the incoming quality manager's dashboard, who inspects the fabric against standard specifications and marks it as approved.",
-    badge: "Dock QC Approval",
+    side: "right",
     icon: ShieldCheck,
-    align: "right",
+    badge: "Dock QC Approval",
   },
   {
     step: 3,
-    title: "Raw Store Issue",
+    title: "RAW STORE ISSUE",
+    sub: "Material allocation",
     station: "Station 2 · Material Store",
-    tagline: "AI-driven material allocation & scrap reduction",
-    description:
+    narrative:
       "When the raw store manager creates a production order, an integrated AI recommender analyzes all accepted fabric inventory in real time to suggest the optimal roll that minimizes remnant cutting scrap. The manager selects the AI-recommended roll and scans its bundle card, seamlessly linking the production order to that exact fabric before issuing it to the floor.",
-    badge: "AI Optimization",
+    side: "left",
     icon: Sparkles,
-    align: "left",
+    badge: "AI Roll Matching",
   },
   {
     step: 4,
-    title: "Cutting & RFID Bind",
+    title: "CUTTING & RFID BIND",
+    sub: "Identify assignment",
     station: "Station 3 · Cutting Table",
-    tagline: "Pattern cutting & individual garment serialization",
-    description:
+    narrative:
       "At the cutting table, the operator scans the bundle card to automatically load all of its associated production orders, selects the specific order currently being cut, scans individual tags one by one to serialize each garment under that order, and clicks to complete the order to release the batch to the assembly line.",
-    badge: "Garment UID Serialization",
+    side: "right",
     icon: Scissors,
-    align: "right",
+    badge: "Garment Serialization",
   },
   {
     step: 5,
-    title: "Stitching Assembly",
+    title: "STITCHING ASSEMBLY",
+    sub: "Real-time tracking",
     station: "Station 4 · Sewing Line",
-    tagline: "Real-time assembly progress checkpointing",
-    description:
+    narrative:
       "The garments move through stitching, where line operators simply tap each shirt on their station scanners to instantly update manufacturing progress in real time without any manual typing.",
-    badge: "Tap-and-Go Tracking",
+    side: "left",
     icon: Cpu,
-    align: "left",
+    badge: "Direct RFID Tap",
   },
   {
     step: 6,
-    title: "Finishing",
+    title: "FINISHING",
+    sub: "Assembly completion",
     station: "Station 5 · Finishing Table",
-    tagline: "Assembly completion, trimming, and pressing",
-    description:
-      "The stitched garments proceed to finishing for thread trimming, buttoning, and ironing. Operators tap each garment on the finishing scanner to mark assembly complete and advance it directly to quality verification.",
-    badge: "Zero-Touch Progress",
+    narrative:
+      "The stitched garments proceed to finishing for thread trimming, buttoning, and pressing. Operators tap each garment on the finishing scanner to mark assembly complete and advance it directly to quality verification.",
+    side: "right",
     icon: Shirt,
-    align: "right",
+    badge: "Finishing Sensor",
   },
   {
     step: 7,
-    title: "Final QC",
+    title: "FINAL QC",
+    sub: "Inspection",
     station: "Station 6 · Inspection Gate",
-    tagline: "Defect inspection & cryptographic quality seal",
-    description:
+    narrative:
       "At the final quality gate, the inspector physically examines the completed garment, enters the evaluation decision on the screen, and taps the shirt on the inspection scanner to cryptographically bind the quality clearance to the product's identity.",
-    badge: "Cryptographic Clearance",
+    side: "left",
     icon: ShieldCheck,
-    align: "left",
+    badge: "Cryptographic Seal",
   },
   {
     step: 8,
-    title: "Packaging",
+    title: "PACKAGING",
+    sub: "Verification",
     station: "Station 7 · Packing Station",
-    tagline: "Master carton initialization & product packing",
-    description:
+    narrative:
       "Approved garments move to the packaging station, where the operator scans a box card to initialize a new carton on the dashboard, scans each shirt directly into that container, and seals the package.",
-    badge: "Container Aggregation",
+    side: "right",
     icon: Package,
-    align: "right",
+    badge: "Master Carton Tag",
   },
   {
     step: 9,
-    title: "Warehouse",
+    title: "WAREHOUSE",
+    sub: "stocking",
     station: "Station 8 · Finished Goods",
-    tagline: "Zero-touch inbound stock registration",
-    description:
+    narrative:
       "The sealed carton is transported to the finished-goods warehouse, where a zero-touch scan at the inbound reader instantly registers the box and its contents into stock inventory.",
-    badge: "Automated Ingestion",
+    side: "left",
     icon: Warehouse,
-    align: "left",
+    badge: "Zero-Touch Ingestion",
   },
   {
     step: 10,
-    title: "Dispatch",
+    title: "DISPATCH",
+    sub: "Final ledger",
     station: "Station 9 · Loading Dock Gate",
-    tagline: "Permanent ledger audit & carrier freight release",
-    description:
+    narrative:
       "When scheduled for delivery, the dispatch logistics officer scans the carton at the loading dock, where the system verifies that every enclosed item has passed all quality gates, writes the permanent departure record to the ledger, and clears the shipment for freight release.",
-    badge: "Immutable Ledger Audit",
+    side: "right",
     icon: Truck,
-    align: "right",
+    badge: "Outbound Clearance",
   },
   {
     step: 11,
-    title: "To Customer",
-    station: "Retail / Post-Sale · Consumer Experience",
-    tagline: "Tap NFC or Scan QR for live Digital Product Passport",
-    description:
+    title: "TO CUSTOMER",
+    sub: "SCAN QR → Live",
+    station: "Retail / Post-Sale · Customer Experience",
+    narrative:
       "Finally, when the garment reaches the consumer, the buyer taps their smartphone against the embedded smart tag to instantly launch its Digital Product Passport, providing complete and verifiable transparency into the garment's ethical origin, AI-optimized material efficiency, manufacturing timeline, and authentic craftsmanship.",
-    badge: "Live Customer DPP",
+    side: "left",
     icon: QrCode,
-    align: "left",
-    linkHref: paths.publicJourney("shirt-001-demo"),
-    linkText: "View Sample Passport",
+    badge: "Live Passport",
   },
 ];
 
 export function AboutView() {
-  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const [activeStep, setActiveStep] = useState<number | null>(null);
 
   const toggleStep = (step: number) => {
-    setExpandedStep((prev) => (prev === step ? null : step));
+    setActiveStep((prev) => (prev === step ? null : step));
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#2C241D] antialiased selection:bg-[#E4D5B7] selection:text-[#1F1914]">
-      {/* Top Floating Navigation */}
-      <header className="sticky top-0 z-50 border-b border-[#E7DEC8]/80 bg-[#FAF7F2]/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3.5">
-          <div className="flex items-center gap-3">
-            {/* TraceX Shield Icon */}
-            <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#8C6D3E] via-[#B89658] to-[#6E532B] text-white shadow-sm ring-1 ring-black/5">
-              <span className="font-serif font-black tracking-tighter text-lg leading-none">TX</span>
-            </div>
-            <div>
-              <span className="text-lg font-bold tracking-tight text-[#231A12]">TraceX</span>
-              <span className="ml-2 hidden sm:inline-block rounded-full bg-[#EFE8D6] px-2 py-0.5 text-[11px] font-medium text-[#7A6034]">
-                Project Showcase
-              </span>
-            </div>
+    <div className="min-h-screen bg-[#F4E8D3] text-[#291B12] font-sans selection:bg-[#DEC49F] selection:text-[#1F140D]">
+      {/* Top Standee Organic Arch Frame */}
+      <div className="w-full bg-[#291B12] text-[#F3E7D3] pt-3 pb-4 px-4 border-b border-[#3E2C20]">
+        <div className="mx-auto max-w-4xl flex items-center justify-between text-xs font-medium">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-[#C29F6C] animate-pulse" />
+            <span className="tracking-wider uppercase text-[11px] text-[#C29F6C] font-semibold">
+              NED Alumni Convention 2026 Showcase
+            </span>
           </div>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-3">
             <AppLink
               href={paths.publicJourney("shirt-001-demo")}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#D5C6A9] bg-white/80 px-3 py-1.5 text-xs font-semibold text-[#5A4525] shadow-xs hover:bg-white hover:border-[#B89658] transition-all"
+              className="inline-flex items-center gap-1.5 text-xs text-[#E8D6BF] hover:text-white transition-colors"
             >
-              <QrCode className="size-3.5 text-[#B89658]" />
-              <span className="hidden sm:inline">Sample</span> Passport
+              <QrCode className="size-3.5 text-[#C29F6C]" />
+              <span>Live Passport</span>
             </AppLink>
+            <span className="text-[#594132]">·</span>
             <AppLink
               href={paths.home}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#2D2217] px-3.5 py-1.5 text-xs font-semibold text-[#F7F3EB] shadow-xs hover:bg-[#1D160E] transition-all"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#C29F6C] text-[#24150D] font-bold px-3 py-1 text-[11px] hover:bg-[#D5B584] transition-colors"
             >
               <span>Staff Workspace</span>
-              <ArrowRight className="size-3.5" />
+              <ArrowRight className="size-3" />
             </AppLink>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden pt-12 pb-14 sm:pt-16 sm:pb-20 border-b border-[#EFE8D6]">
-        {/* Subtle decorative background pattern */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#C5A880_1px,transparent_1px)] [background-size:24px_24px] opacity-25" />
-
-        <div className="relative mx-auto max-w-5xl px-4 sm:px-6 text-center space-y-6">
-          {/* Standee Shield Emblem */}
-          <div className="mx-auto flex size-20 sm:size-24 items-center justify-center rounded-3xl bg-gradient-to-br from-[#8C6D3E] via-[#C5A880] to-[#5C4524] p-[3px] shadow-lg shadow-[#8C6D3E]/15">
-            <div className="flex size-full items-center justify-center rounded-[21px] bg-[#FAF7F2] border border-[#E7DEC8]">
-              <div className="text-center">
-                <span className="font-serif font-black text-3xl sm:text-4xl text-[#7A5B2B] tracking-tight">TX</span>
+      {/* Main Standee Column (max-w-2xl creates the exact vertical standee proportion) */}
+      <main className="mx-auto max-w-2xl px-4 py-8 sm:py-12 space-y-10">
+        {/* ========================================================= */}
+        {/* HEADER SECTION: LOGO, TITLE, TAGLINE, HERO BANNER         */}
+        {/* ========================================================= */}
+        <section className="text-center space-y-5">
+          {/* Standee Shield Logo Badge */}
+          <div className="inline-flex flex-col items-center">
+            <div className="relative flex size-24 sm:size-28 items-center justify-center rounded-[32px] border-2 border-[#291B12] bg-[#FAF5EC] shadow-[0_8px_24px_rgba(41,27,18,0.12)] p-2">
+              {/* Inner Shield Graphic with Scissors and Blockchain nodes */}
+              <div className="flex size-full flex-col items-center justify-center rounded-[24px] border border-[#D9C4A6] bg-[#F7EFE1]">
+                <div className="flex items-center justify-center text-[#291B12]">
+                  <Scissors className="size-9 stroke-[2.2] text-[#291B12] rotate-90" />
+                </div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="size-1.5 rounded-full bg-[#C29F6C]" />
+                  <span className="h-0.5 w-4 bg-[#8C6D4A]" />
+                  <span className="size-1.5 rounded-full bg-[#C29F6C]" />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Title and Tagline matching Standee */}
-          <div className="space-y-3 max-w-3xl mx-auto">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-[#1F1710]">
-              Trace<span className="text-[#96743A]">X</span>
+          {/* Title: TraceX */}
+          <div className="space-y-1">
+            <h1 className="text-5xl sm:text-6xl font-black tracking-tight text-[#24160E]">
+              Trace<span className="text-[#C29F6C]">X</span>
             </h1>
-            <p className="text-lg sm:text-xl md:text-2xl font-semibold text-[#4A3B2B] leading-snug">
+            <p className="text-base sm:text-lg font-bold text-[#2A1B12] max-w-lg mx-auto leading-snug">
               A Blockchain-Based Real-Time Smart Supply Chain Traceability System
             </p>
           </div>
 
-          {/* Sub-banner Pill */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#D5C6A9] bg-[#EFE8D6]/80 px-4 py-1.5 text-xs sm:text-sm font-semibold text-[#6E532B] shadow-xs">
-            <span className="size-2 rounded-full bg-[#B89658] animate-pulse" />
-            <span>From Raw Fabric Intake to Verified Customer Passport</span>
-          </div>
-
-          {/* Academic / Showcase Credits */}
-          <p className="text-xs sm:text-sm text-[#7A6852] max-w-xl mx-auto">
-            Department of Software Engineering · NED University of Engineering &amp; Technology, Karachi
-            <br />
-            <span className="text-[11px] text-[#9A8770]">NED Alumni Convention 2026 Showcase</span>
-          </p>
-
-          {/* Visual Hardware Chain Icons */}
-          <div className="pt-4 flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs font-semibold text-[#7A633F]">
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D6BE] bg-white/70 px-3 py-1.5">
-              <Boxes className="size-3.5 text-[#A58245]" /> Raw Fabric RFID
-            </span>
-            <span className="text-[#C5B393]">➔</span>
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D6BE] bg-white/70 px-3 py-1.5">
-              <Scissors className="size-3.5 text-[#A58245]" /> Cutting &amp; Garment UID
-            </span>
-            <span className="text-[#C5B393]">➔</span>
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D6BE] bg-white/70 px-3 py-1.5">
-              <Cpu className="size-3.5 text-[#A58245]" /> Assembly Scanners
-            </span>
-            <span className="text-[#C5B393]">➔</span>
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D6BE] bg-white/70 px-3 py-1.5">
-              <Lock className="size-3.5 text-[#A58245]" /> Ledger Hash
-            </span>
-            <span className="text-[#C5B393]">➔</span>
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D6BE] bg-white/70 px-3 py-1.5">
-              <QrCode className="size-3.5 text-[#A58245]" /> Customer Passport
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* The Conventional Blindspot — 3 Core Pillars */}
-      <section className="py-14 sm:py-18 bg-[#F4EFE6]/60 border-b border-[#EAE1CF]">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="text-center space-y-2 mb-10">
-            <span className="inline-block rounded-full bg-[#E5DCBE] px-3 py-0.5 text-xs font-bold uppercase tracking-wider text-[#634E27]">
-              Core Architectural Pillars
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#231A12]">
-              The Conventional Blindspot
-            </h2>
-            <p className="text-sm text-[#735F47] max-w-2xl mx-auto">
-              How TraceX closes the critical visibility gap in cut-and-sew garment manufacturing.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Pillar 1 */}
-            <div className="rounded-2xl border border-[#DFD3BB] bg-white p-6 shadow-sm space-y-4 hover:shadow-md transition-shadow">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-[#F6F1E5] text-[#8C6D3E] border border-[#E8DFC9]">
-                <Layers className="size-6" />
-              </div>
-              <div className="space-y-1.5">
-                <h3 className="font-bold text-sm tracking-wide text-[#261C13] uppercase">
-                  Unbroken Raw-to-Garment Lineage
-                </h3>
-                <p className="text-sm text-[#614F3C] leading-relaxed">
-                  Tracks physical fabric rolls directly to finished garments. Unlike systems that only track packaged goods, TraceX links raw rolls through split cuts, sewing lines, and serializes every individual shirt.
-                </p>
-              </div>
-            </div>
-
-            {/* Pillar 2 */}
-            <div className="rounded-2xl border border-[#DFD3BB] bg-white p-6 shadow-sm space-y-4 hover:shadow-md transition-shadow">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-[#F6F1E5] text-[#8C6D3E] border border-[#E8DFC9]">
-                <Radio className="size-6" />
-              </div>
-              <div className="space-y-1.5">
-                <h3 className="font-bold text-sm tracking-wide text-[#261C13] uppercase">
-                  Frictionless RFID Tap-to-Identify
-                </h3>
-                <p className="text-sm text-[#614F3C] leading-relaxed">
-                  9-reader connected edge hardware network (13.56 MHz RC522). Machine operators tap shirts or bundle cards directly at their station, eliminating paper traveler sheets and manual keyboard entry.
-                </p>
-              </div>
-            </div>
-
-            {/* Pillar 3 */}
-            <div className="rounded-2xl border border-[#DFD3BB] bg-white p-6 shadow-sm space-y-4 hover:shadow-md transition-shadow">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-[#F6F1E5] text-[#8C6D3E] border border-[#E8DFC9]">
-                <Lock className="size-6" />
-              </div>
-              <div className="space-y-1.5">
-                <h3 className="font-bold text-sm tracking-wide text-[#261C13] uppercase">
-                  Zero-Knowledge Provenance Ledger
-                </h3>
-                <p className="text-sm text-[#614F3C] leading-relaxed">
-                  Cryptographic SHA-256 tamper-proof ledger audit trail. Internal yields and defect logs remain private, while providing shoppers and enterprise buyers with unalterable proof of authentic provenance.
-                </p>
-              </div>
+          {/* Golden Tan Pill Banner */}
+          <div>
+            <div className="inline-block rounded-full bg-[#DEC49F] border border-[#C5AA82] px-5 py-1.5 text-xs sm:text-sm font-bold text-[#26170E] shadow-xs">
+              From Raw Fabric Intake to Verified Customer Passport
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* The Traceable Journey — Standee Vertical Timeline */}
-      <section className="py-14 sm:py-20">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6">
-          <div className="text-center space-y-2 mb-12">
-            <span className="inline-block rounded-full bg-[#E5DCBE] px-3.5 py-0.5 text-xs font-bold uppercase tracking-wider text-[#634E27]">
-              Step-by-Step Manufacturing Lifecycle
-            </span>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#231A12]">
-              The Traceable Journey
-            </h2>
-            <p className="text-sm text-[#735F47] max-w-xl mx-auto">
-              Follow a physical fabric roll through 11 continuous checkpoints from receiving dock to consumer smartphone tap.
-            </p>
-          </div>
-
-          {/* Timeline Spine Container */}
-          <div className="relative">
-            {/* Center Vertical Connecting Spine */}
-            <div className="absolute left-6 sm:left-1/2 top-4 bottom-4 w-0.5 -translate-x-1/2 bg-gradient-to-b from-[#C5A880] via-[#8C6D3E] to-[#C5A880]" />
-
-            <div className="space-y-6 sm:space-y-8">
-              {STAGES.map((s) => {
-                const Icon = s.icon;
-                const isExpanded = expandedStep === s.step;
-                const isLeft = s.align === "left";
-
-                return (
-                  <div
-                    key={s.step}
-                    className={`relative flex flex-col sm:flex-row items-start ${
-                      isLeft ? "sm:flex-row-reverse" : ""
-                    }`}
-                  >
-                    {/* Content Card */}
-                    <div className="ml-14 sm:ml-0 sm:w-[calc(50%-2rem)] w-[calc(100%-3.5rem)]">
-                      <div
-                        onClick={() => toggleStep(s.step)}
-                        className={`group cursor-pointer rounded-2xl border transition-all ${
-                          isExpanded
-                            ? "border-[#B89658] bg-white shadow-md ring-2 ring-[#B89658]/20"
-                            : "border-[#DFD3BB] bg-white/90 hover:bg-white hover:border-[#C5A880] shadow-xs"
-                        } p-5 space-y-2`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-[#96743A]">
-                            {s.station}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F3EDE0] px-2 py-0.5 text-[10px] font-semibold text-[#664F26]">
-                            {s.badge}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-base font-bold text-[#231A12] group-hover:text-[#8C6D3E] transition-colors">
-                            {s.title}
-                          </h3>
-                          <ChevronDown
-                            className={`size-4 text-[#9C8A73] transition-transform duration-200 ${
-                              isExpanded ? "rotate-180 text-[#8C6D3E]" : ""
-                            }`}
-                          />
-                        </div>
-
-                        <p className="text-xs font-medium text-[#7D6A54]">{s.tagline}</p>
-
-                        {/* Expandable in-depth narrative */}
-                        <div
-                          className={`overflow-hidden transition-all duration-300 text-xs sm:text-sm text-[#4E3E2C] leading-relaxed ${
-                            isExpanded ? "pt-2 max-h-96 opacity-100" : "max-h-0 opacity-0"
-                          }`}
-                        >
-                          <div className="border-t border-[#EFE8D6] pt-2.5 space-y-3">
-                            <p>{s.description}</p>
-                            {s.linkHref && (
-                              <div>
-                                <AppLink
-                                  href={s.linkHref}
-                                  className="inline-flex items-center gap-1.5 font-semibold text-[#8C6D3E] hover:text-[#5E4723] transition-colors"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <span>{s.linkText}</span>
-                                  <ExternalLink className="size-3" />
-                                </AppLink>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Numbered Center Badge matching Standee */}
-                    <div className="absolute left-6 sm:left-1/2 -translate-x-1/2 flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-[#8C6D3E] to-[#5C4524] text-white shadow-md ring-4 ring-[#FAF7F2]">
-                      <span className="font-mono font-black text-sm">{s.step}</span>
-                    </div>
-
-                    {/* Spacer for opposite side */}
-                    <div className="hidden sm:block sm:w-[calc(50%-2rem)]" />
+          {/* Standee Visual Vignette Chain (Fabric Roll ➔ Factory ➔ Sewing ➔ Box ➔ Blockchain) */}
+          <div className="pt-2">
+            <div className="rounded-2xl border border-[#DBC19C] bg-[#ECE0CB]/70 p-3.5 shadow-inner">
+              <div className="flex items-center justify-between max-w-md mx-auto text-[#291B12]">
+                {/* 1. Fabric Roll */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex size-11 items-center justify-center rounded-full bg-white/90 border border-[#D5BE98] shadow-xs">
+                    <Boxes className="size-5 text-[#8A673E]" />
                   </div>
-                );
-              })}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A412F]">Fabric</span>
+                </div>
+
+                <span className="text-[#C29F6C] font-bold">➔</span>
+
+                {/* 2. Factory */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex size-11 items-center justify-center rounded-full bg-white/90 border border-[#D5BE98] shadow-xs">
+                    <Factory className="size-5 text-[#8A673E]" />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A412F]">Factory</span>
+                </div>
+
+                <span className="text-[#C29F6C] font-bold">➔</span>
+
+                {/* 3. Sewing */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex size-11 items-center justify-center rounded-full bg-white/90 border border-[#D5BE98] shadow-xs">
+                    <Shirt className="size-5 text-[#8A673E]" />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A412F]">Assembly</span>
+                </div>
+
+                <span className="text-[#C29F6C] font-bold">➔</span>
+
+                {/* 4. Carton */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex size-11 items-center justify-center rounded-full bg-white/90 border border-[#D5BE98] shadow-xs">
+                    <Package className="size-5 text-[#8A673E]" />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A412F]">Carton</span>
+                </div>
+
+                <span className="text-[#C29F6C] font-bold">➔</span>
+
+                {/* 5. Blockchain Cubes */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex size-11 items-center justify-center rounded-full bg-[#291B12] text-[#DEC49F] shadow-xs">
+                    <Lock className="size-5" />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#291B12]">Ledger</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Compliance & Impact Metrics matching Standee */}
-      <section className="py-14 sm:py-18 bg-[#F4EFE6]/70 border-t border-b border-[#EAE1CF]">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="text-center space-y-2 mb-10">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#231A12]">
+        {/* ========================================================= */}
+        {/* THE CONVENTIONAL BLINDSPOT — 3 WHITE CARDS                */}
+        {/* ========================================================= */}
+        <section className="space-y-4">
+          {/* Dark Espresso Badge */}
+          <div className="text-center">
+            <span className="inline-block rounded-full bg-[#291B12] px-5 py-1 text-xs font-bold uppercase tracking-wider text-[#FAF5EC] shadow-xs">
+              The Conventional Blindspot
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            {/* Card 1 */}
+            <div className="rounded-2xl border border-[#D8C2A0] bg-white p-4 text-center shadow-[0_4px_16px_rgba(41,27,18,0.06)] space-y-2.5">
+              <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-[#F7EFE1] text-[#291B12] border border-[#E5D2B8]">
+                <Layers className="size-5 text-[#8A673E]" />
+              </div>
+              <h3 className="text-xs font-extrabold uppercase tracking-tight text-[#24160E] leading-snug">
+                Unbroken Raw-to-Garment Lineage
+              </h3>
+              <p className="text-[11px] text-[#594435] leading-relaxed">
+                Tracks physical fabric rolls directly to finished garments.
+              </p>
+            </div>
+
+            {/* Card 2 */}
+            <div className="rounded-2xl border border-[#D8C2A0] bg-white p-4 text-center shadow-[0_4px_16px_rgba(41,27,18,0.06)] space-y-2.5">
+              <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-[#F7EFE1] text-[#291B12] border border-[#E5D2B8]">
+                <Radio className="size-5 text-[#8A673E]" />
+              </div>
+              <h3 className="text-xs font-extrabold uppercase tracking-tight text-[#24160E] leading-snug">
+                Frictionless RFID Tap-to-Identify
+              </h3>
+              <p className="text-[11px] text-[#594435] leading-relaxed">
+                9-reader connected edge hardware network (13.56 MHz RC522).
+              </p>
+            </div>
+
+            {/* Card 3 */}
+            <div className="rounded-2xl border border-[#D8C2A0] bg-white p-4 text-center shadow-[0_4px_16px_rgba(41,27,18,0.06)] space-y-2.5">
+              <div className="mx-auto flex size-10 items-center justify-center rounded-xl bg-[#F7EFE1] text-[#291B12] border border-[#E5D2B8]">
+                <Lock className="size-5 text-[#8A673E]" />
+              </div>
+              <h3 className="text-xs font-extrabold uppercase tracking-tight text-[#24160E] leading-snug">
+                Zero-Knowledge Provenance Ledger
+              </h3>
+              <p className="text-[11px] text-[#594435] leading-relaxed">
+                Cryptographic SHA-256 tamper-proof ledger audit trail.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* THE TRACEABLE JOURNEY — STANDEE ZIG-ZAG TIMELINE          */}
+        {/* ========================================================= */}
+        <section className="space-y-4">
+          {/* Dark Espresso Badge */}
+          <div className="text-center">
+            <span className="inline-block rounded-full bg-[#291B12] px-6 py-1 text-xs font-bold uppercase tracking-wider text-[#FAF5EC] shadow-xs">
+              The Traceable Journey
+            </span>
+          </div>
+
+          {/* Main Beige/Caramel Card Container */}
+          <div className="rounded-3xl border border-[#D5BE98] bg-[#F7ECD9] p-5 sm:p-7 shadow-[0_8px_24px_rgba(41,27,18,0.08)]">
+            <div className="relative">
+              {/* Central Spine Line */}
+              <div className="absolute left-1/2 top-3 bottom-3 w-0.5 -translate-x-1/2 bg-[#B89B7A]" />
+
+              <div className="space-y-5">
+                {JOURNEY_STAGES.map((s) => {
+                  const Icon = s.icon;
+                  const isExpanded = activeStep === s.step;
+                  const isLeft = s.side === "left";
+
+                  return (
+                    <div key={s.step} className="relative flex items-center justify-between">
+                      {/* Left Slot */}
+                      <div className="w-[calc(50%-1.5rem)] text-right pr-2">
+                        {isLeft ? (
+                          <div
+                            onClick={() => toggleStep(s.step)}
+                            className="group cursor-pointer select-none space-y-0.5 inline-block text-right"
+                          >
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span className="font-extrabold text-xs sm:text-sm text-[#26170E] group-hover:text-[#8C6D4A] transition-colors uppercase">
+                                {s.title}
+                              </span>
+                              <Icon className="size-4 shrink-0 text-[#7A5B3D]" />
+                            </div>
+                            <div className="text-[10px] sm:text-[11px] text-[#69513F] font-medium flex items-center justify-end gap-1">
+                              <span>{s.sub}</span>
+                              <span className="text-[#8C6D4A] font-bold">➔</span>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Center Solid Circle Badge with Number */}
+                      <button
+                        type="button"
+                        onClick={() => toggleStep(s.step)}
+                        aria-label={`Toggle details for ${s.title}`}
+                        className="relative z-10 flex size-8 sm:size-9 shrink-0 items-center justify-center rounded-full bg-[#6D5545] text-white shadow-sm ring-2 ring-[#F7ECD9] hover:bg-[#291B12] transition-colors cursor-pointer"
+                      >
+                        <span className="font-mono text-xs sm:text-sm font-extrabold">{s.step}</span>
+                      </button>
+
+                      {/* Right Slot */}
+                      <div className="w-[calc(50%-1.5rem)] text-left pl-2">
+                        {!isLeft ? (
+                          <div
+                            onClick={() => toggleStep(s.step)}
+                            className="group cursor-pointer select-none space-y-0.5 inline-block text-left"
+                          >
+                            <div className="flex items-center justify-start gap-1.5">
+                              <Icon className="size-4 shrink-0 text-[#7A5B3D]" />
+                              <span className="font-extrabold text-xs sm:text-sm text-[#26170E] group-hover:text-[#8C6D4A] transition-colors uppercase">
+                                {s.title}
+                              </span>
+                            </div>
+                            <div className="text-[10px] sm:text-[11px] text-[#69513F] font-medium flex items-center justify-start gap-1">
+                              <span className="text-[#8C6D4A] font-bold">➔</span>
+                              <span>{s.sub}</span>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Expandable narrative drawer popup directly under the stage */}
+                      {isExpanded && (
+                        <div className="absolute left-0 right-0 top-11 z-20 rounded-2xl border border-[#C5AA82] bg-white p-4 shadow-xl text-left space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#8A673E]">
+                              {s.station}
+                            </span>
+                            <span className="rounded-full bg-[#F4E8D3] px-2 py-0.5 text-[10px] font-bold text-[#5C422E]">
+                              {s.badge}
+                            </span>
+                          </div>
+                          <p className="text-xs text-[#3D2C1E] leading-relaxed">{s.narrative}</p>
+                          {s.step === 11 && (
+                            <div className="pt-1">
+                              <AppLink
+                                href={paths.publicJourney("shirt-001-demo")}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#8A673E] hover:underline"
+                              >
+                                <span>Launch Live Sample Digital Product Passport</span>
+                                <ExternalLink className="size-3" />
+                              </AppLink>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Standee QR Code Tap CTA at bottom of timeline */}
+            <div className="mt-8 pt-5 border-t border-[#DEC8A6] flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-center sm:text-left space-y-0.5">
+                <span className="text-xs font-black text-[#26170E] uppercase tracking-wide">
+                  Touch-free Visitor Experience
+                </span>
+                <p className="text-[11px] text-[#69513F]">
+                  Tap any numbered milestone above to view live technical execution details.
+                </p>
+              </div>
+
+              <AppLink
+                href={paths.publicJourney("shirt-001-demo")}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#291B12] px-4 py-2 text-xs font-bold text-[#F3E7D3] hover:bg-[#3E2C20] shadow-sm transition-all"
+              >
+                <QrCode className="size-4 text-[#C29F6C]" />
+                <span>Open Live Customer Passport</span>
+              </AppLink>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* COMPLIANCE & IMPACT METRICS                               */}
+        {/* ========================================================= */}
+        <section className="space-y-4">
+          <div className="text-center">
+            <h2 className="text-lg sm:text-xl font-extrabold text-[#26170E]">
               Compliance &amp; Impact Metrics
             </h2>
-            <p className="text-sm text-[#735F47]">
-              Measurable operational and regulatory impact on garment manufacturing.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 text-center">
             {/* Metric 1 */}
-            <div className="rounded-2xl border border-[#DFD3BB] bg-white p-6 shadow-xs space-y-2">
-              <div className="text-4xl sm:text-5xl font-black tracking-tight text-[#8C6D3E]">
+            <div className="rounded-2xl border border-[#D5BE98] bg-[#F7ECD9] p-4 shadow-xs space-y-1">
+              <div className="text-2xl sm:text-3xl font-black text-[#26170E] tracking-tight">
                 [ 100% ]
               </div>
-              <h3 className="font-bold text-sm text-[#231A12]">
-                Traceability Lineage from Yarn to Retail
-              </h3>
-              <p className="text-xs text-[#7A6852]">
-                Unbroken custody chain linking initial raw fabric batch specs directly to retail garments.
+              <p className="text-xs font-bold text-[#2A1B12]">
+                Traceability Lineage
+              </p>
+              <p className="text-[11px] text-[#6E5544]">
+                from Yarn to Retail
               </p>
             </div>
 
             {/* Metric 2 */}
-            <div className="rounded-2xl border border-[#DFD3BB] bg-white p-6 shadow-xs space-y-2">
-              <div className="text-4xl sm:text-5xl font-black tracking-tight text-[#8C6D3E]">
-                [ 5 – 8 ]%
+            <div className="rounded-2xl border border-[#D5BE98] bg-[#F7ECD9] p-4 shadow-xs space-y-1">
+              <div className="text-2xl sm:text-3xl font-black text-[#26170E] tracking-tight">
+                [ 5 – 8]%
               </div>
-              <h3 className="font-bold text-sm text-[#231A12]">
-                Fabric Waste Reduction via Smart Allocation
-              </h3>
-              <p className="text-xs text-[#7A6852]">
-                Real-time AI roll matching optimizes yardage usage and eliminates remnant offcut scrap.
+              <p className="text-xs font-bold text-[#2A1B12]">
+                Fabric Waste Reduction
+              </p>
+              <p className="text-[11px] text-[#6E5544]">
+                via Smart Allocation
               </p>
             </div>
 
             {/* Metric 3 */}
-            <div className="rounded-2xl border border-[#DFD3BB] bg-white p-6 shadow-xs space-y-2">
-              <div className="text-4xl sm:text-5xl font-black tracking-tight text-[#8C6D3E]">
+            <div className="rounded-2xl border border-[#D5BE98] bg-[#F7ECD9] p-4 shadow-xs space-y-1">
+              <div className="text-2xl sm:text-3xl font-black text-[#26170E] tracking-tight">
                 [ EU DPP ]
               </div>
-              <h3 className="font-bold text-sm text-[#231A12]">
-                Digital Product Passport Compliant
-              </h3>
-              <p className="text-xs text-[#7A6852]">
-                Meets EU Ecodesign for Sustainable Products Regulation (ESPR) provenance requirements.
+              <p className="text-xs font-bold text-[#2A1B12]">
+                Digital Product Passport
+              </p>
+              <p className="text-[11px] text-[#6E5544]">
+                Compliant
               </p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Blockchain Verified Callout matching Standee Footer */}
-      <section className="py-14 sm:py-18">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6">
-          <div className="rounded-3xl border border-[#2B2117] bg-[#1E1711] text-[#F5EFE6] p-8 sm:p-10 shadow-xl space-y-6 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[#C5A880]/15 text-[#E4D5B7] border border-[#C5A880]/30">
-              <CheckCircle2 className="size-6 text-[#D5B889]" />
+        {/* ========================================================= */}
+        {/* BLOCKCHAIN VERIFIED FOOTER CARD (DEEP ROAST ESPRESSO)      */}
+        {/* ========================================================= */}
+        <section>
+          <div className="rounded-3xl border border-[#3E2B1E] bg-[#22150E] text-[#F3E7D3] p-6 sm:p-8 shadow-xl text-center space-y-4">
+            {/* Golden Shield / Check Icon */}
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-[#C29F6C]/15 border border-[#C29F6C]/40 text-[#C29F6C]">
+              <CheckCircle2 className="size-6 text-[#C29F6C]" />
             </div>
 
-            <div className="space-y-2 max-w-xl mx-auto">
-              <h3 className="text-xl sm:text-2xl font-black tracking-wider text-[#F2E8D7] uppercase">
-                Blockchain Verified
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-lg sm:text-xl font-black tracking-wider text-[#C29F6C] uppercase">
+                BLOCKCHAIN VERIFIED
               </h3>
-              <p className="text-xs sm:text-sm text-[#C8B89E] leading-relaxed">
-                Every garment is sealed with an immutable SHA-256 tamperproof hash. Anyone can scan the embedded NFC tag or QR code to verify complete factory authenticity on the public ledger.
+              <p className="text-xs text-[#E5D2BA] leading-relaxed">
+                Every garment sealed with a SHA-256 tamperproof hash. Scan to verify authenticity on the public ledger.
               </p>
             </div>
 
-            {/* Interactive CTAs */}
+            {/* Standee Dot Chain Indicator */}
+            <div className="flex items-center justify-center gap-2 pt-1 text-[#C29F6C]/60">
+              <span className="size-1.5 rounded-full bg-[#C29F6C]" />
+              <span className="h-0.5 w-6 bg-[#C29F6C]/30" />
+              <span className="size-1.5 rounded-full bg-[#C29F6C]" />
+              <span className="h-0.5 w-6 bg-[#C29F6C]/30" />
+              <span className="size-1.5 rounded-full bg-[#C29F6C]" />
+              <span className="h-0.5 w-6 bg-[#C29F6C]/30" />
+              <span className="size-1.5 rounded-full bg-[#C29F6C]" />
+            </div>
+
+            {/* Quick Actions */}
             <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
               <AppLink
                 href={paths.publicJourney("shirt-001-demo")}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#9E7D46] via-[#B89658] to-[#8C6D3E] px-5 py-2.5 text-xs sm:text-sm font-bold text-white shadow-sm hover:brightness-105 transition-all"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#C29F6C] px-4 py-2 text-xs font-bold text-[#24150D] hover:bg-[#D5B584] transition-all shadow-sm"
               >
-                <QrCode className="size-4" />
-                <span>Explore Live Customer Passport</span>
+                <QrCode className="size-3.5" />
+                <span>Verify Sample Garment</span>
               </AppLink>
 
               <AppLink
                 href={paths.home}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#524131] bg-[#2E2319] px-5 py-2.5 text-xs sm:text-sm font-bold text-[#EFE8D6] hover:bg-[#3D2F22] transition-colors"
+                className="inline-flex items-center gap-2 rounded-xl border border-[#543C2C] bg-[#332117] px-4 py-2 text-xs font-bold text-[#E5D2BA] hover:bg-[#452D20] transition-colors"
               >
-                <span>Open Factory Workspace</span>
-                <ArrowRight className="size-4" />
+                <span>Factory Login</span>
+                <ArrowRight className="size-3.5" />
               </AppLink>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Page Footer */}
-      <footer className="border-t border-[#EAE1CF] py-8 text-center text-xs text-[#7A6852] space-y-2 bg-[#F6F1E6]">
-        <p className="font-semibold text-[#3D2F20]">
-          TraceX · Department of Software Engineering, NED University of Engineering &amp; Technology, Karachi
-        </p>
-        <p className="text-[11px] text-[#9A8770]">
-          NED Alumni Convention 2026 Technology Showcase · Supervised by Dr. Kashif Mehboob Khan
-        </p>
-      </footer>
+        {/* Footer Credits */}
+        <footer className="text-center text-[11px] text-[#7A604D] space-y-1 pt-2 pb-6">
+          <p className="font-bold text-[#291B12]">
+            TraceX · Department of Software Engineering, NED University of Engineering &amp; Technology, Karachi
+          </p>
+          <p>
+            Supervised by Dr. Kashif Mehboob Khan · Technology Showcase 2026
+          </p>
+        </footer>
+      </main>
     </div>
   );
 }
