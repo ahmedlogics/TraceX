@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as PRouteRouteImport } from './routes/p/route'
 import { Route as StaffRouteRouteImport } from './routes/staff/route'
 import { Route as StaffWorkspaceRouteRouteImport } from './routes/staff/_workspace/route'
@@ -44,6 +45,11 @@ import { Route as StaffWorkspaceQualityInspectionsInspectionIdRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PRouteRoute = PRouteRouteImport.update({
@@ -216,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/p': typeof PRouteRouteWithChildren
   '/staff': typeof StaffRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/staff/login': typeof StaffLoginRoute
   '/p/$publicId/proof': typeof PPublicIdProofRoute
   '/staff/account': typeof StaffWorkspaceAccountRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/p': typeof PRouteRouteWithChildren
   '/staff': typeof StaffWorkspaceIndexRoute
+  '/about': typeof AboutRoute
   '/staff/login': typeof StaffLoginRoute
   '/p/$publicId/proof': typeof PPublicIdProofRoute
   '/staff/account': typeof StaffWorkspaceAccountRoute
@@ -280,6 +288,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/p': typeof PRouteRouteWithChildren
   '/staff': typeof StaffRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/staff/_workspace': typeof StaffWorkspaceRouteRouteWithChildren
   '/staff/login': typeof StaffLoginRoute
   '/p/$publicId/proof': typeof PPublicIdProofRoute
@@ -315,6 +324,7 @@ export interface FileRouteTypes {
     | '/'
     | '/p'
     | '/staff'
+    | '/about'
     | '/staff/login'
     | '/p/$publicId/proof'
     | '/staff/account'
@@ -347,6 +357,7 @@ export interface FileRouteTypes {
     | '/'
     | '/p'
     | '/staff'
+    | '/about'
     | '/staff/login'
     | '/p/$publicId/proof'
     | '/staff/account'
@@ -378,6 +389,7 @@ export interface FileRouteTypes {
     | '/'
     | '/p'
     | '/staff'
+    | '/about'
     | '/staff/_workspace'
     | '/staff/login'
     | '/p/$publicId/proof'
@@ -412,6 +424,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   PRouteRoute: typeof PRouteRouteWithChildren
   StaffRouteRoute: typeof StaffRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -421,6 +434,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/p': {
@@ -728,6 +748,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   PRouteRoute: PRouteRouteWithChildren,
   StaffRouteRoute: StaffRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

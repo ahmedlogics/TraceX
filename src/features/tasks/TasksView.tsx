@@ -147,7 +147,14 @@ function taskStationCode(checkpoint?: string): string | null {
   }
 }
 
-export function TasksSection({ showHeader = true }: { showHeader?: boolean } = {}) {
+export function TasksSection({
+  showHeader = true,
+  hideHeader = false,
+}: {
+  showHeader?: boolean;
+  hideHeader?: boolean;
+} = {}) {
+  const shouldShowHeader = showHeader && !hideHeader;
   const me = useMe();
   const qTasks = useWtQuery(["tasks"], (c) => c.listTasks());
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
@@ -191,9 +198,14 @@ export function TasksSection({ showHeader = true }: { showHeader?: boolean } = {
 
   return (
     <>
-      {showHeader && (
+      {shouldShowHeader && (
         <PageHeader
           title="Tasks & Factory Work Queue"
+          description={
+            me.role === "M"
+              ? "Factory-wide task queue. Review prerequisites, bottlenecks, and assign work to operators."
+              : `Departmental work queue for ${departmentLabels[me.department]}.`
+          }
           crumbs={[{ label: "Staff", href: paths.home }, { label: "Tasks" }]}
         />
       )}
