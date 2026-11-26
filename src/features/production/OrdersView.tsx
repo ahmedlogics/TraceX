@@ -13,6 +13,7 @@ import { can } from "@/domain/permissions";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
 import { useDirectory, UserName } from "@/features/shared/directory";
 import { useMe } from "@/features/shared/useMe";
+import { matchesDateFilter, type DateFilterOption } from "@/features/workstation/panels/IssuePanel";
 
 export function PlanOrderDialog({
   triggerLabel,
@@ -148,6 +149,7 @@ export function OrdersView() {
   const { run, pending } = useWtAction();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [dateFilter, setDateFilter] = useState<DateFilterOption>("all");
 
   return (
     <>
@@ -174,9 +176,9 @@ export function OrdersView() {
                 .toLowerCase()
                 .includes(search.toLowerCase());
               if (!matchesSearch) return false;
-              if (status === "all") return true;
-              if (status === "planned") return o.status === "planned" || o.status === "approved";
-              return o.status === status;
+              if (status === "planned" && !(o.status === "planned" || o.status === "approved")) return false;
+              if (status !== "all" && status !== "planned" && o.status !== status) return false;
+              return matchesDateFilter(o.dueDate, (o as any).createdAt, dateFilter);
             })
             .sort((a, b) => {
               if (!a.dueDate) return 1;
@@ -245,6 +247,19 @@ export function OrdersView() {
                       { value: "in-progress", label: "In Progress" },
                       { value: "completed", label: "Completed" },
                       { value: "draft", label: "Draft" },
+                    ]}
+                  />
+                </div>
+                <div className="w-full sm:w-36">
+                  <NativeSelect
+                    ariaLabel="Filter by date"
+                    value={dateFilter}
+                    onChange={(val) => setDateFilter(val as DateFilterOption)}
+                    options={[
+                      { value: "all", label: "All dates" },
+                      { value: "today", label: "Today" },
+                      { value: "week", label: "This week" },
+                      { value: "month", label: "This month" },
                     ]}
                   />
                 </div>

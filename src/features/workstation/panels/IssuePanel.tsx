@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Calendar,
   Check,
   CheckCircle2,
   Clock,
@@ -20,7 +21,7 @@ import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/wt/DataTable";
-import { Field, ScopeNote } from "@/components/wt/forms";
+import { Field, NativeSelect, ScopeNote } from "@/components/wt/forms";
 import { fmt, KeyValue, PageHeader, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
 import { EmptyState, Loadable } from "@/components/wt/states";
@@ -35,6 +36,63 @@ import { optimizeFabricAllocation } from "@/domain/fabric-optimizer";
 
 function getRequiredFabric(order: ProductionOrder): number {
   return Math.round(order.plannedQty * 2.0 * 10) / 10;
+}
+
+export type DateFilterOption = "all" | "today" | "week" | "month";
+
+export function matchesDateFilter(
+  dateStr: string | null | undefined,
+  altDateStr: string | null | undefined,
+  filter: DateFilterOption,
+): boolean {
+  if (filter === "all") return true;
+
+  const targetDate = dateStr ? new Date(dateStr) : null;
+  const altDate = altDateStr ? new Date(altDateStr) : null;
+
+  if ((!targetDate || isNaN(targetDate.getTime())) && (!altDate || isNaN(altDate.getTime()))) {
+    return true;
+  }
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  const check = (d: Date | null) => {
+    if (!d || isNaN(d.getTime())) return false;
+
+    if (filter === "today") {
+      return (
+        (d >= startOfToday && d <= endOfToday) ||
+        Math.abs(now.getTime() - d.getTime()) <= 24 * 60 * 60 * 1000
+      );
+    }
+
+    if (filter === "week") {
+      const day = (now.getDay() + 6) % 7;
+      const startOfWeek = new Date(startOfToday);
+      startOfWeek.setDate(startOfWeek.getDate() - day);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(endOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      return (
+        (d >= startOfWeek && d <= endOfWeek) ||
+        Math.abs(now.getTime() - d.getTime()) <= 7 * 24 * 60 * 60 * 1000
+      );
+    }
+
+    if (filter === "month") {
+      return (
+        (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) ||
+        Math.abs(now.getTime() - d.getTime()) <= 31 * 24 * 60 * 60 * 1000
+      );
+    }
+
+    return true;
+  };
+
+  return check(targetDate) || check(altDate);
 }
 
 export function IssuePanel({
@@ -53,6 +111,7 @@ export function IssuePanel({
   const [selectedOrderId, setSelectedOrderId] = useState<string>("");
   const [scanUid, setScanUid] = useState<string>("");
   const [queueTab, setQueueTab] = useState<"pending" | "issued">("pending");
+  const [dateFilter, setDateFilter] = useState<DateFilterOption>("all");
   // Only show scan feedback (error or success) after a scan occurs in this session, never on screen arrival
   const [activeOutcome, setActiveOutcome] = useState<ScanOutcome | null>(null);
   const lastSeenScanAt = useRef<string | null>(stationData?.lastScanOutcome?.at ?? null);
@@ -104,7 +163,10 @@ export function IssuePanel({
                 (o.status === "in-progress" && (o.lotIds?.length ?? 0) > 0),
             );
 
-            const displayedOrders = queueTab === "pending" ? pendingOrders : issuedOrders;
+            const rawDisplayedOrders = queueTab === "pending" ? pendingOrders : issuedOrders;
+            const displayedOrders = rawDisplayedOrders.filter((o) =>
+              matchesDateFilter(o.dueDate, (o as any).createdAt, dateFilter),
+            );
 
             // Active target order is either explicitly selected, or context order, or first pending order (only in pending queue)
             const targetOrderId =
@@ -320,52 +382,85 @@ export function IssuePanel({
                 {/* Active Production Orders Queue */}
                 <Section
                   title={
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setQueueTab("pending")}
-                          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                            queueTab === "pending"
-                              ? "bg-card text-foreground shadow-xs font-semibold"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          Pending Fabric ({pendingOrders.length})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setQueueTab("issued")}
-                          className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                            queueTab === "issued"
-                              ? "bg-card text-foreground shadow-xs font-semibold"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          Already Issued ({issuedOrders.length})
-                        </button>
+                    <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="inline-flex rounded-lg border bg-muted/30 p-0.5 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setQueueTab("pending")}
+                            className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                              queueTab === "pending"
+                                ? "bg-card text-foreground shadow-xs font-semibold"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Pending Fabric ({pendingOrders.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setQueueTab("issued")}
+                            className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                              queueTab === "issued"
+                                ? "bg-card text-foreground shadow-xs font-semibold"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            Already Issued ({issuedOrders.length})
+                          </button>
+                        </div>
+                        <PlanOrderDialog
+                          triggerLabel="+ New Order"
+                          onSuccess={handleOrderCreated}
+                        />
                       </div>
-                      <PlanOrderDialog
-                        triggerLabel="+ New Order"
-                        onSuccess={handleOrderCreated}
-                      />
+
+                      {/* Date Filter Dropdown */}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="size-3.5 text-muted-foreground hidden sm:block" />
+                        <div className="w-36">
+                          <NativeSelect
+                            ariaLabel="Filter orders by date"
+                            value={dateFilter}
+                            onChange={(val) => setDateFilter(val as any)}
+                            options={[
+                              { value: "all", label: "All dates" },
+                              { value: "today", label: "Today" },
+                              { value: "week", label: "This week" },
+                              { value: "month", label: "This month" },
+                            ]}
+                          />
+                        </div>
+                      </div>
                     </div>
                   }
                 >
                       {displayedOrders.length === 0 ? (
                         <EmptyState
                           title={
-                            queueTab === "pending"
-                              ? "All approved orders have been issued fabric"
-                              : "No orders with issued fabric yet"
+                            dateFilter !== "all"
+                              ? `No ${queueTab === "pending" ? "pending" : "issued"} orders match "${dateFilter === "today" ? "Today" : dateFilter === "week" ? "This week" : "This month"}"`
+                              : queueTab === "pending"
+                                ? "All approved orders have been issued fabric"
+                                : "No orders with issued fabric yet"
                           }
                         >
                           <div className="space-y-3 text-center">
-                            <p className="text-sm text-muted-foreground">
-                              {queueTab === "pending"
-                                ? "No production orders are currently awaiting fabric allocation. Approved orders will appear here automatically."
-                                : "When bundles are scanned and issued at Scanner 2, completed orders will appear here."}
-                            </p>
+                            {dateFilter !== "all" ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs mt-2"
+                                onClick={() => setDateFilter("all")}
+                              >
+                                Clear date filter
+                              </Button>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                {queueTab === "pending"
+                                  ? "No production orders are currently awaiting fabric allocation. Approved orders will appear here automatically."
+                                  : "When bundles are scanned and issued at Scanner 2, completed orders will appear here."}
+                              </p>
+                            )}
                             <div className="flex items-center justify-center gap-2">
                               {queueTab === "pending" && issuedOrders.length > 0 && (
                                 <Button

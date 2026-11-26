@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Boxes,
+  Calendar,
   CheckCircle2,
   Clock,
   Cpu,
@@ -22,6 +23,7 @@ import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/wt/forms";
 import { PageHeader, Section, IdLink } from "@/components/wt/layout";
 import { EmptyState, Loadable, LoadingState } from "@/components/wt/states";
 import { can, canAccessRoute } from "@/domain/permissions";
@@ -32,6 +34,7 @@ import { StatusBadge, HoldBadge } from "@/components/wt/StatusBadge";
 import { ReceiveLotDialog } from "@/features/materials/LotsView";
 import { TasksSection } from "@/features/tasks/TasksView";
 import { QualityView } from "@/features/quality/QualityView";
+import { matchesDateFilter, type DateFilterOption } from "@/features/workstation/panels/IssuePanel";
 import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
 
 const toneIcon = { danger: OctagonAlert, warning: AlertTriangle, info: Info } as const;
@@ -204,6 +207,7 @@ function IncomingQcQueue() {
 function RawStoreDashboard() {
   const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
   const qLots = useWtQuery(["lots"], (c) => c.listLots());
+  const [dateFilter, setDateFilter] = useState<DateFilterOption>("all");
 
   if (qOrders.isError || qLots.isError) {
     return (
@@ -342,57 +346,97 @@ function RawStoreDashboard() {
       </div>
 
       {/* Section: Available Bundles (only bundles that passed qc.incoming) */}
-      <Section title="Available bundles">
-        {acceptedLots.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-            <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="size-4" />
-            </div>
-            <p className="text-sm font-medium text-foreground">
-              No available bundles cleared by qc.incoming yet
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y rounded-lg border bg-card overflow-hidden">
-            {acceptedLots.map((lot) => {
-              return (
-                <div
-                  key={lot.id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-foreground wt-id">{lot.id}</span>
-                      <span className="text-muted-foreground">·</span>
-                      <span className="font-medium text-foreground">{lot.material}</span>
-                      {lot.rfidUid && (
-                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                          <Radio className="size-2.5" /> Tag: {lot.rfidUid}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Available Balance: <strong className="text-foreground">{lot.balanceQty} {lot.unit ?? "m"}</strong> ·{" "}
-                      Received: <span className="font-medium text-foreground">{lot.receivedQty} {lot.unit ?? "m"}</span> ·{" "}
-                      Supplier: <span className="font-medium text-foreground">{lot.supplierRef}</span>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      <CheckCircle2 className="size-3" /> Passed qc.incoming
-                    </span>
-                    <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
-                      <AppLink href={paths.workstation}>
-                        Issue at Station 2 <ArrowRight className="size-3" />
-                      </AppLink>
-                    </Button>
-                  </div>
+      {(() => {
+        const displayedLots = acceptedLots.filter((lot) =>
+          matchesDateFilter((lot as any).receivedAt, (lot as any).createdAt, dateFilter),
+        );
+
+        return (
+          <Section
+            title="Available bundles"
+            actions={
+              <div className="flex items-center gap-1.5">
+                <Calendar className="size-3.5 text-muted-foreground hidden sm:block" />
+                <div className="w-32">
+                  <NativeSelect
+                    ariaLabel="Filter bundles by date"
+                    value={dateFilter}
+                    onChange={(val) => setDateFilter(val as DateFilterOption)}
+                    options={[
+                      { value: "all", label: "All dates" },
+                      { value: "today", label: "Today" },
+                      { value: "week", label: "This week" },
+                      { value: "month", label: "This month" },
+                    ]}
+                  />
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </Section>
+              </div>
+            }
+          >
+            {displayedLots.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
+                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="size-4" />
+                </div>
+                <p className="text-sm font-medium text-foreground">
+                  {dateFilter !== "all"
+                    ? `No available bundles match "${dateFilter === "today" ? "Today" : dateFilter === "week" ? "This week" : "This month"}"`
+                    : "No available bundles cleared by qc.incoming yet"}
+                </p>
+                {dateFilter !== "all" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs mt-2"
+                    onClick={() => setDateFilter("all")}
+                  >
+                    Clear date filter
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y rounded-lg border bg-card overflow-hidden">
+                {displayedLots.map((lot) => {
+                  return (
+                    <div
+                      key={lot.id}
+                      className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground wt-id">{lot.id}</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="font-medium text-foreground">{lot.material}</span>
+                          {lot.rfidUid && (
+                            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                              <Radio className="size-2.5" /> Tag: {lot.rfidUid}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Available Balance: <strong className="text-foreground">{lot.balanceQty} {lot.unit ?? "m"}</strong> ·{" "}
+                          Received: <span className="font-medium text-foreground">{lot.receivedQty} {lot.unit ?? "m"}</span> ·{" "}
+                          Supplier: <span className="font-medium text-foreground">{lot.supplierRef}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="size-3" /> Passed qc.incoming
+                        </span>
+                        <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
+                          <AppLink href={paths.workstation}>
+                            Issue at Station 2 <ArrowRight className="size-3" />
+                          </AppLink>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+        );
+      })()}
     </div>
   );
 }
