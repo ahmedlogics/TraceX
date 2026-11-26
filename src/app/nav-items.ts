@@ -168,13 +168,13 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
         items: [
           {
             key: "home" as const,
-            label: "Raw Store Overview",
+            label: "Home",
             href: paths.home,
-            icon: Boxes,
+            icon: Home,
           },
           {
             key: "workstation" as const,
-            label: "Station 2 (Fabric Issue)",
+            label: "Workstation",
             href: paths.workstation,
             icon: Cpu,
           },

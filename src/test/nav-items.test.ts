@@ -65,15 +65,15 @@ describe("Staff Navigation Items", () => {
     expect(defaultGroups).toEqual(navGroups);
   });
 
-  it("filters accessible items properly for rawstore.demo to Raw Store Overview and Workstation", () => {
+  it("filters accessible items properly for rawstore.demo to Home and Workstation", () => {
     const groups = getNavGroups(rawStoreUser);
     const workItems = groups
       .find((g) => g.label === "Work")!
       .items.filter((i) => canAccessRoute(rawStoreUser, i.key));
 
     expect(workItems.map((i) => i.label)).toEqual([
-      "Raw Store Overview",
-      "Station 2 (Fabric Issue)",
+      "Home",
+      "Workstation",
     ]);
   });
 

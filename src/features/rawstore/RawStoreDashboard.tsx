@@ -50,7 +50,7 @@ export function RawStoreDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Raw Store & Fabric Inventory"
+        title="Home"
         description="Department of Raw Material Store · Verified Incoming QC Queue & Production Allocation"
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -219,7 +219,7 @@ export function RawStoreDashboard() {
                         }`}
                       >
                         <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                        Passed Incoming QC Queue ({passedLots.length})
+                        Available bundles ({passedLots.length})
                       </button>
                       <button
                         type="button"
