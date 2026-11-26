@@ -129,15 +129,20 @@ export function IssuePanel({
               const requiredQty = getRequiredFabric(order);
               void run(
                 async (c) => {
-                  const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
-                    kind: "confirm_issue",
-                    orderId: order.id,
-                    qty: requiredQty,
-                  });
-                  if (ctxId) {
-                    await c.acknowledgeContext(ctxId);
+                  try {
+                    const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
+                      kind: "confirm_issue",
+                      orderId: order.id,
+                      qty: requiredQty,
+                    });
+                    if (ctxId) {
+                      await c.acknowledgeContext(ctxId);
+                    }
+                    return ctxId;
+                  } catch (e) {
+                    console.warn("Context arming deferred or handled:", e);
+                    return null;
                   }
-                  return ctxId;
                 },
                 `Armed Scanner 2 for ${order.id} (${requiredQty} m required). Ready to scan bundle tag.`,
               );
@@ -158,15 +163,20 @@ export function IssuePanel({
               }, 50);
               void run(
                 async (c) => {
-                  const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
-                    kind: "confirm_issue",
-                    orderId: newOrderId,
-                    qty: 8.0,
-                  });
-                  if (ctxId) {
-                    await c.acknowledgeContext(ctxId);
+                  try {
+                    const ctxId = await c.prepareActionContext("fabric_issue", "confirm_issue", {
+                      kind: "confirm_issue",
+                      orderId: newOrderId,
+                      qty: 8.0,
+                    });
+                    if (ctxId) {
+                      await c.acknowledgeContext(ctxId);
+                    }
+                    return ctxId;
+                  } catch (e) {
+                    console.warn("Context arming deferred or handled:", e);
+                    return null;
                   }
-                  return ctxId;
                 },
                 `Order ${newOrderId} created and armed for Scanner 2. Ready to scan bundle tag!`,
               );

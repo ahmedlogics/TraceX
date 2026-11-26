@@ -85,7 +85,14 @@ export function PlanOrderDialog({
             )}
 
             <Field label="Product name" htmlFor="po-p" hint="Canonical garment model name">
-              <Input id="po-p" value={product} onChange={(e) => setProduct(e.target.value)} />
+              <Input
+                id="po-p"
+                value={product}
+                onChange={(e) => {
+                  setProduct(e.target.value);
+                  if (selectedSpecId) setSelectedSpecId("");
+                }}
+              />
             </Field>
 
             <Field label="Style code" htmlFor="po-s" hint="e.g. WT-SH-100 or WT-TR-200">

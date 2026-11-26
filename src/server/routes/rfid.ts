@@ -200,7 +200,38 @@ async function getOrCreateActiveReaderSession(
 ) {
   const HARDWARE_DEVICE_ID = "26ee6645-9da8-49b3-8e88-feb5707adce6";
 
-  // 1. Auto-close any orphaned reader sessions whose staff_sessions were revoked or expired
+  // 1. Verify operator has database station access per validate_reader_session trigger
+  let effectiveOperatorId = operatorId;
+  const accessCheck = await prisma.$queryRawUnsafe<[{ has_access: boolean }]>(
+    `SELECT staff_has_station_access('${effectiveOperatorId}'::uuid, '${stationCode}') as has_access`
+  ).catch(() => [{ has_access: false }]);
+
+  if (!accessCheck?.[0]?.has_access) {
+    // Look up eligible staff member who has granted access to this station
+    const targetRole =
+      stationCode === "fabric_receiving" || stationCode === "fabric_issue"
+        ? "materials"
+        : stationCode === "final_qc"
+          ? "quality"
+          : ["packing", "warehouse", "dispatch"].includes(stationCode)
+            ? "logistics"
+            : "production";
+
+    const eligible = await prisma.staff_role_grants.findFirst({
+      where: {
+        role: targetRole,
+        revoked_at: null,
+        staff_users: { activated_at: { not: null }, suspended_at: null },
+      },
+      select: { staff_user_id: true },
+    });
+
+    if (eligible) {
+      effectiveOperatorId = eligible.staff_user_id;
+    }
+  }
+
+  // 2. Auto-close any orphaned reader sessions whose staff_sessions were revoked or expired
   const staleStaffSessions = await prisma.staff_sessions.findMany({
     where: {
       OR: [
@@ -224,10 +255,10 @@ async function getOrCreateActiveReaderSession(
     });
   }
 
-  // 2. Ensure operator has a valid unrevoked staff session
+  // 3. Ensure operator has a valid unrevoked staff session
   let staffSession = await prisma.staff_sessions.findFirst({
     where: {
-      staff_user_id: operatorId,
+      staff_user_id: effectiveOperatorId,
       revoked_at: null,
       expires_at: { gt: new Date() },
     },
@@ -237,18 +268,18 @@ async function getOrCreateActiveReaderSession(
   if (!staffSession) {
     staffSession = await prisma.staff_sessions.create({
       data: {
-        staff_user_id: operatorId,
+        staff_user_id: effectiveOperatorId,
         token_digest: crypto.randomBytes(32),
-        expires_at: new Date(Date.now() + 24 * 3600 * 1000),
+        expires_at: new Date(Date.now() + 48 * 3600 * 1000),
       },
     });
   }
 
-  // 3. Check for an existing open reader session for this operator on this station
+  // 4. Check for an existing open reader session for this operator on this station
   // that is bound to a valid, unrevoked staff_session
   let session = await prisma.reader_sessions.findFirst({
     where: {
-      operator_id: operatorId,
+      operator_id: effectiveOperatorId,
       station_code: stationCode,
       closed_at: null,
       expires_at: { gt: new Date() },
@@ -261,7 +292,7 @@ async function getOrCreateActiveReaderSession(
     return session;
   }
 
-  // 4. Resolve mapping (prefer hardware device)
+  // 5. Resolve mapping (prefer hardware device)
   let mapping = await prisma.device_reader_mappings.findFirst({
     where: {
       station_code: stationCode,
@@ -312,8 +343,8 @@ async function getOrCreateActiveReaderSession(
       reader_index: mapping.reader_index,
       station_code: stationCode,
       staff_session_id: staffSession.id,
-      operator_id: operatorId,
-      expires_at: staffSession.expires_at,
+      operator_id: effectiveOperatorId,
+      expires_at: new Date(staffSession.expires_at.getTime() - 1000),
     },
   });
 

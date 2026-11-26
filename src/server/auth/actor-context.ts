@@ -282,12 +282,35 @@ export function createSessionResolverMiddleware(prisma: PrismaClient): RequestHa
         const headerDept = req.headers["x-actor-dept"] as string | undefined;
 
         if (headerRole || headerId || headerUser) {
+          let dbUser = null;
+          if (headerId) {
+            dbUser = await prisma.staff_users.findUnique({
+              where: { id: headerId },
+            }).catch(() => null);
+          } else if (headerUser) {
+            dbUser = await prisma.staff_users.findFirst({
+              where: { username: headerUser, suspended_at: null },
+            }).catch(() => null);
+          }
+
+          const primaryGrant = dbUser
+            ? await prisma.staff_role_grants.findFirst({
+                where: { staff_user_id: dbUser.id, revoked_at: null },
+              }).catch(() => null)
+            : null;
+
+          const resolvedRole = (headerRole as any) || (primaryGrant?.role as any) || "admin";
+          const resolvedDept = (headerDept as any) || (primaryGrant?.department_code as any) || "raw_store";
+          const resolvedId = dbUser?.id || headerId || "03221414-8e7e-4063-8054-e2426d7677c1";
+          const resolvedUsername = dbUser?.username || headerUser || "rawstore.demo";
+          const resolvedDisplayName = dbUser?.display_name || headerUser || "Operator";
+
           req.actor = {
-            actorId: headerId || "03221414-8e7e-4063-8054-e2426d7677c1",
-            username: headerUser || "test.operator",
-            displayName: headerUser || "Test Operator",
-            role: (headerRole as any) || "admin",
-            department: (headerDept as any) || "receiving",
+            actorId: resolvedId,
+            username: resolvedUsername,
+            displayName: resolvedDisplayName,
+            role: resolvedRole,
+            department: resolvedDept,
             authenticatedAt: new Date(),
           };
           (req as unknown as { staffUser?: unknown }).staffUser = {

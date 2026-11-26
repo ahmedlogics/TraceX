@@ -466,16 +466,27 @@ export async function createProductionOrder(
       }
     }
 
+    const desiredProduct = input.product?.trim();
     let spec = await db.product_spec_versions.findFirst({
-      where: { style_code: input.styleCode },
+      where: desiredProduct
+        ? { style_code: input.styleCode, product_name: desiredProduct }
+        : { style_code: input.styleCode },
       orderBy: { version: "desc" },
     });
+
     if (!spec) {
+      const highestVersion = await db.product_spec_versions.findFirst({
+        where: { style_code: input.styleCode },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      const nextVersion = (highestVersion?.version ?? 0) + 1;
+
       spec = await db.product_spec_versions.create({
         data: {
           style_code: input.styleCode,
-          version: 1,
-          product_name: input.product || `Product ${input.styleCode}`,
+          version: nextVersion,
+          product_name: desiredProduct || `Product ${input.styleCode}`,
           specifications: {
             category: "shirt",
             standardConsumptionMeters: 2.0,
