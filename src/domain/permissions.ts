@@ -112,6 +112,16 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   ) {
     return false;
   }
+
+  // Raw Store operators operate at Station 2 (Fabric Issue) Workstation and Material Lots, not production orders screen
+  if (
+    (user.username === "rawstore.demo" ||
+      user.department?.toLowerCase() === "raw-store" ||
+      user.department?.toLowerCase() === "raw_store") &&
+    (key === "productionOrders" || key === "productionOrder")
+  ) {
+    return false;
+  }
   // Warehouse operators: strictly Workstation and Fulfilment/Warehouse Stock
   // (NO home, NO shipments, NO garments full factory list)
   if (

@@ -155,7 +155,9 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
   }
 
   const isRawStore =
-    user?.username?.toLowerCase() === "rawstore.demo" || user?.department === "raw-store";
+    user?.username?.toLowerCase() === "rawstore.demo" ||
+    user?.department?.toLowerCase() === "raw-store" ||
+    user?.department?.toLowerCase() === "raw_store";
 
   if (isRawStore) {
     return navGroups.map((g) => {
@@ -165,7 +167,6 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
           items: [
             { key: "home", label: "Home", href: paths.home, icon: Home },
             { key: "workstation", label: "Workstation", href: paths.workstation, icon: Cpu },
-            { key: "productionOrders", label: "Production orders", href: paths.orders, icon: ClipboardList },
           ],
         };
       }

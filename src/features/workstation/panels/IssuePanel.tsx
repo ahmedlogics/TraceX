@@ -605,56 +605,96 @@ export function IssuePanel({
                                 />
                               )}
 
-                              <div className="space-y-2">
-                                <Field
-                                  label="Bundle Card Tag UID"
-                                  htmlFor="s2-uid"
-                                  hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID/Lot ID to test manually."
-                                >
-                                  <Input
-                                    id="s2-uid"
-                                    value={scanUid}
-                                    onChange={(e) => setScanUid(e.target.value.toUpperCase())}
-                                    placeholder="e.g. BB4A0003 or tap physical card"
-                                    className="font-mono bg-card"
-                                  />
-                                </Field>
-                                <div className="flex flex-wrap items-center gap-2 pt-1">
-                                  <Button
-                                    disabled={pending}
-                                    onClick={() => handleScan()}
-                                    className="gap-1.5"
-                                  >
-                                    {pending ? (
-                                      <>
-                                        <span className="relative flex h-2.5 w-2.5 mr-2">
-                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                                        </span>
-                                        Awaiting Hardware Card Tap (Scanner 2)...
-                                      </>
-                                    ) : scanUid.trim() ? (
-                                      <>
-                                        <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
-                                      </>
-                                    )}
-                                  </Button>
-                                  {scanUid && (
+                              {isLive ? (
+                                <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4 space-y-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+                                      <Radio className={`size-4.5 ${pending ? "animate-spin" : ""}`} />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-xs font-bold text-foreground">
+                                        Scanner 2 Hardware Ready (GPIO 12)
+                                      </h4>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        Tap the physical RFID bundle card on Scanner 2 hardware reader. The system verifies QC clearance and issues the roll to the selected order.
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-1">
                                     <Button
-                                      variant="outline"
-                                      size="sm"
-                                      disabled={pending}
-                                      onClick={() => setScanUid("")}
+                                      disabled={pending || !targetOrder}
+                                      onClick={() => handleScan()}
+                                      className="h-9 gap-2 font-semibold text-xs shadow-xs"
                                     >
-                                      Clear
+                                      {pending ? (
+                                        <>
+                                          <span className="relative flex size-2 mr-1">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                                            <span className="relative inline-flex rounded-full size-2 bg-white" />
+                                          </span>
+                                          Awaiting Physical Card Tap on Scanner 2...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Radio className="size-3.5" /> Catch Hardware Scan (Scanner 2)
+                                        </>
+                                      )}
                                     </Button>
-                                  )}
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <Field
+                                    label="Bundle Card Tag UID"
+                                    htmlFor="s2-uid"
+                                    hint="Tap bundle card on Scanner 2 (GPIO 12), or enter UID/Lot ID to test manually."
+                                  >
+                                    <Input
+                                      id="s2-uid"
+                                      value={scanUid}
+                                      onChange={(e) => setScanUid(e.target.value.toUpperCase())}
+                                      placeholder="e.g. BB4A0003 or tap physical card"
+                                      className="font-mono bg-card"
+                                    />
+                                  </Field>
+                                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <Button
+                                      disabled={pending}
+                                      onClick={() => handleScan()}
+                                      className="gap-1.5"
+                                    >
+                                      {pending ? (
+                                        <>
+                                          <span className="relative flex h-2.5 w-2.5 mr-2">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                                          </span>
+                                          Awaiting Hardware Card Tap (Scanner 2)...
+                                        </>
+                                      ) : scanUid.trim() ? (
+                                        <>
+                                          <ScanLine className="size-4" /> Simulate RFID Scan ({scanUid.trim()})
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Radio className="size-4" /> Catch Hardware Scan (Scanner 2)
+                                        </>
+                                      )}
+                                    </Button>
+                                    {scanUid && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={pending}
+                                        onClick={() => setScanUid("")}
+                                      >
+                                        Clear
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Quick Pre-fill Test Chips for Demonstration (Mock Mode Only) */}
                               {!isLive && (() => {

@@ -26,20 +26,17 @@ describe("Staff Navigation Items", () => {
     status: "active",
   };
 
-  it("places production orders below workstation for rawstore.demo", () => {
+  it("removes production orders from navigation for rawstore.demo", () => {
     const groups = getNavGroups(rawStoreUser);
     const workGroup = groups.find((g) => g.label === "Work");
     expect(workGroup).toBeDefined();
 
     const keys = workGroup!.items.map((i) => i.key);
-    expect(keys).toEqual(["home", "workstation", "productionOrders"]);
-
-    const workstationIndex = keys.indexOf("workstation");
-    const productionOrdersIndex = keys.indexOf("productionOrders");
-    expect(productionOrdersIndex).toBeGreaterThan(workstationIndex);
+    expect(keys).toEqual(["home", "workstation"]);
+    expect(keys).not.toContain("productionOrders");
   });
 
-  it("places production orders below workstation for any raw-store department staff", () => {
+  it("removes production orders for any raw-store department staff", () => {
     const customRawStoreStaff: StaffUser = {
       ...rawStoreUser,
       username: "john.store",
@@ -48,7 +45,8 @@ describe("Staff Navigation Items", () => {
     const groups = getNavGroups(customRawStoreStaff);
     const workGroup = groups.find((g) => g.label === "Work");
     const keys = workGroup!.items.map((i) => i.key);
-    expect(keys).toEqual(["home", "workstation", "productionOrders"]);
+    expect(keys).toEqual(["home", "workstation"]);
+    expect(keys).not.toContain("productionOrders");
   });
 
   it("retains standard order (production orders above workstation) for other users and defaults", () => {
@@ -73,7 +71,6 @@ describe("Staff Navigation Items", () => {
     expect(workItems.map((i) => i.label)).toEqual([
       "Home",
       "Workstation",
-      "Production orders",
     ]);
   });
 
