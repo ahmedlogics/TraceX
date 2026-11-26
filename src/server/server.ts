@@ -3,6 +3,13 @@ import { createExpressApp } from "./app";
 import { serverConfig, getSanitizedConfig } from "./config";
 import { disconnectPrisma } from "./db/client";
 
+// Suppress pg driver adapter internal concurrent query deprecation warning
+process.on("warning", (warning) => {
+  if (warning.name === "DeprecationWarning" && warning.message.includes("client.query()")) {
+    return;
+  }
+});
+
 let serverInstance: Server | null = null;
 let isShuttingDown = false;
 
