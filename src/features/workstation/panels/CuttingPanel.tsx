@@ -510,28 +510,32 @@ export function CuttingPanel({ stationData }: { stationData: RfidStationData }) 
                         {/* Alert / Notification Banner */}
                         {alertMessage && (
                           <div
-                            className={`rounded-xl border p-3.5 text-xs flex items-start gap-3 transition-all shadow-sm ${
+                            className={`rounded-xl border border-[#CDBBA8] p-3.5 text-xs flex items-start gap-3 transition-all shadow-2xs ${
                               alertMessage.type === "success"
-                                ? "border-[#134441] bg-[#1B5E5A] text-white"
+                                ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                                 : alertMessage.type === "error"
                                   ? "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
                                   : "border-[#CDBBA8] bg-[#FFFDFC] text-[#2B170E]"
                             }`}
                           >
                             <div className="mt-0.5 shrink-0">
-                              {alertMessage.type === "success" && <CheckCircle2 className="size-4 text-[#A3E5DE]" />}
+                              {alertMessage.type === "success" && (
+                                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                                  <CheckCircle2 className="size-3.5 text-[#1B5E5A]" />
+                                </div>
+                              )}
                               {alertMessage.type === "error" && <XCircle className="size-4 text-[#8C5348]" />}
                               {alertMessage.type === "info" && <Sparkles className="size-4 text-[#C79C70]" />}
                             </div>
                             <div className="flex-1 space-y-0.5">
-                              <p className={`font-bold ${alertMessage.type === "success" ? "text-white" : ""}`}>{alertMessage.title}</p>
-                              <p className={alertMessage.type === "success" ? "text-white/90 font-medium" : "opacity-90"}>{alertMessage.message}</p>
+                              <p className="font-bold text-[#2B170E]">{alertMessage.title}</p>
+                              <p className="text-[#6E5748] font-medium">{alertMessage.message}</p>
                             </div>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => setAlertMessage(null)}
-                              className={`h-6 w-6 p-0 shrink-0 ${alertMessage.type === "success" ? "text-white/70 hover:text-white hover:bg-white/10" : "text-muted-foreground hover:text-foreground"}`}
+                              className="h-6 w-6 p-0 shrink-0 text-[#6E5748] hover:text-[#2B170E] hover:bg-[#F2E4D2]"
                             >
                               ✕
                             </Button>

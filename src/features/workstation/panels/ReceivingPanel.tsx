@@ -652,27 +652,27 @@ export function ReceivingPanel({ stationData }: { stationData: RfidStationData }
                     <div className="flex flex-1 flex-col justify-between space-y-3.5 animate-fade-in-up">
                       <div className="space-y-3">
                         {/* Success Header Banner */}
-                        <div className="flex items-start gap-2.5 rounded-xl border border-[#134441] bg-[#1B5E5A] text-white p-3.5 shadow-sm">
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-[#A3E5DE] border border-white/20">
-                            <CheckCircle2 className="size-4.5" />
+                        <div className="flex items-start gap-2.5 rounded-xl border border-[#CDBBA8] border-l-[4px] border-l-[#1B5E5A] bg-[#FFFDFC] text-[#2B170E] p-3.5 shadow-2xs">
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                            <CheckCircle2 className="size-4.5 text-[#1B5E5A]" />
                           </div>
                           <div className="min-w-0 flex-1 space-y-0.5">
                             <div className="flex items-center justify-between">
-                              <h3 className="text-xs font-bold text-white">
+                              <h3 className="text-xs font-bold text-[#2B170E]">
                                 RFID Card Successfully Bound!
                               </h3>
-                              <span className="text-[10px] text-white/80 font-mono flex items-center gap-1">
+                              <span className="text-[10px] text-[#6E5748] font-mono flex items-center gap-1">
                                 <Clock className="size-3" />
                                 {fmt.dateTime(lastOutcome.at)}
                               </span>
                             </div>
-                            <p className="text-[11px] text-white/90">
+                            <p className="text-[11px] text-[#6E5748]">
                               Card UID{" "}
-                              <span className="font-mono font-bold text-white bg-white/15 px-1.5 py-0.5 rounded border border-white/20">
+                              <span className="font-mono font-bold text-[#2B170E] bg-[#F2E4D2] px-1.5 py-0.5 rounded border border-[#CDBBA8]">
                                 {lastOutcome.uid}
                               </span>{" "}
                               linked to lot{" "}
-                              <span className="font-mono font-bold text-white">
+                              <span className="font-mono font-bold text-[#2B170E]">
                                 {boundLot?.id || lastOutcome.subjectId}
                               </span>
                               .

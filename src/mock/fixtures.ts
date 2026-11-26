@@ -1122,7 +1122,7 @@ export function createSeed(): DemoState {
         kind: "reset",
         status: "valid",
         createdAt: "2026-11-19T00:00:00Z",
-        expiresAt: "2026-11-26T00:00:00Z",
+        expiresAt: "2027-11-26T00:00:00Z",
       },
       {
         id: "tok-002",

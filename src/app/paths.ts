@@ -5,6 +5,7 @@ export const paths = {
   credentials: (token: string) => `/staff/credentials/${encodeURIComponent(token)}`,
   account: "/staff/account",
   home: "/staff",
+  dashboard: "/staff/dashboard",
   tasks: "/staff/tasks",
   workstation: "/staff/workstation",
   lots: "/staff/material-lots",

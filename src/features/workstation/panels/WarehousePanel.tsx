@@ -371,24 +371,24 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
                       <div
                         className={`rounded-lg border p-4 shadow-sm transition-all ${
                           details.isAccepted
-                            ? "border-[#99C5C1] bg-[#E6F0EE]/80 text-[#134441]"
+                            ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                             : "border-destructive/40 bg-destructive/10 text-destructive"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           {details.isAccepted ? (
-                            <ShieldCheck className="size-6 text-[#A3E5DE] shrink-0 mt-0.5" />
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]"><ShieldCheck className="size-5 text-[#1B5E5A]" /></div>
                           ) : (
                             <ShieldAlert className="size-6 text-destructive shrink-0 mt-0.5" />
                           )}
                           <div className="space-y-2.5 flex-1">
                             <div className="flex items-center justify-between">
-                              <p className={`text-sm font-bold tracking-tight ${details.isAccepted ? "text-white" : ""}`}>
+                              <p className="text-sm font-bold tracking-tight text-[#2B170E]">
                                 {details.title}
                               </p>
                               <span
                                 className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
-                                  details.isAccepted ? "bg-white/15 text-white border-white/25"
+                                  details.isAccepted ? "bg-[#E6F0EE] text-[#134441] border-[#99C5C1]"
                                     : "bg-destructive/20 text-destructive border-destructive/40"
                                 }`}
                               >
@@ -398,15 +398,15 @@ export function WarehousePanel({ stationData }: { stationData: RfidStationData }
 
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               <div>
-                                <span className={details.isAccepted ? "text-white/75 font-medium" : "text-muted-foreground font-medium"}>Box ID:</span>{" "}
-                                <span className={details.isAccepted ? "font-mono font-bold text-white bg-white/15 px-1.5 py-0.5 rounded" : "font-mono font-bold text-foreground"}>
+                                <span className={"text-[#6E5748] font-medium"}>Box ID:</span>{" "}
+                                <span className={"font-mono font-bold text-[#2B170E] bg-[#F2E4D2] px-1.5 py-0.5 rounded border border-[#CDBBA8]"}>
                                   {details.cartonId}
                                 </span>
                               </div>
 
                               <div>
-                                <span className={details.isAccepted ? "text-white/75 font-medium" : "text-muted-foreground font-medium"}>Garments:</span>{" "}
-                                <span className={details.isAccepted ? "font-semibold text-white" : "font-semibold text-foreground"}>
+                                <span className={"text-[#6E5748] font-medium"}>Garments:</span>{" "}
+                                <span className={"font-semibold text-[#2B170E]"}>
                                   {details.garmentCount !== undefined
                                     ? `${details.garmentCount} garment${details.garmentCount !== 1 ? "s" : ""}`
                                     : "—"}

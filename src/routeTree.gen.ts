@@ -19,6 +19,7 @@ import { Route as PPublicIdProofRouteImport } from './routes/p/$publicId/proof'
 import { Route as StaffWorkspaceIndexRouteImport } from './routes/staff/_workspace/index'
 import { Route as StaffWorkspaceAccountRouteImport } from './routes/staff/_workspace/account'
 import { Route as StaffWorkspaceAuditRouteImport } from './routes/staff/_workspace/audit'
+import { Route as StaffWorkspaceDashboardRouteImport } from './routes/staff/_workspace/dashboard'
 import { Route as StaffWorkspaceFulfilmentRouteImport } from './routes/staff/_workspace/fulfilment'
 import { Route as StaffWorkspaceLedgerRouteImport } from './routes/staff/_workspace/ledger'
 import { Route as StaffWorkspaceNfcPassportsRouteImport } from './routes/staff/_workspace/nfc-passports'
@@ -88,6 +89,11 @@ const StaffWorkspaceAccountRoute = StaffWorkspaceAccountRouteImport.update({
 const StaffWorkspaceAuditRoute = StaffWorkspaceAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => StaffWorkspaceRouteRoute,
+} as any)
+const StaffWorkspaceDashboardRoute = StaffWorkspaceDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => StaffWorkspaceRouteRoute,
 } as any)
 const StaffWorkspaceFulfilmentRoute =
@@ -220,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/p/$publicId/proof': typeof PPublicIdProofRoute
   '/staff/account': typeof StaffWorkspaceAccountRoute
   '/staff/audit': typeof StaffWorkspaceAuditRoute
+  '/staff/dashboard': typeof StaffWorkspaceDashboardRoute
   '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
@@ -252,6 +259,7 @@ export interface FileRoutesByTo {
   '/p/$publicId/proof': typeof PPublicIdProofRoute
   '/staff/account': typeof StaffWorkspaceAccountRoute
   '/staff/audit': typeof StaffWorkspaceAuditRoute
+  '/staff/dashboard': typeof StaffWorkspaceDashboardRoute
   '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/p/$publicId/proof': typeof PPublicIdProofRoute
   '/staff/_workspace/account': typeof StaffWorkspaceAccountRoute
   '/staff/_workspace/audit': typeof StaffWorkspaceAuditRoute
+  '/staff/_workspace/dashboard': typeof StaffWorkspaceDashboardRoute
   '/staff/_workspace/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/_workspace/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/_workspace/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
@@ -319,6 +328,7 @@ export interface FileRouteTypes {
     | '/p/$publicId/proof'
     | '/staff/account'
     | '/staff/audit'
+    | '/staff/dashboard'
     | '/staff/fulfilment'
     | '/staff/ledger'
     | '/staff/nfc-passports'
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/p/$publicId/proof'
     | '/staff/account'
     | '/staff/audit'
+    | '/staff/dashboard'
     | '/staff/fulfilment'
     | '/staff/ledger'
     | '/staff/nfc-passports'
@@ -383,6 +394,7 @@ export interface FileRouteTypes {
     | '/p/$publicId/proof'
     | '/staff/_workspace/account'
     | '/staff/_workspace/audit'
+    | '/staff/_workspace/dashboard'
     | '/staff/_workspace/fulfilment'
     | '/staff/_workspace/ledger'
     | '/staff/_workspace/nfc-passports'
@@ -484,6 +496,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/staff/audit'
       preLoaderRoute: typeof StaffWorkspaceAuditRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/dashboard': {
+      id: '/staff/_workspace/dashboard'
+      path: '/dashboard'
+      fullPath: '/staff/dashboard'
+      preLoaderRoute: typeof StaffWorkspaceDashboardRouteImport
       parentRoute: typeof StaffWorkspaceRouteRoute
     }
     '/staff/_workspace/fulfilment': {
@@ -652,6 +671,7 @@ const PRouteRouteWithChildren =
 interface StaffWorkspaceRouteRouteChildren {
   StaffWorkspaceAccountRoute: typeof StaffWorkspaceAccountRoute
   StaffWorkspaceAuditRoute: typeof StaffWorkspaceAuditRoute
+  StaffWorkspaceDashboardRoute: typeof StaffWorkspaceDashboardRoute
   StaffWorkspaceFulfilmentRoute: typeof StaffWorkspaceFulfilmentRoute
   StaffWorkspaceLedgerRoute: typeof StaffWorkspaceLedgerRoute
   StaffWorkspaceNfcPassportsRoute: typeof StaffWorkspaceNfcPassportsRoute
@@ -678,6 +698,7 @@ interface StaffWorkspaceRouteRouteChildren {
 const StaffWorkspaceRouteRouteChildren: StaffWorkspaceRouteRouteChildren = {
   StaffWorkspaceAccountRoute: StaffWorkspaceAccountRoute,
   StaffWorkspaceAuditRoute: StaffWorkspaceAuditRoute,
+  StaffWorkspaceDashboardRoute: StaffWorkspaceDashboardRoute,
   StaffWorkspaceFulfilmentRoute: StaffWorkspaceFulfilmentRoute,
   StaffWorkspaceLedgerRoute: StaffWorkspaceLedgerRoute,
   StaffWorkspaceNfcPassportsRoute: StaffWorkspaceNfcPassportsRoute,

@@ -189,43 +189,7 @@ export function StationShell() {
                       </div>
                     </div>
 
-                    {/* Durable Scan Feedback */}
-                    {lastOutcome && (
-                      <div
-                        className={`mt-4 rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-sm ${
-                          lastOutcome.resolution === "accepted"
-                            ? "border-[#134441] bg-[#1B5E5A] text-white"
-                            : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          {lastOutcome.resolution === "accepted" ? (
-                            <CheckCircle2 className="size-4 shrink-0 text-[#A3E5DE]" />
-                          ) : (
-                            <XCircle className="size-4 shrink-0 text-[#8C5348]" />
-                          )}
-                          <div className="space-y-0.5">
-                            <p className="font-bold text-white">
-                              {lastOutcome.resolution === "accepted"
-                                ? `Scan Confirmed (${lastOutcome.uid}): ${lastOutcome.lotCode ?? lastOutcome.garmentCode ?? lastOutcome.subjectId}${
-                                    lastOutcome.productName ? ` · ${lastOutcome.productName}` : ""
-                                  }`
-                                : `Scan Rejected (${lastOutcome.uid}): ${
-                                    lastOutcome.rejectReason ?? lastOutcome.resolution
-                                  }`}
-                            </p>
-                            <p className={lastOutcome.resolution === "accepted" ? "text-[11px] text-white/80 font-medium" : "text-[11px] text-foreground/80 font-medium"}>
-                              Timestamp: {fmt.dateTime(lastOutcome.at)}
-                            </p>
-                          </div>
-                        </div>
-                        {lastOutcome.resolution === "accepted" && (
-                          <span className="font-mono text-white/90 bg-white/15 px-2 py-0.5 rounded text-[11px] border border-white/20 shrink-0">
-                            Tag: {lastOutcome.uid}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {/* Durable Scan Feedback handled contextually by individual station panels */}
                   </section>
                 )}
 

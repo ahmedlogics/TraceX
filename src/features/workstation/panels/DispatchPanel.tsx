@@ -222,31 +222,33 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                       {/* Live Scan Feedback Banner */}
                       {lastOutcome && (
                         <div
-                          className={`mt-4 rounded-xl border p-4 text-xs transition-all shadow-sm ${
+                          className={`mt-4 rounded-xl border border-[#CDBBA8] p-4 text-xs transition-all shadow-2xs ${
                             lastOutcome.resolution === "accepted"
-                              ? "border-[#134441] bg-[#1B5E5A] text-white"
+                              ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                               : "border-[#BFA894] bg-[#E8D7C2]/50 text-[#2B170E]"
                           }`}
                         >
                           <div className="flex items-start gap-3">
                             {lastOutcome.resolution === "accepted" ? (
-                              <CheckCircle2 className="size-5 shrink-0 text-[#A3E5DE] mt-0.5" />
+                              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                                <CheckCircle2 className="size-5 text-[#1B5E5A]" />
+                              </div>
                             ) : (
                               <XCircle className="size-5 shrink-0 text-[#8C5348] mt-0.5" />
                             )}
                             <div className="space-y-1">
-                              <p className="font-bold text-sm text-white">
+                              <p className="font-bold text-sm text-[#2B170E]">
                                 {lastOutcome.resolution === "accepted"
                                   ? `Accepted: Container ${lastOutcome.garmentCode ?? lastOutcome.subjectId} Dispatched`
                                   : `Rejected: ${lastOutcome.rejectReason ?? "Dispatch Gate Rejected Scan"}`}
                               </p>
-                              <p className={lastOutcome.resolution === "accepted" ? "text-xs text-white/90 font-medium" : "text-xs opacity-90"}>
+                              <p className="text-xs text-[#6E5748] font-medium">
                                 {lastOutcome.resolution === "accepted"
                                   ? `Box Scanned → All linked garments updated to 'dispatched'.`
                                   : lastOutcome.rejectReason}
                               </p>
-                              <div className={lastOutcome.resolution === "accepted" ? "flex items-center gap-2 pt-1 font-mono text-[11px] text-white/80" : "flex items-center gap-2 pt-1 font-mono text-[11px] text-muted-foreground"}>
-                                <span className={lastOutcome.resolution === "accepted" ? "bg-white/15 px-2 py-0.5 rounded border border-white/20 text-white" : ""}>
+                              <div className="flex items-center gap-2 pt-1 font-mono text-[11px] text-[#6E5748]">
+                                <span className="bg-[#F2E4D2] px-2 py-0.5 rounded border border-[#CDBBA8] text-[#2B170E]">
                                   Scanned UID / ID: {lastOutcome.uid}
                                 </span>
                                 <span>·</span>

@@ -407,27 +407,29 @@ export function GarmentsView() {
 
                   {activeOutcome && (
                     <div
-                      className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-sm transition-all ${
+                      className={`rounded-xl border border-[#CDBBA8] p-3.5 text-xs flex items-center justify-between gap-3 shadow-2xs transition-all ${
                         activeOutcome.resolution === "accepted"
-                          ? "border-[#134441] bg-[#1B5E5A] text-white"
+                          ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                           : "border-destructive/40 bg-danger-soft text-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
                         {activeOutcome.resolution === "accepted" ? (
-                          <CheckCircle2 className="size-4 text-[#A3E5DE] shrink-0" />
+                          <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                            <CheckCircle2 className="size-4 text-[#1B5E5A]" />
+                          </div>
                         ) : (
                           <OctagonAlert className="size-4 text-destructive shrink-0" />
                         )}
                         <div>
-                          <span className="font-bold text-white">
+                          <span className="font-bold text-[#2B170E]">
                             {activeOutcome.resolution === "accepted"
                               ? `Scan Confirmed: ${activeOutcome.garmentCode ?? activeOutcome.subjectId}${
                                   activeOutcome.productName ? ` · ${activeOutcome.productName}` : ""
                                 }`
                               : `Scan Rejected (${activeOutcome.uid})`}
                           </span>
-                          <span className={activeOutcome.resolution === "accepted" ? "text-white/85 ml-2 font-medium" : "text-muted-foreground ml-2"}>
+                          <span className="text-[#6E5748] ml-2 font-medium">
                             {activeOutcome.resolution === "accepted"
                               ? activeStationCode === "finishing"
                                 ? "· Finishing Complete → Status Updated to Finished"
@@ -437,11 +439,11 @@ export function GarmentsView() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 text-[11px]">
-                        <span className={activeOutcome.resolution === "accepted" ? "font-mono text-white/90 bg-white/15 px-2 py-0.5 rounded border border-white/20" : "font-mono text-muted-foreground"}>
+                        <span className="font-mono text-[#2B170E] bg-[#F2E4D2] px-2 py-0.5 rounded border border-[#CDBBA8]">
                           Tag: {activeOutcome.uid}
                         </span>
                         {activeOutcome.at && (
-                          <span className={activeOutcome.resolution === "accepted" ? "text-white/70 hidden sm:inline" : "text-muted-foreground"}>
+                          <span className="text-[#6E5748] hidden sm:inline">
                             · {fmt.dateTime(activeOutcome.at)}
                           </span>
                         )}

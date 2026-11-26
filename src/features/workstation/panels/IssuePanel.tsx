@@ -690,15 +690,17 @@ export function IssuePanel({
                     {/* Live Scan Feedback Box */}
                     {showFeedback && lastOutcome && (
                       <div
-                        className={`rounded-xl border p-4 text-xs shadow-sm transition-all duration-200 ${
+                        className={`rounded-xl border border-[#CDBBA8] p-4 text-xs shadow-2xs transition-all duration-200 ${
                           lastOutcome.resolution === "accepted"
-                            ? "border-[#134441] bg-[#1B5E5A] text-white"
+                            ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                             : "border-rose-400/50 bg-rose-50 dark:bg-rose-950/30 text-rose-950 dark:text-rose-100"
                         }`}
                       >
                         <div className="flex items-start gap-3">
                           {lastOutcome.resolution === "accepted" ? (
-                            <CheckCircle2 className="size-5 shrink-0 text-[#A3E5DE] mt-0.5" />
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                              <CheckCircle2 className="size-5 text-[#1B5E5A]" />
+                            </div>
                           ) : (
                             <XCircle className="size-5 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
                           )}
@@ -707,7 +709,7 @@ export function IssuePanel({
                               <p
                                 className={`font-bold text-sm tracking-tight ${
                                   lastOutcome.resolution === "accepted"
-                                    ? "text-white"
+                                    ? "text-[#2B170E]"
                                     : "text-rose-900 dark:text-rose-200"
                                 }`}
                               >
@@ -716,23 +718,13 @@ export function IssuePanel({
                                   : "✕ Scan Rejected at Station 2"}
                               </p>
                               <div className="flex items-center gap-2">
-                                <span
-                                  className={`text-[11px] font-mono ${
-                                    lastOutcome.resolution === "accepted"
-                                      ? "text-white/80"
-                                      : "text-rose-800/80 dark:text-rose-300/80"
-                                  }`}
-                                >
+                                <span className="text-[11px] font-mono text-[#6E5748]">
                                   {fmt.dateTime(lastOutcome.at)}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => setActiveOutcome(null)}
-                                  className={`inline-flex size-6 items-center justify-center rounded-full transition-colors cursor-pointer ${
-                                    lastOutcome.resolution === "accepted"
-                                      ? "text-white/70 hover:text-white hover:bg-white/10"
-                                      : "text-rose-700 hover:bg-rose-500/20 hover:text-rose-950 dark:text-rose-300 dark:hover:text-rose-100"
-                                  }`}
+                                  className="inline-flex size-6 items-center justify-center rounded-full transition-colors cursor-pointer text-[#6E5748] hover:bg-[#F2E4D2] hover:text-[#2B170E]"
                                   aria-label="Dismiss scan notification"
                                   title="Dismiss feedback"
                                 >
@@ -742,30 +734,30 @@ export function IssuePanel({
                             </div>
 
                             {lastOutcome.resolution === "accepted" ? (
-                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-lg border border-white/20 bg-white/10 p-2.5 mt-2 text-white">
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 rounded-lg border border-[#CDBBA8] bg-[#F2E4D2]/40 p-2.5 mt-2 text-[#2B170E]">
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-white/75">
+                                  <span className="text-[10px] uppercase font-semibold text-[#6E5748]">
                                     Order ID
                                   </span>
-                                  <p className="font-bold wt-id text-white">{lastOutcome.orderId ?? targetOrderId}</p>
+                                  <p className="font-bold wt-id text-[#2B170E]">{lastOutcome.orderId ?? targetOrderId}</p>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-white/75">
+                                  <span className="text-[10px] uppercase font-semibold text-[#6E5748]">
                                     Matched Lot ID
                                   </span>
-                                  <p className="font-bold wt-id text-white">{lastOutcome.lotCode ?? lastOutcome.subjectId}</p>
+                                  <p className="font-bold wt-id text-[#2B170E]">{lastOutcome.lotCode ?? lastOutcome.subjectId}</p>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-white/75">
+                                  <span className="text-[10px] uppercase font-semibold text-[#6E5748]">
                                     Issued Meterage
                                   </span>
-                                  <p className="font-bold text-[#A3E5DE]">{lastOutcome.issuedQty ?? targetRequiredFabric} m</p>
+                                  <p className="font-bold text-[#134441]">{lastOutcome.issuedQty ?? targetRequiredFabric} m</p>
                                 </div>
                                 <div>
-                                  <span className="text-[10px] uppercase font-semibold text-white/75">
+                                  <span className="text-[10px] uppercase font-semibold text-[#6E5748]">
                                     Remaining Balance
                                   </span>
-                                  <p className="font-bold text-white">{lastOutcome.remainingBalance ?? 0} m</p>
+                                  <p className="font-bold text-[#2B170E]">{lastOutcome.remainingBalance ?? 0} m</p>
                                 </div>
                               </div>
                             ) : (

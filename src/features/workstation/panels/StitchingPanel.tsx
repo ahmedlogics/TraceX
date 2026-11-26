@@ -154,32 +154,34 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                 {/* Live Scan Outcome Banner */}
                 {lastOutcome && (
                   <div
-                    className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-sm transition-all ${
+                    className={`rounded-xl border border-[#CDBBA8] p-3.5 text-xs flex items-center justify-between gap-3 shadow-2xs transition-all ${
                       lastOutcome.resolution === "accepted"
-                        ? "border-[#134441] bg-[#1B5E5A] text-white"
+                        ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                         : "border-destructive/40 bg-danger-soft text-foreground"
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       {lastOutcome.resolution === "accepted" ? (
-                        <CheckCircle2 className="size-4 shrink-0 text-[#A3E5DE]" />
+                        <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                          <CheckCircle2 className="size-4 text-[#1B5E5A]" />
+                        </div>
                       ) : (
                         <XCircle className="size-4 shrink-0 text-destructive" />
                       )}
                       <div>
-                        <span className="font-bold text-white">
+                        <span className="font-bold text-[#2B170E]">
                           {lastOutcome.resolution === "accepted"
                             ? `Scan Confirmed: ${lastOutcome.garmentCode ?? lastOutcome.subjectId}`
                             : `Scan Rejected (${lastOutcome.uid})`}
                         </span>
-                        <span className={lastOutcome.resolution === "accepted" ? "text-white/85 ml-2 font-medium" : "text-muted-foreground ml-2"}>
+                        <span className="text-[#6E5748] ml-2 font-medium">
                           {lastOutcome.resolution === "accepted"
                             ? "· Stitching Complete → Advanced to Finishing"
                             : `· ${lastOutcome.rejectReason ?? lastOutcome.resolution}`}
                         </span>
                       </div>
                     </div>
-                    <span className={lastOutcome.resolution === "accepted" ? "font-mono text-white/90 bg-white/15 px-2 py-0.5 rounded text-[11px] border border-white/20" : "font-mono text-muted-foreground text-[11px]"}>
+                    <span className="font-mono text-[#2B170E] bg-[#F2E4D2] px-2.5 py-0.5 rounded text-[11px] border border-[#CDBBA8]">
                       Tag: {lastOutcome.uid}
                     </span>
                   </div>

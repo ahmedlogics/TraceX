@@ -552,26 +552,22 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
 
                       {/* Live Feedback Notification Banner (Dismissible; only renders on active events) */}
                       {feedback.type !== "idle" && (
-                        <div className="mt-4 pt-4 border-t">
+                        <div className="mt-4 pt-4 border-t border-[#CDBBA8]">
                           <div
-                            className={`relative rounded-xl border p-4 shadow-sm transition-all duration-200 ${
+                            className={`relative rounded-xl border border-[#CDBBA8] p-4 shadow-2xs transition-all duration-200 ${
                               feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
-                                ? "border-[#134441] bg-[#1B5E5A] text-white"
+                                ? "bg-[#FFFDFC] border-l-[4px] border-l-[#1B5E5A] text-[#2B170E]"
                                 : feedback.type === "rejected"
-                                ? "border-destructive/40 bg-destructive/10 text-destructive dark:text-destructive-foreground"
+                                ? "border-destructive/40 bg-destructive/10 text-destructive"
                                 : feedback.type === "waiting_box"
                                 ? "border-[#CDBBA8] bg-[#F4EADA] text-[#2B170E]"
-                                : "border-primary/20 bg-muted/30 text-foreground"
+                                : "border-[#CDBBA8] bg-[#FFFDFC] text-[#2B170E]"
                             }`}
                           >
                             <button
                               type="button"
                               onClick={() => setFeedback({ type: "idle", title: "", message: "" })}
-                              className={`absolute top-3 right-3 p-1 rounded-md transition-colors ${
-                                feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
-                                  ? "text-white/70 hover:text-white hover:bg-white/10"
-                                  : "text-muted-foreground hover:text-foreground"
-                              }`}
+                              className="absolute top-3 right-3 p-1 rounded-md transition-colors text-[#6E5748] hover:text-[#2B170E] hover:bg-[#F2E4D2]"
                               aria-label="Dismiss message"
                             >
                               <X className="size-4" />
@@ -579,53 +575,43 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
 
                             <div className="flex items-start gap-3 pr-6">
                               {feedback.type === "accepted_box" || feedback.type === "accepted_product" ? (
-                                <ShieldCheck className="size-6 text-[#A3E5DE] shrink-0 mt-0.5" />
+                                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                                  <ShieldCheck className="size-4.5 text-[#1B5E5A]" />
+                                </div>
                               ) : feedback.type === "sealed" ? (
-                                <PackageCheck className="size-6 text-[#A3E5DE] shrink-0 mt-0.5" />
+                                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#E6F0EE] text-[#1B5E5A] border border-[#99C5C1]">
+                                  <PackageCheck className="size-4.5 text-[#1B5E5A]" />
+                                </div>
                               ) : feedback.type === "rejected" ? (
                                 <ShieldAlert className="size-6 text-destructive shrink-0 mt-0.5" />
                               ) : (
-                                <Radio className="size-6 text-primary shrink-0 mt-0.5 animate-pulse" />
+                                <Radio className="size-6 text-[#6E5748] shrink-0 mt-0.5 animate-pulse" />
                               )}
 
                               <div className="flex-1 space-y-1">
                                 <div className="flex items-center justify-between gap-2">
-                                  <h3 className={`text-sm font-bold tracking-tight ${
-                                    feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed" ? "text-white" : ""
-                                  }`}>
+                                  <h3 className="text-sm font-bold tracking-tight text-[#2B170E]">
                                     {feedback.title}
                                   </h3>
                                   {feedback.timestamp && (
-                                    <span className={`text-[11px] font-mono ${
-                                      feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed" ? "text-white/80" : "text-muted-foreground"
-                                    }`}>
+                                    <span className="text-[11px] font-mono text-[#6E5748]">
                                       {feedback.timestamp}
                                     </span>
                                   )}
                                 </div>
-                                <p className={`text-xs font-medium leading-relaxed ${
-                                  feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed" ? "text-white/90" : "opacity-95"
-                                }`}>
+                                <p className="text-xs font-medium leading-relaxed text-[#6E5748]">
                                   {feedback.message}
                                 </p>
 
                                 {/* Details Chips */}
                                 <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-mono">
                                   {feedback.boxId && (
-                                    <span className={`rounded px-2 py-0.5 border shadow-2xs font-semibold ${
-                                      feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
-                                        ? "bg-white/15 text-white border-white/25"
-                                        : "bg-background/80"
-                                    }`}>
+                                    <span className="rounded bg-[#F2E4D2] px-2 py-0.5 border border-[#CDBBA8] shadow-2xs font-semibold text-[#2B170E]">
                                       Box: {feedback.boxId}
                                     </span>
                                   )}
                                   {feedback.garmentId && (
-                                    <span className={`rounded px-2 py-0.5 border shadow-2xs font-semibold ${
-                                      feedback.type === "accepted_box" || feedback.type === "accepted_product" || feedback.type === "sealed"
-                                        ? "bg-white/15 text-white border-white/25"
-                                        : "bg-background/80"
-                                    }`}>
+                                    <span className="rounded bg-[#F2E4D2] px-2 py-0.5 border border-[#CDBBA8] shadow-2xs font-semibold text-[#2B170E]">
                                       Item: {feedback.garmentId}
                                     </span>
                                   )}
