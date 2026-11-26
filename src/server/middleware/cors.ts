@@ -51,6 +51,12 @@ export function createCorsMiddleware() {
       "X-Actor-Dept",
       "X-Actor-Username",
       "X-Actor-Id",
+      "x-ui-simulation",
+      "X-UI-Simulation",
+      "x-scan-id",
+      "X-Scan-Id",
+      "x-device-secret",
+      "X-Device-Secret",
     ],
     exposedHeaders: ["X-Request-Id"],
     maxAge: 86400, // 24 hours

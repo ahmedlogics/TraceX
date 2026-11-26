@@ -989,7 +989,7 @@ export class StitchingScanHandler implements DomainScanHandler<ScanOutcomeResult
     }
 
     // Validate cutting completion and current stage
-    if (garment.stage !== "cut" && garment.stage !== "stitched" && garment.stage !== "stitching") {
+    if (garment.stage !== "cut") {
       throw ApiError.badRequest(
         `Garment ${garment.code} cannot be processed at stitching; current stage is '${garment.stage}'. Expected stage 'cut' (cutting completed).`,
         { garmentId: garment.id, stage: garment.stage },
@@ -1227,7 +1227,7 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
       });
       if (!existingOpen) {
         const qcUser = await tx.staff_users.findFirst({
-          where: { OR: [{ username: "qc.demo" }, { department_code: "quality" }] },
+          where: { username: "qc.demo" },
         });
         const inspectorId = qcUser?.id || context?.actor?.actorId || "09abcce4-0126-42bc-bfdb-8e3f76332ee8";
         const checklistVer = await getOrCreateChecklistVersion(tx, "final", inspectorId);

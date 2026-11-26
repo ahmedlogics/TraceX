@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
-import { runInTransaction } from "../db/client";
+import { getPrismaClient, runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
 import { normalizeTagUid } from "../contracts/rfid";
@@ -1075,7 +1075,6 @@ export async function replaceGarmentCard(
 // ---------------------------------------------------------------- Routine Assembly Scans (Stitching & Finishing)
 
 async function recordRfidScanLog(
-  db: PrismaTransactionClient,
   tagUid: string,
   stationCode: string,
   outcome: "accepted" | "rejected",
@@ -1084,19 +1083,34 @@ async function recordRfidScanLog(
   extra?: { garmentId?: string | null; materialLotId?: string | null; tagBindingId?: string | null },
 ) {
   try {
-    const deviceId = "00000000-0000-0000-0000-000000000000";
+    const prisma = getPrismaClient();
+    const activeSession = await prisma.reader_sessions.findFirst({
+      where: {
+        station_code: stationCode,
+        closed_at: null,
+        expires_at: { gt: new Date() },
+      },
+      orderBy: { opened_at: "desc" },
+    });
+
+    if (outcome === "accepted" && !activeSession) {
+      return;
+    }
+
+    const deviceId = activeSession?.device_id ?? "26ee6645-9da8-49b3-8e88-feb5707adce6";
     const scanId = `routine-${crypto.randomUUID()}`;
     const bootId = `boot-routine`;
     const fingerprint = crypto.createHash("sha256").update(scanId).digest();
-    await (db as any).rfid_scans.create({
+    await (prisma as any).rfid_scans.create({
       data: {
         device_id: deviceId,
         scan_id: scanId,
         boot_id: bootId,
         sequence: BigInt(Date.now()),
-        reader_index: stationCode === "stitching" ? 6 : 7,
-        reported_mapping_version: 1,
+        reader_index: activeSession?.reader_index ?? (stationCode === "stitching" ? 6 : 7),
+        reported_mapping_version: activeSession?.mapping_version ?? 1,
         tag_uid: tagUid,
+        reader_session_id: activeSession?.id ?? null,
         station_code: stationCode,
         tag_binding_id: extra?.tagBindingId ?? null,
         garment_id: extra?.garmentId ?? null,
@@ -1122,7 +1136,7 @@ export async function executeRoutineScan(
   const now = new Date();
   const actorRef = toActorRef(actor);
 
-  return runInTransaction(async (db) => {
+  const outcome = await runInTransaction(async (db) => {
     // 1. Identify active binding
     const binding = await db.rfid_tag_bindings.findFirst({
       where: {
@@ -1148,7 +1162,6 @@ export async function executeRoutineScan(
 
     if (!binding) {
       await recordRfidScanLog(
-        db,
         normalizedUid,
         input.stationCode,
         "rejected",
@@ -1166,7 +1179,6 @@ export async function executeRoutineScan(
 
     if (!binding.garments || !binding.garment_id) {
       await recordRfidScanLog(
-        db,
         normalizedUid,
         input.stationCode,
         "rejected",
@@ -1199,7 +1211,6 @@ export async function executeRoutineScan(
       const rejectReason = `Garment '${garment.code}' has an active quality hold (${reason}). Routine assembly progression is blocked until cleared by QC.`;
 
       await recordRfidScanLog(
-        db,
         normalizedUid,
         input.stationCode,
         "rejected",
@@ -1225,7 +1236,6 @@ export async function executeRoutineScan(
         const rejectReason = `Garment '${garment.code}' is at stage '${garment.stage}'. Expected stage 'cut' for stitching station.`;
 
         await recordRfidScanLog(
-          db,
           normalizedUid,
           input.stationCode,
           "rejected",
@@ -1249,7 +1259,6 @@ export async function executeRoutineScan(
         const rejectReason = `Garment '${garment.code}' is at stage '${garment.stage}'. Expected stage 'stitched' for finishing station.`;
 
         await recordRfidScanLog(
-          db,
           normalizedUid,
           input.stationCode,
           "rejected",
@@ -1284,7 +1293,6 @@ export async function executeRoutineScan(
       const rejectReason = `Duplicate scan: Garment '${garment.code}' has already completed ${input.stationCode} and advanced to Finishing.`;
 
       await recordRfidScanLog(
-        db,
         normalizedUid,
         input.stationCode,
         "rejected",
@@ -1336,7 +1344,7 @@ export async function executeRoutineScan(
     if (input.stationCode === "finishing") {
       try {
         const qcUser = await db.staff_users.findFirst({
-          where: { OR: [{ username: "qc.demo" }, { department_code: "quality" }] },
+          where: { username: "qc.demo" },
         });
         const inspectorId = qcUser?.id || staffUserId;
         const existingOpen = await db.inspections.findFirst({
@@ -1422,17 +1430,6 @@ export async function executeRoutineScan(
       },
     });
 
-    // Record accepted scan
-    await recordRfidScanLog(
-      db,
-      normalizedUid,
-      input.stationCode,
-      "accepted",
-      `${input.stationCode}_completed`,
-      `Garment ${garment.code} ${input.stationCode} completed. Ready for ${nextExpectedStation}.`,
-      { garmentId: garment.id, tagBindingId: binding.id },
-    );
-
     return {
       uid: normalizedUid,
       resolution: "accepted",
@@ -1440,8 +1437,23 @@ export async function executeRoutineScan(
       garmentCode: garment.code,
       productName,
       at: now.toISOString(),
+      extra: { garmentId: garment.id, tagBindingId: binding.id },
     };
   }, txClient);
+
+  if (outcome.resolution === "accepted") {
+    const nextExpectedStation = input.stationCode === "stitching" ? "finishing" : "final_qc";
+    await recordRfidScanLog(
+      normalizedUid,
+      input.stationCode,
+      "accepted",
+      `${input.stationCode}_completed`,
+      `Garment ${outcome.garmentCode} ${input.stationCode} completed. Ready for ${nextExpectedStation}.`,
+      (outcome as any).extra,
+    );
+  }
+
+  return outcome;
 }
 
 export async function routineProductionScan(

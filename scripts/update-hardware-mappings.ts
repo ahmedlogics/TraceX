@@ -77,11 +77,11 @@ async function main() {
       [deviceId]
     );
 
-    // 3. Update requires_explicit_context for cutting to false
+    // 3. Update requires_explicit_context for cutting & packing to false for direct hardware scanning
     await client.query(
-      "UPDATE supplyease.rfid_stations SET requires_explicit_context = false WHERE code = 'cutting'"
+      "UPDATE supplyease.rfid_stations SET requires_explicit_context = false WHERE code IN ('cutting', 'packing')"
     );
-    console.log("✓ Station 'cutting' requires_explicit_context updated to false.");
+    console.log("✓ Stations 'cutting' and 'packing' requires_explicit_context updated to false.");
 
     // 4. Delete old mappings for this device and insert clean canonical mappings for version 2 & version 1
     await client.query(

@@ -182,17 +182,9 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                   // 2. STATE: Box is Open -> Associate Product Tags
                   // -------------------------------------------------------------
                   if (isBoxOpen && activeBox) {
-                    // Check if operator hasn't clicked "Start Scanning Products" yet
+                    // Auto-enable scanning state if paused
                     if (!isScanningProducts) {
-                      setFeedback({
-                        type: "rejected",
-                        title: "Product Scanning Paused",
-                        message: `Box ${activeBox.id} is open. Please click 'Start Scanning Products' to activate hardware scanner listening.`,
-                        rejectReason: "Operator must click 'Start Scanning Products' to begin intake.",
-                        tagUid: uid,
-                        timestamp: new Date().toLocaleTimeString(),
-                      });
-                      return;
+                      setIsScanningProducts(true);
                     }
 
                     // Check if tag is a fabric bundle card
@@ -329,13 +321,74 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                   }
 
                   // -------------------------------------------------------------
-                  // 3. STATE: No box open and not waiting for box scan
+                  // 3. STATE: No box open
                   // -------------------------------------------------------------
+                  // Check if tag belongs to an existing package
+                  const existingBox = packages.find(
+                    (p) => p.rfidUid === uid || p.id === uid || (p as any).code === uid,
+                  );
+                  if (existingBox) {
+                    setLocalActiveBoxId(existingBox.id);
+                    setIsWaitingForBoxScan(false);
+                    setIsScanningProducts(true);
+                    setFeedback({
+                      type: "accepted_box",
+                      title: `✓ Box ${existingBox.id} Activated`,
+                      message: `Master Carton ${existingBox.id} activated with Tag ${uid}. Ready for product intake.`,
+                      boxId: existingBox.id,
+                      tagUid: uid,
+                      timestamp: new Date().toLocaleTimeString(),
+                    });
+                    void qFulfilment.refetch();
+                    void qGarments.refetch();
+                    return;
+                  }
+
+                  // Check if tag is clean (not bound to garment or fabric lot) -> Auto-initialize new Master Box
+                  const isUsedByLot = lots.some((l) => l.rfidUid === uid);
+                  const isUsedByGarment = garments.some((g) => g.rfidUid === uid);
+
+                  if (!isUsedByLot && !isUsedByGarment) {
+                    const existingBoxNums = packages
+                      .map((p) => {
+                        const m = p.id.match(/BOX-(\d+)/i) || p.id.match(/PKG-(\d+)/i);
+                        return m ? parseInt(m[1]!, 10) : 0;
+                      })
+                      .filter((n) => !isNaN(n));
+                    const nextNum = existingBoxNums.length > 0 ? Math.max(...existingBoxNums) + 1 : 1;
+                    const newBoxId = `BOX-${String(nextNum).padStart(3, "0")}`;
+
+                    void run(
+                      async (c) => {
+                        return await c.createPackage(uid, newBoxId);
+                      },
+                      () => {
+                        setLocalActiveBoxId(newBoxId);
+                        setIsWaitingForBoxScan(false);
+                        setIsScanningProducts(true);
+                        setTestBoxUid(generateFreshBoxUid());
+                        setFeedback({
+                          type: "accepted_box",
+                          title: `✓ Box ${newBoxId} Initialized`,
+                          message: `Master Carton bound with Tag ${uid}. Ready for product packing.`,
+                          boxId: newBoxId,
+                          tagUid: uid,
+                          timestamp: new Date().toLocaleTimeString(),
+                        });
+                        void qFulfilment.refetch();
+                        void qGarments.refetch();
+                        return `Box ${newBoxId} registered with Tag ${uid}. Ready for product packing.`;
+                      },
+                    );
+                    return;
+                  }
+
+                  // If tag is a garment or lot tag, guide operator to scan box tag first
                   setFeedback({
                     type: "rejected",
-                    title: "Scan Rejected — Scan Box First",
-                    message: "Rejected: No active master carton open. Click 'Scan Box Tag' first before scanning product tags.",
-                    rejectReason: "No active box open. Box tag must be scanned first.",
+                    title: "Scan Rejected — Scan Box Tag First",
+                    message: "Rejected: No active master carton open. Please scan a fresh Box RFID Card first to create or activate a box before scanning product tags.",
+                    rejectReason: "No active box open. Box tag must be presented first.",
                     tagUid: uid,
                     timestamp: new Date().toLocaleTimeString(),
                   });
@@ -441,11 +494,63 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                   if (!outcome) return;
                   if (outcome.at && outcome.at !== lastSeenOutcomeRef.current) {
                     lastSeenOutcomeRef.current = outcome.at;
+
+                    if (outcome.resolution === "accepted") {
+                      if (outcome.outcomeCode === "BOX_INITIALIZED" || outcome.outcomeCode === "BOX_OPENED") {
+                        const boxId = outcome.subjectCode || outcome.subjectId || "BOX-001";
+                        setLocalActiveBoxId(boxId);
+                        setIsWaitingForBoxScan(false);
+                        setIsScanningProducts(true);
+                        setFeedback({
+                          type: "accepted_box",
+                          title: `✓ Box ${boxId} ${outcome.outcomeCode === "BOX_INITIALIZED" ? "Initialized" : "Opened"}`,
+                          message: outcome.message || `Master Carton bound with Tag ${outcome.uid}. Ready for product intake.`,
+                          boxId: boxId,
+                          tagUid: outcome.uid,
+                          timestamp: new Date().toLocaleTimeString(),
+                        });
+                        void qFulfilment.refetch();
+                        void qGarments.refetch();
+                        return;
+                      }
+
+                      if (
+                        outcome.outcomeCode === "PACKING_ACCEPTED" ||
+                        outcome.outcomeCode === "GARMENT_PACKED" ||
+                        outcome.garmentCode ||
+                        outcome.subjectCode
+                      ) {
+                        const garmentCode = outcome.garmentCode || outcome.subjectCode || outcome.subjectId;
+                        setFeedback({
+                          type: "accepted_product",
+                          title: `✓ Product Packed: ${garmentCode}`,
+                          message: outcome.message || `Garment ${garmentCode} packed into carton. Ready for next product scan.`,
+                          boxId: activeBox?.id,
+                          garmentCode: garmentCode,
+                          tagUid: outcome.uid,
+                          timestamp: new Date().toLocaleTimeString(),
+                        });
+                        void qFulfilment.refetch();
+                        void qGarments.refetch();
+                        return;
+                      }
+                    } else if (outcome.resolution === "rejected") {
+                      setFeedback({
+                        type: "rejected",
+                        title: "Hardware Scan Rejected",
+                        message: outcome.message || outcome.rejectionReason || "Scan rejected by station rules.",
+                        rejectReason: outcome.rejectionReason || outcome.message,
+                        tagUid: outcome.uid,
+                        timestamp: new Date().toLocaleTimeString(),
+                      });
+                      return;
+                    }
+
                     if (outcome.uid) {
                       void handleTagScan(outcome.uid);
                     }
                   }
-                }, [stationData?.lastScanOutcome]);
+                }, [stationData?.lastScanOutcome, activeBox?.id]);
 
                 // Global USB Keyboard Wedge RFID reader listener for Station 7
                 // Zero manual typing/selecting needed: barcode/RFID reader automatically triggers scan

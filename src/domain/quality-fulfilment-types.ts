@@ -165,9 +165,9 @@ export function checkFulfilmentEligibility(
 
   // Operation-specific stage checks
   if (operation === "packing") {
-    const stageOk = garment.stage === "packing";
+    const stageOk = garment.stage === "packing" || garment.stage === "finished";
     if (!stageOk) {
-      const reason = `Physical stage is '${garment.stage}', expected 'packing'`;
+      const reason = `Physical stage is '${garment.stage}', expected 'packing' or 'finished'`;
       checks.push({
         code: "STAGE_VALID_FOR_PACKING",
         label: "Garment arrived at packing stage",

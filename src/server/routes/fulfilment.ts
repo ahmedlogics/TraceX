@@ -17,6 +17,7 @@ import {
 } from "../fulfilment/fulfilment-service";
 import { sendSuccess, sendError, ApiError } from "../middleware/responses";
 import type { ActorContext, StaffRole, Department } from "../contracts/actor";
+import { packageTagCache } from "../rfid/quality-fulfilment-handlers";
 
 export const fulfilmentRouter = Router();
 
@@ -233,7 +234,7 @@ fulfilmentRouter.get("/", async (_req: Request, res: Response) => {
       id: p.code || p.id,
       packageId: p.id,
       code: p.code,
-      rfidUid: p.code,
+      rfidUid: packageTagCache.get(p.id) || packageTagCache.get(p.code) || p.code,
       status: p.status,
       packedBy: p.staff_users?.display_name || p.staff_users?.username || "Staff",
       createdAt: (p.created_at ? new Date(p.created_at) : new Date()).toISOString(),

@@ -126,10 +126,21 @@ export async function httpRequest<T = unknown>(
     headers["Authorization"] = `Bearer ${token}`;
   } else if (!token && typeof window !== "undefined") {
     // In prototype/development mode, if staff user hasn't explicitly logged in with password,
-    // propagate active session username and admin role so authenticated routes succeed:
+    // propagate active session username and actor context so authenticated routes succeed:
     const username = window.localStorage.getItem("weartrail.staff-username") || "admin.demo";
     headers["X-Actor-Username"] = username;
     headers["X-Actor-Role"] = "admin";
+    try {
+      const rawUser = window.localStorage.getItem("weartrail.staff-user");
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        if (u.id) headers["X-Actor-Id"] = u.id;
+        if (u.role) headers["X-Actor-Role"] = u.role;
+        if (u.department) headers["X-Actor-Dept"] = u.department;
+      }
+    } catch {
+      // ignore
+    }
   }
 
   let body: BodyInit | undefined;
@@ -479,16 +490,33 @@ export function createHttpClient(): WearTrailClient {
       await req(`/api/rfid/contexts/${contextId}`, { method: "DELETE" });
     },
     async resolveRfidScan(uid: string): Promise<ScanOutcome> {
-      const res = await req<any>("/api/rfid/ui-scan", {
-        method: "POST",
-        body: { uid },
-      });
-      return {
-        ...res,
-        subjectId: res.subjectCode || res.subjectId,
-        lotCode: res.lotCode || (res.subjectKind === "material_lot" ? res.subjectCode : undefined),
-        garmentCode: res.garmentCode || (res.subjectKind === "garment" ? res.subjectCode : undefined),
-      };
+      try {
+        const res = await req<any>("/api/rfid/ui-scan", {
+          method: "POST",
+          body: { uid },
+        });
+        return {
+          ...res,
+          subjectId: res.subjectCode || res.subjectId,
+          lotCode: res.lotCode || (res.subjectKind === "material_lot" ? res.subjectCode : undefined),
+          garmentCode: res.garmentCode || (res.subjectKind === "garment" ? res.subjectCode : undefined),
+        };
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const code = err.code.toLowerCase();
+          let resolution: ScanResolution = "rejected_unknown_card";
+          if (code.includes("stage")) resolution = "rejected_wrong_stage";
+          else if (code.includes("hold")) resolution = "rejected_business_rule";
+          else if (code.includes("duplicate")) resolution = "rejected_duplicate";
+          return {
+            uid,
+            resolution,
+            rejectReason: err.message,
+            at: new Date().toISOString(),
+          };
+        }
+        throw err;
+      }
     },
     async routineScan(
       uid: string,

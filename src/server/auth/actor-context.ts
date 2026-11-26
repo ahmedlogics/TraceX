@@ -282,20 +282,48 @@ export function createSessionResolverMiddleware(prisma: PrismaClient): RequestHa
         const headerDept = req.headers["x-actor-dept"] as string | undefined;
 
         if (headerRole || headerId || headerUser) {
+          let realUser = null;
+          if (headerUser) {
+            realUser = await prisma.staff_users.findFirst({
+              where: { username: headerUser },
+            });
+          } else if (headerId) {
+            realUser = await prisma.staff_users.findUnique({
+              where: { id: headerId },
+            });
+          }
+
+          let activeGrants: any[] = [];
+          if (realUser) {
+            activeGrants = await prisma.staff_role_grants.findMany({
+              where: {
+                staff_user_id: realUser.id,
+                revoked_at: null,
+              },
+            });
+          }
+
+          const primaryRole = activeGrants[0]?.role_code || (headerRole as any) || "quality";
+          const primaryDept = activeGrants[0]?.department_code || (headerDept as any) || "quality";
+
+          const resolvedId = realUser?.id || headerId || "03221414-8e7e-4063-8054-e2426d7677c1";
+          const resolvedUsername = realUser?.username || headerUser || "test.operator";
+          const resolvedDisplayName = realUser?.display_name || headerUser || "Test Operator";
+
           req.actor = {
-            actorId: headerId || "03221414-8e7e-4063-8054-e2426d7677c1",
-            username: headerUser || "test.operator",
-            displayName: headerUser || "Test Operator",
-            role: (headerRole as any) || "admin",
-            department: (headerDept as any) || "receiving",
+            actorId: resolvedId,
+            username: resolvedUsername,
+            displayName: resolvedDisplayName,
+            role: primaryRole,
+            department: primaryDept,
             authenticatedAt: new Date(),
           };
           (req as unknown as { staffUser?: unknown }).staffUser = {
-            id: req.actor.actorId,
-            username: req.actor.username,
-            displayName: req.actor.displayName,
-            role: req.actor.role,
-            department: req.actor.department,
+            id: resolvedId,
+            username: resolvedUsername,
+            displayName: resolvedDisplayName,
+            role: primaryRole,
+            department: primaryDept,
             status: "active",
           };
         }

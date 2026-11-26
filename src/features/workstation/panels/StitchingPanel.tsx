@@ -7,12 +7,21 @@ import {
   Scissors,
   Wrench,
   XCircle,
+  OctagonAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IdLink, Section } from "@/components/wt/layout";
 import { StatusBadge } from "@/components/wt/StatusBadge";
@@ -20,10 +29,13 @@ import { Loadable } from "@/components/wt/states";
 import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { useClient } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 export function StitchingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const client = useClient();
+  const inputRef = useRef<HTMLInputElement>(null);
   const { run, pending } = useWtAction();
   const [activeTab, setActiveTab] = useState<"queue" | "rework">("queue");
   const [scanUid, setScanUid] = useState("");
@@ -31,17 +43,71 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
   const [repairedIds, setRepairedIds] = useState<Record<string, string>>({});
   const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
 
-  const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 3000 });
+  // Scan modal state
+  const [scanGarment, setScanGarment] = useState<Garment | null>(null);
+  const [inputUid, setInputUid] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 2000 });
   const qRework = useWtQuery(["rework"], (c) => c.listRework(), { refetchInterval: 3000 });
 
   const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
+
+  // Auto-focus input on modal open
+  useEffect(() => {
+    if (scanGarment) {
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [scanGarment]);
+
+  // Live active reader polling while modal is open (checks both stitching and finishing endpoints)
+  useEffect(() => {
+    if (!scanGarment) return;
+    const interval = setInterval(async () => {
+      try {
+        const [stitchingData, finishingData] = await Promise.all([
+          client.getRfidStationData("stitching"),
+          client.getRfidStationData("finishing"),
+        ]);
+        const latest = stitchingData.lastScanOutcome || finishingData.lastScanOutcome;
+        if (latest && latest.at && latest.at !== lastSeenScanRef.current) {
+          const matched =
+            latest.uid === scanGarment.rfidUid ||
+            latest.subjectId === scanGarment.id ||
+            latest.garmentCode === scanGarment.id;
+          if (matched) {
+            lastSeenScanRef.current = latest.at;
+            setInputUid(latest.uid || scanGarment.rfidUid || "");
+            if (latest.resolution === "accepted") {
+              setCompletedIds((prev) => ({
+                ...prev,
+                [scanGarment.id]: { at: latest.at || new Date().toISOString(), uid: latest.uid },
+              }));
+              void qGarments.refetch();
+              setScanGarment(null);
+              setInputUid("");
+              setScanError(null);
+              toast.success(
+                `✓ Garment ${latest.garmentCode ?? scanGarment.id} Stitching complete! Advanced to Finishing.`
+              );
+            } else {
+              setScanError(latest.rejectReason || `Scan rejected: ${latest.resolution}`);
+            }
+          }
+        }
+      } catch {
+        /* poll catch */
+      }
+    }, 600);
+    return () => clearInterval(interval);
+  }, [scanGarment, client, qGarments]);
 
   // Auto-detect scans arriving via MQTT/backend hardware reader
   const lastSeenScanRef = useRef<string | null>(null);
   useEffect(() => {
     const outcome = stationData.lastScanOutcome;
-    if (!outcome) return;
-    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
+    if (!outcome || !outcome.at) return;
+    if (outcome.at !== lastSeenScanRef.current) {
       lastSeenScanRef.current = outcome.at;
       setLocalLastOutcome(outcome);
       if (outcome.resolution === "accepted") {
@@ -56,31 +122,56 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
           }));
         }
         void qGarments.refetch();
+        if (scanGarment && (scanGarment.id === gId || scanGarment.rfidUid === outcome.uid)) {
+          setScanGarment(null);
+          setInputUid("");
+          setScanError(null);
+        }
         toast.success(
           `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? ""} Stitching complete! Advanced to Finishing.`
         );
+      } else if (scanGarment && (scanGarment.id === outcome.subjectId || scanGarment.rfidUid === outcome.uid)) {
+        setInputUid(outcome.uid || "");
+        setScanError(outcome.rejectReason || `Scan rejected: ${outcome.resolution}`);
       }
     }
-  }, [stationData.lastScanOutcome, qGarments]);
+  }, [stationData.lastScanOutcome, qGarments, scanGarment]);
 
   const handleScan = (garment: Garment) => {
-    const uid = garment.rfidUid || scanUid.trim();
-    if (!uid) {
-      toast.error("No RFID card linked to this garment.");
+    setScanGarment(garment);
+    setInputUid("");
+    setScanError(null);
+  };
+
+  const handleConfirmScan = (overrideUid?: string) => {
+    if (!scanGarment) return;
+    const uidToUse = (overrideUid || inputUid).trim();
+    if (!uidToUse) {
+      setScanError("Please enter or scan an RFID tag UID.");
       return;
     }
+    const targetUid = scanGarment.rfidUid;
+    if (targetUid && uidToUse.toUpperCase() !== targetUid.toUpperCase()) {
+      setScanError(`Tag mismatch: Entered tag "${uidToUse}" does not match garment tag "${targetUid}".`);
+      return;
+    }
+
     void run(
-      (c) => c.routineScan(uid, "stitching"),
+      (c) => c.routineScan(uidToUse, "stitching"),
       (outcome) => {
         setLocalLastOutcome(outcome);
         if (outcome.resolution === "accepted") {
           setCompletedIds((prev) => ({
             ...prev,
-            [garment.id]: { at: outcome.at || new Date().toISOString(), uid },
+            [scanGarment.id]: { at: outcome.at || new Date().toISOString(), uid: uidToUse },
           }));
           void qGarments.refetch();
-          return `✓ Garment ${garment.id} (${garment.productName}) Stitching complete! Status updated to Stitched.`;
+          setScanGarment(null);
+          setInputUid("");
+          setScanError(null);
+          return `✓ Garment ${scanGarment.id} (${scanGarment.productName}) Stitching complete! Advanced to Finishing.`;
         }
+        setScanError(`Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`);
         return `Scan rejected: ${outcome.rejectReason ?? outcome.resolution}`;
       }
     );
@@ -389,6 +480,131 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                     )}
                   </Section>
                 )}
+
+                {/* Scan Garment RFID Dialog */}
+                <Dialog open={!!scanGarment} onOpenChange={(open) => { if (!open) setScanGarment(null); }}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <ScanLine className="size-5 text-primary" />
+                        Scan Garment Tag · Station 4
+                      </DialogTitle>
+                      <DialogDescription>
+                        Scan or enter the garment's RFID tag to complete seam assembly and advance to Station 5 Finishing.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {scanGarment && (
+                      <div className="space-y-4 pt-1">
+                        {/* Garment Details Card */}
+                        <div className="rounded-lg border bg-muted/30 p-3.5 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-sm text-foreground">{scanGarment.productName}</span>
+                            {scanGarment.size && (
+                              <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                                Size {scanGarment.size}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span>Garment ID:</span>
+                              <span className="font-mono font-medium text-foreground">{scanGarment.id}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Order:</span>
+                              <span className="font-mono text-foreground">{scanGarment.orderId}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Linked Tag UID:</span>
+                              <span className="inline-flex items-center gap-1 font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                <Radio className="size-3" /> {scanGarment.rfidUid}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Live Reader Detection Beacon */}
+                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex size-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                              <span className="relative inline-flex rounded-full size-2.5 bg-primary" />
+                            </span>
+                            <span className="font-medium text-foreground">Scanner 4 Active &amp; Listening</span>
+                          </div>
+                          {scanGarment.rfidUid && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[11px] gap-1 px-2 border-primary/30 text-primary hover:bg-primary/10"
+                              onClick={() => {
+                                const uid = scanGarment.rfidUid || "";
+                                setInputUid(uid);
+                                setScanError(null);
+                                handleConfirmScan(uid);
+                              }}
+                            >
+                              Auto-Fill Tag ({scanGarment.rfidUid})
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Scan Input */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            RFID Card UID
+                          </label>
+                          <Input
+                            ref={inputRef}
+                            autoFocus
+                            placeholder="Scan or enter RFID card UID (e.g. D49B0103)..."
+                            value={inputUid}
+                            onChange={(e) => {
+                              setInputUid(e.target.value);
+                              if (scanError) setScanError(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleConfirmScan();
+                              }
+                            }}
+                            className="font-mono text-sm"
+                          />
+                        </div>
+
+                        {scanError && (
+                          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive flex items-center gap-2">
+                            <OctagonAlert className="size-4 shrink-0" />
+                            <span>{scanError}</span>
+                          </div>
+                        )}
+
+                        <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setScanGarment(null)}
+                            disabled={pending}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            className="gap-1.5 bg-primary font-semibold"
+                            disabled={pending || !inputUid.trim()}
+                            onClick={() => handleConfirmScan()}
+                          >
+                            <CheckCircle2 className="size-4" />
+                            {pending ? "Validating..." : "Confirm & Complete"}
+                          </Button>
+                        </DialogFooter>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </div>
             );
           }}

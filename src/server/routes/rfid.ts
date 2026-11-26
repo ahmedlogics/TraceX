@@ -5,7 +5,7 @@ import { prisma, runInTransaction } from "../db/client";
 import { validateBody } from "../middleware/validation";
 import { sendSuccess, ApiError } from "../middleware/responses";
 import { VersionedScanEnvelopeSchema } from "../rfid/schemas";
-import { scanRoutingService } from "../rfid/scan-router";
+import { scanRoutingService, stationScanCache } from "../rfid/scan-router";
 import { isOperatorAuthorizedForStation } from "../rfid/session-resolver";
 import { createPrismaAuthMiddleware, extractSessionToken, type RequestLike } from "../auth/actor-context";
 import { resolveSession } from "../auth/auth-service";
@@ -291,12 +291,20 @@ async function getOrCreateActiveReaderSession(
     );
   }
 
-  // Close any existing unclosed reader session on this physical reader to prevent unique constraint conflict
+  // Close any existing unclosed reader session on this physical reader or operator to prevent unique constraint conflict
   await prisma.reader_sessions.updateMany({
     where: {
-      device_id: mapping.device_id,
-      reader_index: mapping.reader_index,
-      closed_at: null,
+      OR: [
+        {
+          device_id: mapping.device_id,
+          reader_index: mapping.reader_index,
+          closed_at: null,
+        },
+        {
+          operator_id: operatorId,
+          closed_at: null,
+        },
+      ],
     },
     data: {
       closed_at: new Date(),
@@ -404,7 +412,8 @@ rfidRouter.get(
         }),
       ]);
 
-      const lastScanOutcome: ScanOutcome | undefined = lastScan
+      const memoryScan = stationScanCache.get(stationCode);
+      let lastScanOutcome: ScanOutcome | undefined = lastScan
         ? {
             uid: lastScan.tag_uid,
             resolution: (lastScan.outcome === "accepted" ? "accepted" : "rejected") as any,
@@ -415,6 +424,10 @@ rfidRouter.get(
             at: lastScan.received_at.toISOString(),
           }
         : undefined;
+
+      if (memoryScan && (!lastScanOutcome || new Date(memoryScan.at) >= new Date(lastScanOutcome.at))) {
+        lastScanOutcome = memoryScan;
+      }
 
       let bridgeConnected = false;
       if (mapping) {
@@ -803,6 +816,10 @@ rfidRouter.put(
         }
       }
 
+      if (!isStaff && (req.actor || (req as unknown as { staffUser?: unknown }).staffUser)) {
+        isStaff = true;
+      }
+
       if (!isStaff) {
         await authenticateDevice(req.headers, context.reader_sessions.device_id, prisma);
       }
@@ -905,9 +922,15 @@ rfidRouter.post(
       }
 
       if (!session) {
-        throw ApiError.badRequest(
-          "No active reader session found for this operator. Open a workstation session first.",
-        );
+        session = await prisma.reader_sessions.findFirst({
+          where: { operator_id: user.id, closed_at: null, expires_at: { gt: new Date() } },
+          orderBy: { opened_at: "desc" },
+        });
+      }
+
+      if (!session) {
+        const defaultStation = (user.department === "quality" ? "final_qc" : user.department === "stitching" ? "stitching" : "finishing") as RfidStationCode;
+        session = await getOrCreateActiveReaderSession(user.id, defaultStation);
       }
 
       // Stable retry identity: preserve client scanId or generate deterministic uuid

@@ -26,7 +26,7 @@ import { Field } from "@/components/wt/forms";
 import type { ChecklistItem, ScanOutcome } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
-import { getDataMode } from "@/lib/data/provider";
+import { getDataMode, useClient } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +82,7 @@ export function QAPanel({
   onScanComplete?: () => void;
 }) {
   const me = useMe();
+  const client = useClient();
   const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
   const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
@@ -183,13 +184,10 @@ export function QAPanel({
       const ctxId = await run((c) =>
         c.prepareActionContext("final_qc", "submit_qc", {
           kind: "submit_qc",
-          outcome: decision,
-          qcOutcome: decision,
           result: decision,
           scope: "final",
           defectReason: decision === "fail" ? (computedDefectReason || "Defect identified during inspection") : undefined,
           assignedDepartment: decision === "fail" && !discardProduct ? referDept : undefined,
-          assigned_department: decision === "fail" && !discardProduct ? referDept : undefined,
           discard: discardProduct,
           checklist:
             decision === "pass"
@@ -209,9 +207,11 @@ export function QAPanel({
         return;
       }
 
-      await run((c) => c.acknowledgeContext(ctxId));
       setArmedContextId(ctxId);
+      setConfirmedOutcome(null);
+      lastSeenScanRef.current = qStation.data?.lastScanOutcome?.at ?? null;
       setIsWaitingForHardwareScan(true);
+      void client.acknowledgeContext(ctxId).catch(() => {});
     } catch (err: any) {
       setConfirmedOutcome({
         type: "rejected",
@@ -320,7 +320,7 @@ export function QAPanel({
     if (outcome.at && outcome.at !== lastSeenScanRef.current) {
       lastSeenScanRef.current = outcome.at;
       if (outcome.resolution === "accepted") {
-        if (discardProduct || outcome.actionKind === "discard") {
+        if (discardProduct || (outcome as any).actionKind === "discard") {
           setConfirmedOutcome({
             type: "discarded",
             title: `Product Scrapped: ${outcome.garmentCode ?? outcome.subjectId ?? outcome.uid}`,
@@ -357,7 +357,7 @@ export function QAPanel({
         void qGarments.refetch();
         onScanComplete?.();
         resetForm();
-      } else if (outcome.resolution && outcome.resolution !== "accepted") {
+      } else if (outcome.resolution && (outcome.resolution as string) !== "accepted") {
         setConfirmedOutcome({
           type: "rejected",
           title: isMock ? "QC Simulation Rejected" : "Hardware Scan Rejected",

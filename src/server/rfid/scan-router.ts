@@ -21,6 +21,12 @@ import {
   existingScanToOutcome,
 } from "./deduplication";
 
+export const stationScanCache = new Map<string, any>();
+
+export function setStationScanOutcome(stationCode: string, outcome: any): void {
+  stationScanCache.set(stationCode, outcome);
+}
+
 /**
  * Authoritative WearTrail Scan Router & Transaction Orchestrator.
  *
@@ -122,12 +128,38 @@ export class ScanRoutingService implements IScanRoutingService {
     }
 
     // 4. Resolve active reader mapping, active operator session, and ActorContext
-    const { stationCode, session, actor } = await resolveReaderSession(
+    let { stationCode, session, actor } = await resolveReaderSession(
       envelope.deviceId,
       envelope.mappingVersion,
       envelope.readerIndex,
       db,
     );
+
+    // Support hardware boards where reader 4 (GPIO 4) is used for Station 4 (Stitching),
+    // or when a garment currently at stage 'cut' is scanned on reader 4.
+    if (stationCode === "finishing" && envelope.tagUid) {
+      const normalizedUid = normalizeTagUid(envelope.tagUid);
+      const binding = await (db as any).rfid_tag_bindings.findFirst({
+        where: {
+          OR: [
+            { tag_uid: normalizedUid, unbound_at: null },
+            { tag_identifier: normalizedUid, unbound_at: null },
+          ],
+        },
+        include: { garments: true },
+      });
+      if (binding?.garments && (binding.garments.stage === "cut" || (binding.garments.stage as string) === "stitching")) {
+        const stitchingSession = await resolveReaderSession(
+          envelope.deviceId,
+          envelope.mappingVersion,
+          3, // reader_index 3 = stitching
+          db,
+        );
+        stationCode = "stitching";
+        session = stitchingSession.session;
+        actor = stitchingSession.actor;
+      }
+    }
 
     // 5. Validate action context (if reported or required by station)
     let contextIdToValidate = envelope.actionContextId ?? null;
@@ -165,7 +197,7 @@ export class ScanRoutingService implements IScanRoutingService {
 
     if (
       !contextIdToValidate &&
-      (stationCode === "fabric_issue" || stationCode === "cutting") &&
+      (stationCode === "fabric_issue" || stationCode === "cutting" || stationCode === "packing") &&
       typeof (db as any).rfid_action_contexts?.findFirst === "function"
     ) {
       // First check if an armed or awaiting_ack context already exists for this reader session
@@ -451,11 +483,29 @@ export class ScanRoutingService implements IScanRoutingService {
         if (!tagBindingId) {
           const binding = await tx.rfid_tag_bindings.findFirst({
             where: {
-              tag_identifier: normalizeTagUid(envelope.tagUid),
-              unbound_at: null,
+              OR: [
+                { tag_identifier: normalizeTagUid(envelope.tagUid), unbound_at: null },
+                { tag_uid: normalizeTagUid(envelope.tagUid), unbound_at: null },
+              ],
             },
           });
           tagBindingId = binding?.id;
+        }
+
+        // Special handling for Station 7 Box Tags (which don't have a garment binding in rfid_tag_bindings)
+        if (!tagBindingId && stationCode === "packing" && (subject.metadata?.isPackage || subject.metadata?.isNewPackage)) {
+          const result = await handler.process(effectiveEnvelope, subject, tx, scanContext);
+          setStationScanOutcome(stationCode, {
+            uid: normalizeTagUid(envelope.tagUid),
+            resolution: "accepted",
+            subjectId: subject.subjectId || result.subjectId,
+            subjectCode: result.subjectCode || subject.subjectCode,
+            garmentCode: subject.subjectCode || result.subjectCode,
+            outcomeCode: result.outcomeCode,
+            message: result.outcomeMessage,
+            at: new Date().toISOString(),
+          });
+          return result;
         }
 
         if (!tagBindingId) {
@@ -512,6 +562,17 @@ export class ScanRoutingService implements IScanRoutingService {
           scanRecordId: scanRecord.id,
         };
         const result = await handler.process(effectiveEnvelope, subject, tx, effectiveScanContext);
+
+        setStationScanOutcome(stationCode, {
+          uid: normalizeTagUid(envelope.tagUid),
+          resolution: "accepted",
+          subjectId: subject.subjectId,
+          subjectCode: (result as any)?.subjectCode || subject.subjectCode,
+          garmentCode: subject.kind === "garment" ? subject.subjectCode : undefined,
+          outcomeCode: (result as any)?.outcomeCode,
+          message: (result as any)?.outcomeMessage,
+          at: new Date().toISOString(),
+        });
 
         // Consume one-use action context if used
         if (actionContext) {
@@ -603,6 +664,15 @@ export class ScanRoutingService implements IScanRoutingService {
             ...rejectedData,
             received_at: new Date(),
           },
+        });
+      }
+      if (stationCode) {
+        setStationScanOutcome(stationCode, {
+          uid: normalizeTagUid(envelope.tagUid),
+          resolution: "rejected",
+          rejectionReason: outcomeMessage,
+          message: outcomeMessage,
+          at: new Date().toISOString(),
         });
       }
     } catch {
