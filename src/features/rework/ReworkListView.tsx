@@ -221,7 +221,7 @@ export function ReworkListView() {
                             />
                           </div>
 
-                          {!isProduction ? (
+                          {!isProduction && (
                             <div className="w-[130px]">
                               <NativeSelect
                                 value={deptFilter}
@@ -233,11 +233,6 @@ export function ReworkListView() {
                                   { value: "finishing", label: "Finishing" },
                                 ]}
                               />
-                            </div>
-                          ) : (
-                            <div className="inline-flex items-center gap-1.5 rounded-md border bg-muted/50 px-2.5 py-1 text-xs font-semibold text-foreground">
-                              <span className="text-muted-foreground uppercase text-[10px]">Shop:</span>
-                              <span>{departmentLabels[me.department] ?? me.department}</span>
                             </div>
                           )}
                         </div>
