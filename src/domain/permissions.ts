@@ -113,30 +113,30 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     return false;
   }
 
-  // Raw Store operators strictly operate at Station 2 (Fabric Issue) Workstation (remove redundant home, materialLots, and productionOrders)
+  // Raw Store operators strictly operate at Station 2 (Fabric Issue) Workstation
   if (
     user.username === "rawstore.demo" ||
     user.department?.toLowerCase() === "raw-store" ||
     user.department?.toLowerCase() === "raw_store"
   ) {
     if (
-      key === "home" ||
       key === "materialLots" ||
       key === "materialLot" ||
       key === "productionOrders" ||
-      key === "productionOrder"
+      key === "productionOrder" ||
+      key === "garments" ||
+      key === "garment"
     ) {
       return false;
     }
   }
   // Warehouse operators: strictly Workstation and Fulfilment/Warehouse Stock
-  // (NO home, NO shipments, NO garments full factory list)
+  // (NO shipments, NO garments full factory list)
   if (
     user.username === "warehouse.demo" ||
     user.department?.toLowerCase() === "warehouse"
   ) {
     if (
-      key === "home" ||
       key === "shipments" ||
       key === "shipment" ||
       key === "garments" ||
@@ -146,14 +146,13 @@ export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
     }
   }
 
-  // Dispatch operators strictly operate at Station 9 Workstation dock gate (remove home, garments, fulfilment, and shipments)
+  // Dispatch operators strictly operate at Station 9 Workstation dock gate (remove garments, fulfilment, and shipments)
   if (
     user.username === "dispatch.demo" ||
     (user.role === "L" && user.department === "dispatch") ||
     user.department?.toLowerCase() === "dispatch"
   ) {
     if (
-      key === "home" ||
       key === "garments" ||
       key === "garment" ||
       key === "fulfilment" ||

@@ -52,10 +52,14 @@ export function LoginView({ redirectTo }: { redirectTo?: string | undefined }) {
         } else if (cleanUsername.toLowerCase() === "qc.demo") {
           destination = paths.quality;
         } else if (cleanUsername.toLowerCase() === "dispatch.demo") {
-          destination = paths.shipments;
+          destination = paths.workstation;
         } else if (cleanUsername.toLowerCase() === "warehouse.demo") {
           destination = paths.workstation;
         } else if (cleanUsername.toLowerCase() === "packing.demo") {
+          destination = paths.workstation;
+        } else if (cleanUsername.toLowerCase() === "rawstore.demo") {
+          destination = paths.workstation;
+        } else if (cleanUsername.toLowerCase() === "finishing.demo") {
           destination = paths.workstation;
         }
       }

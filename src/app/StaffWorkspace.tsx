@@ -19,10 +19,34 @@ export function StaffWorkspace({
   const pathname = usePathname();
   const user = me.data;
 
+  const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
+  const isFinishing =
+    user?.username?.toLowerCase() === "finishing.demo" ||
+    user?.department?.toLowerCase() === "finishing";
+  const isWarehouse =
+    user?.username?.toLowerCase() === "warehouse.demo" ||
+    user?.department?.toLowerCase() === "warehouse";
+  const isDispatch =
+    user?.username?.toLowerCase() === "dispatch.demo" ||
+    user?.department?.toLowerCase() === "dispatch";
+  const isRawStore =
+    user?.username?.toLowerCase() === "rawstore.demo" ||
+    user?.department?.toLowerCase() === "raw-store" ||
+    user?.department?.toLowerCase() === "raw_store";
+
+  const targetStationRedirect = isFinalQc
+    ? paths.quality
+    : isWarehouse || isDispatch || isFinishing || isRawStore
+    ? paths.workstation
+    : null;
+
   useEffect(() => {
     if (!me.isPending && !user)
       void navigate(`${paths.login}?redirect=${encodeURIComponent(pathname)}`, { replace: true });
-  }, [me.isPending, user, navigate, pathname]);
+    else if (user && routeKey === "home" && targetStationRedirect) {
+      void navigate(targetStationRedirect, { replace: true });
+    }
+  }, [me.isPending, user, navigate, pathname, routeKey, targetStationRedirect]);
 
   if (me.isPending || !user)
     return (
@@ -30,6 +54,16 @@ export function StaffWorkspace({
         <LoadingState label="Checking staff session…" />
       </div>
     );
+
+  if (user && routeKey === "home" && targetStationRedirect) {
+    return (
+      <StaffShell user={user}>
+        <div className="p-8">
+          <LoadingState label="Redirecting to workstation…" />
+        </div>
+      </StaffShell>
+    );
+  }
 
   const allowed = !routeKey || canAccessRoute(user, routeKey);
   return (
