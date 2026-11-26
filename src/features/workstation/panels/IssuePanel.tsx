@@ -168,16 +168,8 @@ export function IssuePanel({
               matchesDateFilter(o.dueDate, (o as any).createdAt, dateFilter),
             );
 
-            // Active target order is either explicitly selected, or context order, or first pending order (only in pending queue)
-            const targetOrderId =
-              queueTab === "issued"
-                ? ""
-                : selectedOrderId === "__none__"
-                  ? ""
-                  : selectedOrderId ||
-                    (activeCtx?.payload && (activeCtx.payload as any).orderId) ||
-                    pendingOrders[0]?.id ||
-                    "";
+            // Active target order is unselected by default; only set when explicitly clicked
+            const targetOrderId = queueTab === "issued" ? "" : selectedOrderId;
 
             const targetOrder = orders.find((o) => o.id === targetOrderId);
             const targetRequiredFabric = targetOrder ? getRequiredFabric(targetOrder) : 8.0;
@@ -211,7 +203,7 @@ export function IssuePanel({
             };
 
             const handleDeselectOrder = () => {
-              setSelectedOrderId("__none__");
+              setSelectedOrderId("");
               if (activeCtx) {
                 void run((c) => c.cancelContext(activeCtx.id), "Order deselected. Scanner 2 disarmed.");
               }
