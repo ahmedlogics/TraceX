@@ -16,6 +16,9 @@ function DashboardRoute() {
   const me = useCurrentUser();
   const navigate = useAppNavigate();
   const isFinalQc = me.data?.username?.toLowerCase() === "qc.demo";
+  const isFinishing =
+    me.data?.username?.toLowerCase() === "finishing.demo" ||
+    me.data?.department?.toLowerCase() === "finishing";
   const isWarehouse =
     me.data?.username?.toLowerCase() === "warehouse.demo" ||
     me.data?.department?.toLowerCase() === "warehouse";
@@ -26,12 +29,12 @@ function DashboardRoute() {
   useEffect(() => {
     if (isFinalQc) {
       void navigate(paths.quality, { replace: true });
-    } else if (isWarehouse || isDispatch) {
+    } else if (isWarehouse || isDispatch || isFinishing) {
       void navigate(paths.workstation, { replace: true });
     }
-  }, [isFinalQc, isWarehouse, isDispatch, navigate]);
+  }, [isFinalQc, isWarehouse, isDispatch, isFinishing, navigate]);
 
-  if (isFinalQc || isWarehouse || isDispatch) return null;
+  if (isFinalQc || isWarehouse || isDispatch || isFinishing) return null;
 
   return <DashboardView />;
 }

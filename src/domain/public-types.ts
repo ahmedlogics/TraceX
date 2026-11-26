@@ -132,4 +132,5 @@ export interface PublicProof {
   sampleCommitmentRef: string;
   canonicalBytesLength: number;
   payload: PublicPayload;
+  blockchain?: PublicBlockchainInfo | undefined;
 }

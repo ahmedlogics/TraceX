@@ -76,4 +76,22 @@ describe("Staff Navigation Items", () => {
       "Production orders",
     ]);
   });
+
+  it("removes home for finishing.demo", () => {
+    const finishingUser: StaffUser = {
+      id: "u-finishing",
+      username: "finishing.demo",
+      displayName: "Finishing Specialist",
+      role: "production",
+      department: "finishing",
+      email: "finishing@example.com",
+      scope: "station:finishing",
+      status: "active",
+    };
+    const groups = getNavGroups(finishingUser);
+    const workGroup = groups.find((g) => g.label === "Work");
+    expect(workGroup).toBeDefined();
+    expect(workGroup!.items.some((i) => i.key === "home")).toBe(false);
+    expect(workGroup!.items.some((i) => i.key === "workstation")).toBe(true);
+  });
 });

@@ -76,6 +76,9 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
   const navigate = useAppNavigate();
   const dataMode = getDataMode();
   const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
+  const isFinishing =
+    user?.username?.toLowerCase() === "finishing.demo" ||
+    user?.department?.toLowerCase() === "finishing";
   const isWarehouse =
     user?.username?.toLowerCase() === "warehouse.demo" ||
     user?.department?.toLowerCase() === "warehouse";
@@ -85,7 +88,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
 
   const logoHref = isFinalQc
     ? paths.quality
-    : isWarehouse || isDispatch
+    : isWarehouse || isDispatch || isFinishing
     ? paths.workstation
     : paths.home;
   return (

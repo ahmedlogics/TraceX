@@ -2,66 +2,95 @@ import { useState, useEffect, useRef } from "react";
 import {
   ArrowRight,
   CheckCircle2,
+  Clock,
   Radio,
   ScanLine,
+  ShieldCheck,
   Sparkles,
-  Wrench,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { IdLink, Section } from "@/components/wt/layout";
-import { StatusBadge } from "@/components/wt/StatusBadge";
+import { IdLink } from "@/components/wt/layout";
 import { Loadable } from "@/components/wt/states";
-import type { Garment, ReworkCase, ScanOutcome } from "@/domain/types";
+import type { Garment } from "@/domain/types";
 import type { RfidStationData } from "@/lib/data/client";
 import { useWtAction, useWtQuery } from "@/lib/data/hooks";
+import { getDataMode, useClient } from "@/lib/data/provider";
 import { useMe } from "@/features/shared/useMe";
 
 export function FinishingPanel({ stationData }: { stationData: RfidStationData }) {
   const me = useMe();
+  const client = useClient();
+  const isMock = getDataMode() === "mock";
   const { run, pending } = useWtAction();
-  const [activeTab, setActiveTab] = useState<"queue" | "rework">("queue");
+  const [activeTab, setActiveTab] = useState<"queue" | "completed">("queue");
+  const [search, setSearch] = useState("");
   const [scanUid, setScanUid] = useState("");
+  const [isArmed, setIsArmed] = useState(false);
   const [completedIds, setCompletedIds] = useState<Record<string, { at: string; uid?: string }>>({});
-  const [repairedIds, setRepairedIds] = useState<Record<string, string>>({});
-  const [localLastOutcome, setLocalLastOutcome] = useState<ScanOutcome | undefined>(undefined);
 
-  const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 3000 });
-  const qRework = useWtQuery(["rework"], (c) => c.listRework(), { refetchInterval: 3000 });
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments(), { refetchInterval: 1000 });
 
-  const lastOutcome = localLastOutcome ?? stationData.lastScanOutcome;
-
-  // Auto-detect scans arriving via MQTT/backend hardware reader (Station 5)
   const lastSeenScanRef = useRef<string | null>(null);
+
+  // Instant detection when StationShell prop updates
   useEffect(() => {
     const outcome = stationData.lastScanOutcome;
-    if (!outcome) return;
-    if (outcome.at && outcome.at !== lastSeenScanRef.current) {
-      lastSeenScanRef.current = outcome.at;
-      setLocalLastOutcome(outcome);
-      if (outcome.resolution === "accepted") {
-        const matchedGarment = qGarments.data?.find(
-          (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
-        );
-        const gId = matchedGarment?.id || outcome.subjectId;
-        if (gId) {
-          setCompletedIds((prev) => ({
-            ...prev,
-            [gId]: { at: outcome.at || new Date().toISOString(), uid: outcome.uid },
-          }));
-        }
-        void qGarments.refetch();
-        toast.success(
-          `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? ""} Finishing complete! Released to Station 6 QC Gate.`
-        );
+    if (!outcome?.at || outcome.at === lastSeenScanRef.current) return;
+    lastSeenScanRef.current = outcome.at;
+    if (outcome.resolution === "accepted") {
+      const matchedGarment = qGarments.data?.find(
+        (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
+      );
+      const gId = matchedGarment?.id || outcome.subjectId;
+      if (gId) {
+        setCompletedIds((prev) => ({
+          ...prev,
+          [gId]: { at: outcome.at || new Date().toISOString(), uid: outcome.uid },
+        }));
       }
+      void qGarments.refetch();
+      toast.success(
+        `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? gId ?? ""} Finishing complete! Released to Station 6 QC Gate.`
+      );
     }
-  }, [stationData.lastScanOutcome, qGarments]);
+  }, [stationData.lastScanOutcome, qGarments.data]);
+
+  // Polling for hardware scans when in Live API mode
+  useEffect(() => {
+    if (isMock) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await client.getRfidStationData("finishing");
+        if (data.lastScanOutcome && data.lastScanOutcome.at !== lastSeenScanRef.current) {
+          lastSeenScanRef.current = data.lastScanOutcome.at ?? null;
+          if (data.lastScanOutcome.resolution === "accepted") {
+            const outcome = data.lastScanOutcome;
+            const matchedGarment = qGarments.data?.find(
+              (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
+            );
+            const gId = matchedGarment?.id || outcome.subjectId;
+            if (gId) {
+              setCompletedIds((prev) => ({
+                ...prev,
+                [gId]: { at: outcome.at || new Date().toISOString(), uid: outcome.uid },
+              }));
+            }
+            void qGarments.refetch();
+            toast.success(
+              `✓ Garment ${outcome.garmentCode ?? outcome.subjectId ?? ""} Finishing complete! Released to Station 6 QC Gate.`
+            );
+          }
+        }
+      } catch {
+        // station data poll catch
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isMock, client, qGarments.data]);
 
   const handleScan = (garment: Garment) => {
     const uid = garment.rfidUid || scanUid.trim();
@@ -72,7 +101,6 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
     void run(
       (c) => c.routineScan(uid, "finishing"),
       (outcome) => {
-        setLocalLastOutcome(outcome);
         if (outcome.resolution === "accepted") {
           setCompletedIds((prev) => ({
             ...prev,
@@ -96,7 +124,6 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
       (c) => c.routineScan(uid, "finishing"),
       (outcome) => {
         setScanUid("");
-        setLocalLastOutcome(outcome);
         if (outcome.resolution === "accepted") {
           const matchedGarment = qGarments.data?.find(
             (g) => g.id === outcome.subjectId || g.rfidUid === outcome.uid
@@ -116,99 +143,171 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
     );
   };
 
-  const handleRepair = (rc: ReworkCase) => {
-    void run(
-      (c) => c.completeRework(rc.id, "Finishing repair completed and pressed."),
-      () => {
-        setRepairedIds((prev) => ({ ...prev, [rc.id]: new Date().toISOString() }));
-        void qRework.refetch();
-        return `✓ Rework ${rc.id} repaired! Garment returned to QC for reinspection.`;
-      }
-    );
-  };
-
   return (
     <Loadable query={qGarments}>
-      {(garments) => (
-        <Loadable query={qRework}>
-          {(reworkCases) => {
-            // ONLY garments that completed Stitching at Station 4 (stage 'stitched' or 'finishing', with bound RFID tag)
-            const finishingQueue = garments.filter(
-              (g) =>
-                (g.stage === "stitched" || g.stage === "finishing") &&
-                Boolean(g.rfidUid) &&
-                !g.hold &&
-                !completedIds[g.id]
-            );
+      {(garments) => {
+        // Only garments that completed Stitching at Station 4 (stage 'stitched' or 'finishing', with bound RFID tag)
+        const finishingQueue = garments.filter(
+          (g) =>
+            (g.stage === "stitched" || g.stage === "finishing") &&
+            Boolean(g.rfidUid) &&
+            !g.hold &&
+            !completedIds[g.id]
+        );
 
-            // QC rework cases: ONLY those failed by QC and assigned to Finishing
-            const finishingRework = reworkCases.filter(
-              (rc) =>
-                rc.assignedDepartment === "finishing" &&
-                rc.status === "assigned" &&
-                !repairedIds[rc.id]
-            );
+        // Garments finished (in DB or completed on runtime)
+        const completedQueue = garments.filter(
+          (g) =>
+            g.stage === "finished" ||
+            g.stage === "final-qc" ||
+            g.stage === "packing" ||
+            g.stage === "warehouse" ||
+            g.stage === "dispatched" ||
+            Boolean(completedIds[g.id])
+        );
 
-            return (
-              <div className="space-y-6">
-                {/* Live Scan Outcome Banner */}
-                {lastOutcome && (
-                  <div
-                    className={`rounded-xl border p-3.5 text-xs flex items-center justify-between gap-3 shadow-xs ${
-                      lastOutcome.resolution === "accepted"
-                        ? "border-success/40 bg-success-soft text-foreground"
-                        : "border-destructive/40 bg-danger-soft text-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {lastOutcome.resolution === "accepted" ? (
-                        <CheckCircle2 className="size-4 shrink-0 text-success" />
-                      ) : (
-                        <XCircle className="size-4 shrink-0 text-destructive" />
-                      )}
-                      <div>
-                        <span className="font-bold">
-                          {lastOutcome.resolution === "accepted"
-                            ? `Scan Confirmed: ${lastOutcome.garmentCode ?? lastOutcome.subjectId}`
-                            : `Scan Rejected (${lastOutcome.uid})`}
-                        </span>
-                        <span className="text-muted-foreground ml-2">
-                          {lastOutcome.resolution === "accepted"
-                            ? "· Finishing Complete → Released to Station 6 Final QC"
-                            : `· ${lastOutcome.rejectReason ?? lastOutcome.resolution}`}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="font-mono text-muted-foreground text-[11px]">
-                      Tag: {lastOutcome.uid}
-                    </span>
+        const releasedToQcCount = garments.filter(
+          (g) => g.stage === "final-qc" || g.stage === "packing" || g.stage === "warehouse"
+        ).length;
+
+        const filteredReady = finishingQueue.filter(
+          (g) =>
+            !search.trim() ||
+            `${g.id} ${g.orderId} ${g.productName} ${g.rfidUid ?? ""}`
+              .toLowerCase()
+              .includes(search.toLowerCase())
+        );
+
+        const filteredCompleted = completedQueue.filter(
+          (g) =>
+            !search.trim() ||
+            `${g.id} ${g.orderId} ${g.productName} ${g.rfidUid ?? ""}`
+              .toLowerCase()
+              .includes(search.toLowerCase())
+        );
+
+        return (
+          <div className="space-y-6">
+            {/* 3 Summary KPI Cards moved from Home */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">PENDING FINISHING</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <Sparkles className="size-3.5" />
                   </div>
-                )}
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                  {finishingQueue.length}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Stitched at Station 4
+                </p>
+              </div>
 
-                {/* Header Controls: Tabs & Compact Scanner */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-3">
-                  <Tabs
-                    value={activeTab}
-                    onValueChange={(v) => setActiveTab(v as "queue" | "rework")}
-                  >
-                    <TabsList className="bg-muted p-1">
-                      <TabsTrigger value="queue" className="text-xs font-semibold gap-1.5">
-                        <Sparkles className="size-3.5" /> Finishing Queue ({finishingQueue.length})
-                      </TabsTrigger>
-                      <TabsTrigger value="rework" className="text-xs font-semibold gap-1.5">
-                        <Wrench className="size-3.5" /> QC Rework &amp; Repairs ({finishingRework.length})
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
+              <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">FINISHED TODAY</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                  {completedQueue.length}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Advanced to Station 6 QC
+                </p>
+              </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                      <span className="relative flex size-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                      </span>
-                      <span>Station 5 Ready</span>
-                    </div>
+              <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">AT FINAL QC GATE</span>
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <ShieldCheck className="size-3.5" />
+                  </div>
+                </div>
+                <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                  {releasedToQcCount}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Under Station 6 inspection
+                </p>
+              </div>
+            </div>
+
+            {/* Live API Mode Hardware Armed Beacon */}
+            {!isMock && isArmed && (
+              <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/10 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative flex size-7 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-xs">
+                    <Radio className="size-4 animate-spin" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-foreground">
+                      Scanner 5 Hardware Active &amp; Listening
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Present physical garment tag to Scanner 5 hardware reader to complete finishing.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+                  onClick={() => setIsArmed(false)}
+                >
+                  Stop Listening
+                </Button>
+              </div>
+            )}
+
+            {/* Header Controls: Tab Selector Pills, Search, and Scan Trigger */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-3">
+              <div className="inline-flex rounded-lg border bg-muted/60 p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("queue")}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
+                    activeTab === "queue"
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Sparkles className="size-3.5" /> Finishing Queue ({finishingQueue.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("completed")}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold transition-all cursor-pointer ${
+                    activeTab === "completed"
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <CheckCircle2 className="size-3.5" /> Completed ({completedQueue.length})
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter garments..."
+                  className="h-8 w-44 text-xs bg-card"
+                />
+
+                <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="relative flex size-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span>{isArmed ? "Scanner 5 Armed & Listening" : "Station 5 Ready"}</span>
+                </div>
+
+                {isMock ? (
+                  <>
                     {finishingQueue[0] && !scanUid && (
                       <Button
                         type="button"
@@ -224,7 +323,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                       value={scanUid}
                       onChange={(e) => setScanUid(e.target.value.toUpperCase())}
                       placeholder="Scan tag UID..."
-                      className="h-8 w-36 font-mono text-xs bg-card"
+                      className="h-8 w-32 font-mono text-xs bg-card"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleManualScan(finishingQueue[0]?.rfidUid);
                       }}
@@ -235,7 +334,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                       disabled={pending || (!scanUid.trim() && finishingQueue.length === 0)}
                       onClick={() => handleManualScan(finishingQueue[0]?.rfidUid)}
                     >
-                      <ScanLine className="size-3.5" /> Simulate Scan {scanUid.trim() ? `(${scanUid.trim()})` : finishingQueue[0] ? `(${finishingQueue[0].id})` : ""}
+                      <ScanLine className="size-3.5" /> Simulate Scan
                     </Button>
                     {scanUid && (
                       <Button
@@ -247,153 +346,133 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                         Clear
                       </Button>
                     )}
-                  </div>
-                </div>
-
-                {/* TAB 1: FINISHING QUEUE */}
-                {activeTab === "queue" && (
-                  <Section
-                    title="Active Finishing Bench Queue"
-                    description="Garments that completed Station 4 Stitching awaiting pressing and finishing."
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    className={`h-8 text-xs font-semibold gap-1.5 shadow-xs transition-all ${
+                      isArmed
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                    }`}
+                    disabled={pending}
+                    onClick={() => setIsArmed((prev) => !prev)}
                   >
-                    {finishingQueue.length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-                          <CheckCircle2 className="size-4" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          All stitched garments finished
-                        </p>
-                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                          No garments currently in line for Station 5. When Station 4 Stitching completes assembly, garments will appear here.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
-                        {finishingQueue.map((g) => {
-                          const isDone = Boolean(completedIds[g.id]);
-                          return (
-                            <div
-                              key={g.id}
-                              className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <IdLink href={paths.garment(g.id)} id={g.id} />
-                                  <span className="text-muted-foreground">·</span>
-                                  <span className="font-semibold text-foreground">{g.productName}</span>
-                                  {g.size && (
-                                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                      Size {g.size}
-                                    </span>
-                                  )}
-                                  <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-                                    <Radio className="size-2.5" /> Tag: {g.rfidUid}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  Order: <AppLink href={paths.order(g.orderId)} className="font-medium text-foreground hover:underline">{g.orderId}</AppLink> · Source: Station 4 Stitching
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                {isDone ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                    <CheckCircle2 className="size-3" /> Done · Finished
-                                  </span>
-                                ) : (
-                                  <>
-                                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-                                      Ready to Finish
-                                    </span>
-                                    <Button
-                                      size="sm"
-                                      className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
-                                      disabled={pending}
-                                      onClick={() => handleScan(g)}
-                                    >
-                                      <ScanLine className="size-3.5" /> Scan &amp; Finish <ArrowRight className="size-3" />
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Section>
-                )}
-
-                {/* TAB 2: QC REWORK & REPAIRS */}
-                {activeTab === "rework" && (
-                  <Section
-                    title="Finishing Rework & Repairs"
-                    description="Defects identified by Station 6 Final QC assigned specifically to Finishing."
-                  >
-                    {finishingRework.length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
-                          <CheckCircle2 className="size-4" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          No active finishing rework cases
-                        </p>
-                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                          When QC rejects a garment and assigns corrective action to Finishing, it will appear here.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="divide-y rounded-lg border bg-card overflow-hidden">
-                        {finishingRework.map((rc) => {
-                          const isRepaired = Boolean(repairedIds[rc.id]);
-                          return (
-                            <div
-                              key={rc.id}
-                              className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold wt-id text-foreground">{rc.id}</span>
-                                  <span className="text-muted-foreground">·</span>
-                                  <span className="font-semibold text-foreground">Garment: {rc.garmentId}</span>
-                                  <span className="rounded bg-destructive/15 text-destructive px-2 py-0.5 text-[11px] font-bold">
-                                    QC Rejected
-                                  </span>
-                                </div>
-                                <p className="text-xs text-destructive font-medium">
-                                  Defect: {rc.defectReason}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                {isRepaired ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                    <CheckCircle2 className="size-3" /> Repaired · Returned to QC
-                                  </span>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    className="h-8 text-xs gap-1.5 bg-primary font-semibold"
-                                    disabled={pending}
-                                    onClick={() => handleRepair(rc)}
-                                  >
-                                    <Wrench className="size-3.5" /> Complete Repair &amp; Return to QC
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Section>
+                    <Radio className={`size-3.5 ${isArmed ? "animate-spin" : ""}`} />
+                    {isArmed ? "Scanner 5 Listening..." : "Scan Product"}
+                  </Button>
                 )}
               </div>
-            );
-          }}
-        </Loadable>
-      )}
+            </div>
+
+            {/* TAB 1: FINISHING QUEUE */}
+            {activeTab === "queue" && (
+              <div className="space-y-3">
+                {filteredReady.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
+                    <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="size-4" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">
+                      All stitched garments have been finished
+                    </p>
+                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                      No garments currently awaiting finishing. When Station 4 Stitching completes assembly, garments will appear here automatically.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y rounded-lg border bg-card overflow-hidden">
+                    {filteredReady.map((garment) => {
+                      const isDone = Boolean(completedIds[garment.id]);
+                      return (
+                        <div
+                          key={garment.id}
+                          className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm hover:bg-muted/30 transition-colors"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <IdLink href={paths.garment(garment.id)} id={garment.id} />
+                              <span className="text-muted-foreground">·</span>
+                              <span className="font-semibold text-foreground">{garment.productName}</span>
+                              {garment.size && (
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  Size {garment.size}
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                                <Radio className="size-2.5" /> Tag: {garment.rfidUid}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Order: <AppLink href={paths.order(garment.orderId)} className="font-medium text-foreground hover:underline">{garment.orderId}</AppLink> · Source: Stitching Line (Station 4)
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {isDone ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="size-3" /> Complete · Sent to QC
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                <Clock className="size-3" /> Pending
+                              </span>
+                            )}
+                            {isMock && !isDone && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1"
+                                disabled={pending}
+                                onClick={() => handleScan(garment)}
+                              >
+                                <ScanLine className="size-3" /> Simulate
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: COMPLETED TABLE */}
+            {activeTab === "completed" && (
+              <div className="space-y-3">
+                {filteredCompleted.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground bg-muted/20">
+                    No garments finished yet.
+                  </div>
+                ) : (
+                  <div className="divide-y rounded-lg border bg-card overflow-hidden">
+                    {filteredCompleted.map((g) => (
+                      <div
+                        key={g.id}
+                        className="flex items-center justify-between p-3.5 text-xs hover:bg-muted/30"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <IdLink href={paths.garment(g.id)} id={g.id} />
+                            <span className="text-muted-foreground">·</span>
+                            <span className="font-medium text-foreground">{g.productName}</span>
+                            <span className="font-mono text-muted-foreground">Tag: {g.rfidUid}</span>
+                          </div>
+                          <p className="text-muted-foreground">Order: {g.orderId}</p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <CheckCircle2 className="size-3" /> Done · Released to QC Gate
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }}
     </Loadable>
   );
 }

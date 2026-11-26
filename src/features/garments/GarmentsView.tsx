@@ -35,11 +35,7 @@ export function GarmentsView() {
   const isMock = getDataMode() === "mock";
   const isStitching = me?.department === "stitching" || me?.username === "stitching.demo";
   const isFinishing = me?.department === "finishing" || me?.username === "finishing.demo";
-  const activeStationCode: "stitching" | "finishing" | null = isStitching
-    ? "stitching"
-    : isFinishing
-      ? "finishing"
-      : null;
+  const activeStationCode: "stitching" | null = isStitching ? "stitching" : null;
 
   const canAccessNfc = can.accessNfcHub(me);
   const q = useWtQuery(["garments"], (c) => c.listGarments());

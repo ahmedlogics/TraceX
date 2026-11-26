@@ -14,6 +14,7 @@ import { ApiError } from "../middleware/responses";
 import { scanRoutingService, ScanRoutingService } from "./scan-router";
 import { createInternalCommitment } from "../ledger/commitment-service";
 import { EXCLUDED_LOT_CODES } from "../materials/materials-service";
+import { getOrCreateChecklistVersion } from "../quality/quality-service";
 
 function generatePublicId(): string {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -1217,6 +1218,36 @@ export class FinishingScanHandler implements DomainScanHandler<ScanOutcomeResult
       }
     } catch {
       // Allow fallback if work_tasks table is absent in test harness
+    }
+
+    // Queue open Final QC inspection record for qc.demo
+    try {
+      const existingOpen = await tx.inspections.findFirst({
+        where: { garment_id: subject.subjectId, submitted_at: null },
+      });
+      if (!existingOpen) {
+        const qcUser = await tx.staff_users.findFirst({
+          where: { OR: [{ username: "qc.demo" }, { department_code: "quality" }] },
+        });
+        const inspectorId = qcUser?.id || context?.actor?.actorId || "09abcce4-0126-42bc-bfdb-8e3f76332ee8";
+        const checklistVer = await getOrCreateChecklistVersion(tx, "final", inspectorId);
+        const inspectionCode = `INSP-QA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        await tx.inspections.create({
+          data: {
+            code: inspectionCode,
+            scope: "final",
+            checklist_version_id: checklistVer.id,
+            garment_id: subject.subjectId,
+            inspector_id: inspectorId,
+            outcome: null,
+            answers: {},
+            notes: "Advanced from Station 5 Finishing. Awaiting Final QC.",
+            created_at: new Date(),
+          },
+        });
+      }
+    } catch (err) {
+      console.warn("[FinishingScanHandler] Inspection create warning:", err);
     }
 
     // Record internal commitment

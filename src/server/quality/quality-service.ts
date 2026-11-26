@@ -422,10 +422,10 @@ export function validateFinalQcScan(
     };
   }
 
-  if (garment.stage !== "finishing" && garment.stage !== "final-qc" && garment.stage !== "rework") {
+  if (garment.stage !== "finishing" && garment.stage !== "finished" && garment.stage !== "final-qc" && garment.stage !== "rework") {
     return {
       valid: false,
-      rejectionReason: `Garment ${garment.id} is at stage '${garment.stage}', expected 'finishing' or 'final-qc'.`,
+      rejectionReason: `Garment ${garment.id} is at stage '${garment.stage}', expected 'finishing', 'finished', or 'final-qc'.`,
       rejectionCode: "WT_ERR_WRONG_STAGE",
     };
   }

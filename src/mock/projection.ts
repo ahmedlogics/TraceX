@@ -494,5 +494,6 @@ export function projectProof(s: DemoState, publicId: string): PublicProof | null
     sampleCommitmentRef: record.sampleCommitmentRef,
     canonicalBytesLength: utf8.length,
     payload: built.payload,
+    blockchain: j.blockchain,
   };
 }

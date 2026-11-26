@@ -113,6 +113,7 @@ export function QAPanel({
     const list = candidateGarments.filter(
       (g) =>
         g.stage === "finishing" ||
+        (g.stage as any) === "finished" ||
         g.stage === "final-qc" ||
         (g.stage === "rework" && g.hold) ||
         g.disposition === "awaiting-inspection" ||

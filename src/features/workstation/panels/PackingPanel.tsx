@@ -523,9 +523,6 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                           <h2 className="text-xl font-bold tracking-tight text-foreground">
                             Packaging & Master Carton Aggregation
                           </h2>
-                          <p className="text-xs text-muted-foreground">
-                            Scan clean Box Tag first, click &quot;Start Scanning Products&quot;, then scan finished product tags one by one on hardware. Click &quot;Box Filled&quot; to freeze carton and route to Warehouse DB.
-                          </p>
                         </div>
 
                         <div className="flex flex-col gap-1.5 rounded-lg border bg-muted/40 p-3 text-xs md:min-w-[230px]">
@@ -641,7 +638,6 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       /* STATE A & B: No Active Box Open -> Step 1 Scan Box Tag */
                       <Section
                         title="Master Carton Session"
-                        description="Step 1: Scan a clean box tag on hardware to initiate container."
                       >
                         <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-muted/15 p-8 text-center space-y-5 max-w-2xl mx-auto my-4">
                           <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-xs">
@@ -652,11 +648,6 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             <h3 className="text-xl font-bold tracking-tight text-foreground">
                               {isWaitingForBoxScan ? "Scanner 7 Armed — Scan Box Tag" : "Ready to Pack Master Carton"}
                             </h3>
-                            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                              {isWaitingForBoxScan
-                                ? "Present an unassigned Box RFID tag (zero prior history) to Scanner 7 hardware reader."
-                                : "Click below to begin. The next tag scanned on hardware will be bound as a new Master Carton."}
-                            </p>
                           </div>
 
                           {!isWaitingForBoxScan ? (
@@ -941,7 +932,6 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                         {/* Packed Products Manifest Table Under Active Box */}
                         <Section
                           title={`Packed Products in ${activeBox.id} (${packedGarments.length} units)`}
-                          description="Runtime manifest of shirts linked to this Master Carton. Updated instantly as tags are scanned on hardware."
                         >
                           {packedGarments.length === 0 ? (
                             <div className="rounded-xl border-2 border-dashed border-emerald-500/30 bg-emerald-500/5 p-8 text-center space-y-3">
@@ -1013,11 +1003,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                           )}
 
                           {/* "Box Filled" Action Button Below Products -> Sends to Warehouse DB */}
-                          <div className="pt-6 border-t mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                            <div className="text-xs text-muted-foreground text-center sm:text-left">
-                              When carton is full, click <strong>Box Filled</strong> to freeze manifest, link all products to this carton, and send the box to Warehouse DB.
-                            </div>
-
+                          <div className="pt-6 border-t mt-4 flex flex-col sm:flex-row items-center justify-end gap-4">
                             <Button
                               size="lg"
                               className="w-full sm:w-auto min-w-[220px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md gap-2 h-11"
@@ -1035,7 +1021,6 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                     {/* Section: Available Inspected Garments Awaiting Packaging */}
                     <Section
                       title={`Garments Cleared from Final QC · Ready for Packaging (${readyForPacking.length})`}
-                      description="Serialized shirts that passed Station 6 inspection with zero active holds, ready to pack into shipping cartons."
                     >
                       <DataTable
                         rows={readyForPacking}

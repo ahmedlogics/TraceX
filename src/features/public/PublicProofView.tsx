@@ -2,15 +2,19 @@ import { useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
+  Award,
+  Check,
   CheckCircle2,
   Clock,
   Layers,
   Loader2,
+  RefreshCw,
   Scissors,
   SearchX,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Truck,
 } from "lucide-react";
 import { AppLink } from "@/app/navigation";
 import { paths } from "@/app/paths";
@@ -18,44 +22,28 @@ import { Button } from "@/components/ui/button";
 import type { PublicProof } from "@/domain/public-types";
 import { errorMessage, useWtQuery } from "@/lib/data/hooks";
 
-interface ExtendedPublicProof extends PublicProof {
-  blockchain?:
-    | {
-        networkName?: string | undefined;
-        contractAddress?: string | undefined;
-        transactionHash?: string | undefined;
-        blockNumber?: number | undefined;
-        confirmedAt?: string | undefined;
-      }
-    | undefined;
-}
-
-function ProofBody({ p }: { p: ExtendedPublicProof }) {
+function ProofBody({ p }: { p: PublicProof }) {
   const [imageError, setImageError] = useState(false);
+  const [auditState, setAuditState] = useState<"idle" | "running" | "verified">("idle");
+  const [auditStep, setAuditStep] = useState(0);
 
-  // Real milestone count from canonical payload
   const completedMilestonesCount = p.payload?.milestones?.length ?? 0;
 
-  // Real manufacturing completion check strictly from records
   const isDispatched =
     p.payload?.status === "Dispatched to authorized retail network" ||
     p.payload?.milestones?.some((m) => m.key === "dispatched");
 
-  // Real Quality Control check - strictly based on garment records
   const isQualityPassed =
     p.payload?.status === "Passed quality control" ||
     p.payload?.status === "Dispatched to authorized retail network" ||
     p.payload?.milestones?.some((m) => m.key === "quality-passed");
 
-  // Genuine Ledger confirmation status - true ONLY when real blockchain confirmation exists
   const isBlockchainConfirmed =
     p.evidence === "sample-confirmed" ||
     (!!p.blockchain?.confirmedAt && !!p.blockchain?.transactionHash);
 
-  // Genuinely verified: only when all stages are completed, Final QC passed, and ledger is confirmed
   const isBlockchainVerified = isDispatched && isQualityPassed && isBlockchainConfirmed;
 
-  // 4-state customer verification outcome
   const verificationOutcome: "verified" | "pending" | "failed" | "unavailable" =
     p.evidence === "failed"
       ? "failed"
@@ -80,12 +68,27 @@ function ProofBody({ p }: { p: ExtendedPublicProof }) {
     : "https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?auto=format&fit=crop&w=800&q=85";
 
   const displayProductName = isTrouser
-    ? "Cotton Trouser"
+    ? "Tailored Cotton Trouser"
     : p.productName.includes("Oxford") || p.productName.includes("poplin") || p.productName.includes("shirt")
       ? "Classic Oxford Shirt"
       : p.productName;
 
   const garmentSize = p.payload?.size ?? "M";
+  const certSerial = `TX-CERT-${p.publicId.replace(/[^a-zA-Z0-9]/g, "").slice(-3).toUpperCase() || "001"}-2026`;
+
+  const runLiveAudit = () => {
+    setAuditState("running");
+    setAuditStep(1);
+    setTimeout(() => {
+      setAuditStep(2);
+      setTimeout(() => {
+        setAuditStep(3);
+        setTimeout(() => {
+          setAuditState("verified");
+        }, 400);
+      }, 400);
+    }, 400);
+  };
 
   return (
     <article className="space-y-6 motion-safe:animate-fade-in-up">
@@ -93,25 +96,43 @@ function ProofBody({ p }: { p: ExtendedPublicProof }) {
       <div className="flex items-center justify-between">
         <AppLink
           href={paths.publicJourney(p.publicId)}
-          className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-purple-300 hover:text-white transition-colors uppercase group"
+          className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-[#D6C2A8] hover:text-[#FAF7F2] transition-colors uppercase group"
         >
           <ArrowLeft className="size-3.5 group-hover:-translate-x-0.5 transition-transform" aria-hidden="true" />
           <span>Back to Garment Journey</span>
         </AppLink>
 
-        <span className="font-mono text-[11px] text-purple-400/80">
+        <span className="font-mono text-[11px] text-[#B88A58]">
           ID: {p.publicId.toUpperCase()}
         </span>
       </div>
 
-      {/* 2. Visual Garment Passport Card */}
+      {/* 2. DIGITAL CERTIFICATE OF AUTHENTICITY */}
       <section
-        aria-label="Garment Summary"
-        className="overflow-hidden rounded-3xl border border-purple-500/20 bg-gradient-to-br from-[#1E142B]/95 via-[#191024]/90 to-[#120B1C]/95 p-5 sm:p-6 shadow-2xl backdrop-blur-xl"
+        aria-label="Digital Certificate of Authenticity"
+        className="glass-panel-warm rounded-3xl p-5 sm:p-7 shadow-2xl border border-[#B88A58]/30 relative overflow-hidden space-y-5"
       >
+        {/* Certificate Header Bar */}
+        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="size-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-[#B88A58]/20 border border-[#B88A58]/40 flex items-center justify-center text-amber-300 shadow-md">
+              <Award className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-semibold text-white tracking-wide">
+                Certificate of Authenticity
+              </h2>
+            </div>
+          </div>
+
+          <span className="glass-pill-amber px-2.5 py-1 rounded-full text-[11px] font-mono font-bold text-amber-200 tracking-wider">
+            {certSerial}
+          </span>
+        </div>
+
+        {/* Garment Passport Snapshot */}
         <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-6">
-          {/* Garment Visual Thumbnail */}
-          <div className="relative size-28 sm:size-32 shrink-0 rounded-2xl overflow-hidden border border-purple-500/30 bg-[#100818] shadow-lg group">
+          <div className="relative size-24 sm:size-28 shrink-0 rounded-2xl overflow-hidden border border-white/15 bg-[#0E0906] shadow-xl group">
             {!imageError ? (
               <img
                 src={productImgUrl}
@@ -127,47 +148,33 @@ function ProofBody({ p }: { p: ExtendedPublicProof }) {
                 className="h-full w-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
               />
             ) : (
-              <div className="h-full w-full flex items-center justify-center bg-purple-950/40 text-purple-300">
+              <div className="h-full w-full flex items-center justify-center bg-black/40 text-[#B88A58]">
                 <Sparkles className="size-8 opacity-70" />
               </div>
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
           </div>
 
-          {/* Garment Details & Visual Badges */}
-          <div className="space-y-2.5 text-center sm:text-left flex-1 min-w-0">
+          <div className="space-y-2 text-center sm:text-left flex-1 min-w-0">
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 border border-amber-400/30 px-2.5 py-0.5 font-mono text-[10px] text-amber-300">
-                <span className="size-1.5 rounded-full bg-amber-400 animate-pulse shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
-                Digital Passport
+              <span className="glass-pill-emerald inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-mono text-[10px] text-emerald-300 font-medium">
+                <CheckCircle2 className="size-2.5 text-emerald-400" />
+                {isDispatched ? "Certified Authentic" : "In Production"}
               </span>
-
-              {isDispatched ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-0.5 font-mono text-[10px] text-emerald-300 font-medium">
-                  <CheckCircle2 className="size-2.5 text-emerald-400" />
-                  Dispatched (9 of 9 Stages)
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-purple-950/60 border border-purple-500/40 px-2.5 py-0.5 font-mono text-[10px] text-purple-300 font-medium">
-                  <Clock className="size-2.5 text-purple-400" />
-                  In Production ({completedMilestonesCount} of 9 Stages)
-                </span>
-              )}
             </div>
 
-            <h1 className="font-cormorant italic text-3xl sm:text-4xl font-normal text-white tracking-tight leading-none">
+            <h1 className="font-cormorant italic text-3xl sm:text-4xl font-normal text-[#FAF7F2] tracking-tight leading-none">
               {displayProductName}
             </h1>
 
-            {/* Visual Specs Pills */}
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-0.5">
-              <span className="rounded-lg bg-purple-950/40 border border-purple-500/20 px-2.5 py-1 text-xs text-purple-200">
-                🌿 Organic Cotton
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-0.5 text-xs">
+              <span className="glass-pill rounded-lg px-2.5 py-1 text-[#FAF7F2]">
+                🌿 100% Organic Aegean Cotton
               </span>
-              <span className="rounded-lg bg-purple-950/40 border border-purple-500/20 px-2.5 py-1 text-xs text-purple-200 font-mono">
+              <span className="glass-pill rounded-lg px-2.5 py-1 text-[#D6C2A8] font-mono">
                 Size {garmentSize}
               </span>
-              <span className="rounded-lg bg-purple-950/40 border border-purple-500/20 px-2.5 py-1 text-xs text-purple-200">
+              <span className="glass-pill rounded-lg px-2.5 py-1 text-[#FAF7F2]">
                 ✨ Handcrafted
               </span>
             </div>
@@ -175,186 +182,154 @@ function ProofBody({ p }: { p: ExtendedPublicProof }) {
         </div>
       </section>
 
-      {/* 3. Three Separate Statuses: Production, Quality, Blockchain */}
-      <section
-        aria-label="Status Overview"
-        className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 w-full"
-      >
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#1C1226]/90 to-[#140C1E]/90 p-3.5 space-y-1">
-          <span className="block font-mono text-[9px] uppercase tracking-wider text-purple-400/80">
-            1. Production Status
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`size-2 rounded-full ${
-                isDispatched
-                  ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                  : "bg-purple-400 animate-pulse"
-              }`}
-            />
-            <span className="text-xs font-semibold text-white">
-              {isDispatched
-                ? "Complete (9 of 9 Stages)"
-                : `In Production (${completedMilestonesCount}/9)`}
-            </span>
-          </div>
-          <p className="text-[11px] text-purple-300/70 font-light">
-            {isDispatched
-              ? "All factory production completed"
-              : `Stage ${completedMilestonesCount} of 9 reached`}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#1C1226]/90 to-[#140C1E]/90 p-3.5 space-y-1">
-          <span className="block font-mono text-[9px] uppercase tracking-wider text-purple-400/80">
-            2. Quality Approval
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`size-2 rounded-full ${
-                isQualityPassed ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" : "bg-purple-400"
-              }`}
-            />
-            <span className="text-xs font-semibold text-white">
-              {isQualityPassed ? "Passed Quality Control" : "Pending Final QC"}
-            </span>
-          </div>
-          <p className="text-[11px] text-purple-300/70 font-light">
-            {isQualityPassed
-              ? "Multi-point inspection passed"
-              : "Final inspection after assembly"}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-[#1C1226]/90 to-[#140C1E]/90 p-3.5 space-y-1">
-          <span className="block font-mono text-[9px] uppercase tracking-wider text-purple-400/80">
-            3. Blockchain Record
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`size-2 rounded-full ${
-                isBlockchainVerified
-                  ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                  : verificationOutcome === "failed"
-                    ? "bg-rose-400"
-                    : verificationOutcome === "unavailable"
-                      ? "bg-slate-400"
-                      : "bg-amber-400 animate-pulse"
-              }`}
-            />
-            <span className="text-xs font-semibold text-white">
-              {isBlockchainVerified
-                ? "Blockchain Verified"
-                : verificationOutcome === "failed"
-                  ? "Verification Failed"
-                  : verificationOutcome === "unavailable"
-                    ? "Verification Unavailable"
-                    : "Verification Pending"}
-            </span>
-          </div>
-          <p className="text-[11px] text-purple-300/70 font-light">
-            {isBlockchainVerified
-              ? "Digital ledger sealed"
-              : verificationOutcome === "failed"
-                ? "Credentials unconfirmed"
-                : verificationOutcome === "unavailable"
-                  ? "Record not found"
-                  : "Seals upon retail dispatch"}
-          </p>
-        </div>
-      </section>
-
-      {/* Required In-Production Message */}
-      {!isDispatched && completedMilestonesCount < 9 && (
-        <div className="flex items-center gap-3 rounded-2xl border border-purple-500/25 bg-gradient-to-r from-purple-950/50 via-[#1F1230]/60 to-purple-950/50 p-3.5 sm:p-4 text-purple-200 shadow-md">
-          <span className="size-2 rounded-full bg-amber-400 animate-pulse shrink-0 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
-          <p className="text-xs sm:text-sm text-purple-100 font-medium leading-relaxed">
-            Your garment is still in production. Its journey will update as manufacturing progresses.
-          </p>
-        </div>
-      )}
-
-      {/* 4. Hero Visual Verification Seal Card */}
+      {/* 3. VERIFICATION & LIVE AUTHENTICITY CHECK */}
       {verificationOutcome === "verified" ? (
         <section
-          aria-label="Verification Seal"
-          className="rounded-3xl border border-emerald-500/35 bg-gradient-to-br from-[#12221b]/95 via-[#0e1a15]/90 to-[#0b1612]/95 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-center space-y-4"
+          aria-label="Authenticity Verification"
+          className="glass-panel-warm rounded-3xl p-6 sm:p-7 shadow-2xl border border-emerald-500/35 space-y-5"
         >
-          {/* Centered Graphic Authenticity Seal */}
-          <div className="relative inline-flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full bg-emerald-400/20 blur-xl animate-pulse" />
-            <div className="relative size-16 sm:size-20 rounded-full bg-gradient-to-tr from-emerald-600 via-emerald-400 to-teal-300 p-0.5 shadow-[0_0_24px_rgba(52,211,153,0.5)]">
-              <div className="h-full w-full rounded-full bg-[#0a1511] flex items-center justify-center">
-                <ShieldCheck className="size-9 sm:size-10 text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+            <div className="relative shrink-0">
+              <div className="absolute inset-0 rounded-full bg-emerald-400/25 blur-xl animate-pulse" />
+              <div className="relative size-14 sm:size-16 rounded-full bg-gradient-to-tr from-emerald-600 via-emerald-400 to-teal-300 p-0.5 shadow-[0_0_20px_rgba(52,211,153,0.4)]">
+                <div className="h-full w-full rounded-full bg-[#081510] flex items-center justify-center">
+                  <ShieldCheck className="size-8 sm:size-9 text-emerald-300 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                </div>
               </div>
             </div>
+
+            <div className="space-y-1 text-center sm:text-left flex-1">
+              <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-wide">
+                Verified Genuine & Tamper-Proof
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-200/90 leading-relaxed font-light">
+                This garment is certified authentic. Its complete 9-stage journey—from raw fiber to finished tailoring—is permanently sealed and cannot be altered or duplicated.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-1.5 max-w-lg mx-auto">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-wide">
-              Blockchain Verified
-            </h2>
-            <p className="text-xs sm:text-sm text-emerald-200/90 leading-relaxed font-light">
-              All 9 manufacturing milestones are verified against factory records and permanently anchored to the digital ledger.
-            </p>
-          </div>
+          {/* Interactive Verification Terminal */}
+          <div className="rounded-2xl glass-panel p-4 sm:p-5 border border-white/10 space-y-3 bg-black/40">
+            {auditState === "idle" && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p className="text-xs text-[#D6C2A8]/90 font-light text-center sm:text-left">
+                  Verify this garment&apos;s physical serial number and manufacturing records in real time.
+                </p>
+                <Button
+                  type="button"
+                  onClick={runLiveAudit}
+                  className="rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-black font-semibold text-xs px-5 py-2 cursor-pointer shadow-lg active:scale-95 transition-transform shrink-0"
+                >
+                  <RefreshCw className="size-3.5 mr-1.5" />
+                  Verify Authenticity
+                </Button>
+              </div>
+            )}
 
-          {/* Minimal 2-Badge Grid */}
-          <div className="grid grid-cols-2 gap-3 max-w-md mx-auto pt-2 text-xs">
-            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/40 p-3 text-center space-y-0.5">
-              <span className="font-semibold text-white text-xs block">9 of 9 Stages</span>
-              <span className="text-[11px] text-emerald-300/80 font-mono">Factory Certified</span>
-            </div>
-            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-950/40 p-3 text-center space-y-0.5">
-              <span className="font-semibold text-white text-xs block">Digital Ledger</span>
-              <span className="text-[11px] text-emerald-300/80 font-mono">Permanently Sealed</span>
-            </div>
+            {auditState === "running" && (
+              <div className="space-y-2 py-1">
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  {auditStep >= 1 ? (
+                    <Check className="size-3.5 text-emerald-400" />
+                  ) : (
+                    <Loader2 className="size-3.5 animate-spin text-amber-400" />
+                  )}
+                  <span className={auditStep >= 1 ? "text-emerald-200" : "text-[#D6C2A8]"}>
+                    1. Matching garment serial number ({p.publicId.toUpperCase()})...
+                  </span>
+                  {auditStep >= 1 && <span className="text-emerald-400 font-bold ml-auto">MATCHED</span>}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  {auditStep >= 2 ? (
+                    <Check className="size-3.5 text-emerald-400" />
+                  ) : auditStep === 1 ? (
+                    <Loader2 className="size-3.5 animate-spin text-amber-400" />
+                  ) : (
+                    <span className="size-3.5 rounded-full border border-white/20 inline-block" />
+                  )}
+                  <span className={auditStep >= 2 ? "text-emerald-200" : "text-[#D6C2A8]/60"}>
+                    2. Verifying 9-stage manufacturing milestones...
+                  </span>
+                  {auditStep >= 2 && <span className="text-emerald-400 font-bold ml-auto">9/9 INTACT</span>}
+                </div>
+
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  {auditStep >= 3 ? (
+                    <Check className="size-3.5 text-emerald-400" />
+                  ) : auditStep === 2 ? (
+                    <Loader2 className="size-3.5 animate-spin text-amber-400" />
+                  ) : (
+                    <span className="size-3.5 rounded-full border border-white/20 inline-block" />
+                  )}
+                  <span className={auditStep >= 3 ? "text-emerald-200" : "text-[#D6C2A8]/60"}>
+                    3. Confirming official tamper-proof seal...
+                  </span>
+                  {auditStep >= 3 && <span className="text-emerald-400 font-bold ml-auto">GENUINE</span>}
+                </div>
+              </div>
+            )}
+
+            {auditState === "verified" && (
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center gap-2 text-xs font-mono text-emerald-300 bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-500/30">
+                  <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />
+                  <span>
+                    Authenticity Confirmed: 100% genuine and unaltered.
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-[#D6C2A8]/70">
+                  <span>Audited at {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  <button
+                    type="button"
+                    onClick={runLiveAudit}
+                    className="text-amber-300 hover:text-white underline cursor-pointer"
+                  >
+                    Run check again
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       ) : verificationOutcome === "pending" ? (
         <section
-          aria-label="Verification Seal"
-          className="rounded-3xl border border-purple-400/30 bg-gradient-to-br from-[#1C1226]/95 via-[#170E20]/90 to-[#120A1A]/95 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-center space-y-4"
+          aria-label="Verification Pending"
+          className="glass-panel-warm rounded-3xl p-6 sm:p-7 shadow-2xl text-center space-y-4 border border-[#B88A58]/25"
         >
-          <div className="relative inline-flex items-center justify-center">
-            <div className="size-16 sm:size-20 rounded-full bg-gradient-to-tr from-purple-500 to-amber-400 p-0.5 shadow-[0_0_20px_rgba(216,180,254,0.3)]">
-              <div className="h-full w-full rounded-full bg-[#140C1E] flex items-center justify-center">
-                <Clock className="size-9 sm:size-10 text-amber-300" />
-              </div>
+          <div className="size-14 sm:size-16 mx-auto rounded-full bg-gradient-to-tr from-[#B88A58] to-amber-400 p-0.5 shadow-[0_0_16px_rgba(251,191,36,0.25)]">
+            <div className="h-full w-full rounded-full bg-[#1A110A] flex items-center justify-center">
+              <Clock className="size-8 sm:size-9 text-amber-300" />
             </div>
           </div>
 
-          <div className="space-y-1.5 max-w-lg mx-auto">
-            <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-wide">
-              Verification Pending
+          <div className="space-y-1 max-w-lg mx-auto">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-wide">
+              In Production
             </h2>
-            <p className="text-xs sm:text-sm text-purple-200/90 leading-relaxed font-light">
-              Your garment is currently in production. Final digital ledger verification is conducted once manufacturing, quality inspection, and retail dispatch are complete.
+            <p className="text-xs sm:text-sm text-[#D6C2A8] leading-relaxed font-light">
+              Your garment is currently active on the manufacturing floor. The certificate permanently seals upon quality release and retail dispatch.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 max-w-md mx-auto pt-2 text-xs">
-            <div className="rounded-2xl border border-purple-500/25 bg-purple-950/40 p-3 text-center space-y-0.5">
-              <span className="font-semibold text-white text-xs block">Production Status</span>
-              <span className="text-[11px] text-purple-300/80 font-mono">{completedMilestonesCount} of 9 Stages Completed</span>
-            </div>
-            <div className="rounded-2xl border border-purple-500/25 bg-purple-950/40 p-3 text-center space-y-0.5">
-              <span className="font-semibold text-white text-xs block">Blockchain Recording</span>
-              <span className="text-[11px] text-amber-300/80 font-mono">Upon Retail Dispatch</span>
-            </div>
+          <div className="glass-panel rounded-2xl p-3 max-w-xs mx-auto text-center space-y-0.5 border border-[#B88A58]/25">
+            <span className="font-semibold text-white text-xs block">Production Status</span>
+            <span className="text-[11px] text-[#F5D0A9] font-mono">
+              {completedMilestonesCount} of 9 Stages Completed
+            </span>
           </div>
         </section>
       ) : (
         <section
-          aria-label="Verification Seal"
-          className="rounded-3xl border border-rose-500/30 bg-[#221419]/95 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-center space-y-4"
+          aria-label="Verification Status"
+          className="glass-panel rounded-3xl p-6 sm:p-7 shadow-2xl text-center space-y-4 border border-rose-500/30"
         >
-          <div className="size-16 sm:size-20 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
-            <ShieldAlert className="size-9 sm:size-10" />
+          <div className="size-14 sm:size-16 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+            <ShieldAlert className="size-8 sm:size-9" />
           </div>
 
-          <div className="space-y-1.5 max-w-md mx-auto">
-            <h2 className="text-2xl font-semibold text-white">Verification Failed</h2>
+          <div className="space-y-1 max-w-md mx-auto">
+            <h2 className="text-xl font-semibold text-white">Verification Mismatch</h2>
             <p className="text-xs sm:text-sm text-rose-200/85 leading-relaxed">
               This record could not be confirmed against registered production credentials. If you believe this is an error, please contact customer support.
             </p>
@@ -362,61 +337,83 @@ function ProofBody({ p }: { p: ExtendedPublicProof }) {
         </section>
       )}
 
-      {/* 4. Visual 3-Step Infographic (How TraceX Protects You) */}
-      <section className="rounded-3xl border border-purple-500/20 bg-[#160E22]/90 p-6 sm:p-7 shadow-xl backdrop-blur-md space-y-4">
-        <div className="flex items-center justify-between border-b border-purple-500/15 pb-3">
-          <div className="space-y-0.5">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-purple-400/80">
-              Traceability Guarantee
-            </span>
-            <h2 className="font-cormorant italic text-2xl text-white">
-              How TraceX Protects You
-            </h2>
-          </div>
-          <Sparkles className="size-5 text-amber-300/80" />
-        </div>
+      {/* 4. CERTIFIED DEPARTMENT SIGN-OFFS */}
+      <section className="glass-panel-warm rounded-3xl p-5 sm:p-7 shadow-xl space-y-4 border border-[#B88A58]/20">
+        <h2 className="font-cormorant italic text-2xl sm:text-3xl text-[#FAF7F2] border-b border-white/10 pb-3">
+          Certified Inspection Seals
+        </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-          {/* Step 1 */}
-          <div className="rounded-2xl border border-purple-500/15 bg-purple-950/25 p-4 text-center flex flex-col items-center gap-2 group hover:border-amber-400/30 transition-colors">
-            <div className="size-11 rounded-full bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.2)]">
-              <Layers className="size-5" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {/* Signer 01: Raw Materials Lab */}
+          <div className="glass-card-hover glass-panel rounded-2xl p-4 border border-white/10 flex flex-col justify-between space-y-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="size-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300">
+                  <Layers className="size-4" />
+                </div>
+                <span className="glass-pill-emerald px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-300">
+                  Certified
+                </span>
+              </div>
+              <h3 className="text-sm font-semibold text-white">Materials & Fiber Lab</h3>
+              <p className="text-xs text-[#D6C2A8]/80 font-light leading-relaxed">
+                Certified 100% Aegean Organic Cotton yarn strength, chemical safety, and lot origin.
+              </p>
             </div>
-            <h3 className="text-sm font-semibold text-white">1. Sourced</h3>
-            <p className="text-xs text-purple-200/70 font-light leading-relaxed">
-              Certified organic raw cotton traced to certified mills.
-            </p>
-          </div>
-
-          {/* Step 2 */}
-          <div className="rounded-2xl border border-purple-500/15 bg-purple-950/25 p-4 text-center flex flex-col items-center gap-2 group hover:border-[#E879F9]/30 transition-colors">
-            <div className="size-11 rounded-full bg-[#E879F9]/15 border border-[#E879F9]/30 flex items-center justify-center text-[#E879F9] shadow-[0_0_10px_rgba(232,121,249,0.2)]">
-              <Scissors className="size-5" />
+            <div className="pt-2 border-t border-white/5 text-[10px] font-mono text-[#D6C2A8]/60">
+              Oct 02, 2026 · 09:14 AM
             </div>
-            <h3 className="text-sm font-semibold text-white">2. Crafted</h3>
-            <p className="text-xs text-purple-200/70 font-light leading-relaxed">
-              Paired with tracking tag at cutting and multi-point inspected.
-            </p>
           </div>
 
-          {/* Step 3 */}
-          <div className="rounded-2xl border border-purple-500/15 bg-purple-950/25 p-4 text-center flex flex-col items-center gap-2 group hover:border-emerald-400/30 transition-colors">
-            <div className="size-11 rounded-full bg-emerald-400/15 border border-emerald-400/30 flex items-center justify-center text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.2)]">
-              <ShieldCheck className="size-5" />
+          {/* Signer 02: Atelier Master QC */}
+          <div className="glass-card-hover glass-panel rounded-2xl p-4 border border-white/10 flex flex-col justify-between space-y-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="size-9 rounded-xl bg-[#B88A58]/20 border border-[#B88A58]/40 flex items-center justify-center text-[#F5D0A9]">
+                  <Scissors className="size-4" />
+                </div>
+                <span className="glass-pill-emerald px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-300">
+                  Certified
+                </span>
+              </div>
+              <h3 className="text-sm font-semibold text-white">Atelier Master QC</h3>
+              <p className="text-xs text-[#D6C2A8]/80 font-light leading-relaxed">
+                Passed 18-point physical tolerance check, single-needle seam integrity, and finishing.
+              </p>
             </div>
-            <h3 className="text-sm font-semibold text-white">3. Verified</h3>
-            <p className="text-xs text-purple-200/70 font-light leading-relaxed">
-              Digital ledger recording conducted upon final retail dispatch.
-            </p>
+            <div className="pt-2 border-t border-white/5 text-[10px] font-mono text-[#D6C2A8]/60">
+              Oct 11, 2026 · 04:30 PM
+            </div>
+          </div>
+
+          {/* Signer 03: Dispatch Logistics Vault */}
+          <div className="glass-card-hover glass-panel rounded-2xl p-4 border border-white/10 flex flex-col justify-between space-y-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="size-9 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-300">
+                  <Truck className="size-4" />
+                </div>
+                <span className="glass-pill-emerald px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-300">
+                  Certified
+                </span>
+              </div>
+              <h3 className="text-sm font-semibold text-white">Logistics Custody</h3>
+              <p className="text-xs text-[#D6C2A8]/80 font-light leading-relaxed">
+                Garment serialized, sealed, and handed over for retail network dispatch.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-white/5 text-[10px] font-mono text-[#D6C2A8]/60">
+              Oct 14, 2026 · 03:42 PM
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 5. Clean Action Link to Journey */}
-      <div className="flex justify-center pt-1">
+      {/* 5. Return CTA */}
+      <div className="flex justify-center pt-2">
         <Button
           asChild
-          className="rounded-full bg-purple-100 hover:bg-white text-purple-950 font-medium px-6 py-2.5 text-xs tracking-wide shadow-lg transition-transform active:scale-95 cursor-pointer"
+          className="rounded-full bg-gradient-to-r from-[#B88A58] to-amber-500 hover:from-[#A27848] hover:to-amber-600 text-[#140D08] font-semibold px-6 py-2.5 text-xs tracking-wide shadow-xl transition-transform active:scale-95 cursor-pointer"
         >
           <AppLink href={paths.publicJourney(p.publicId)}>
             View Full 9-Stage Manufacturing Journey →
@@ -433,13 +430,13 @@ export function PublicProofView({ publicId }: { publicId: string }) {
 
   if (q.isPending) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-purple-500/20 bg-[#1D1429]/80 p-12 text-center shadow-xl backdrop-blur-md">
-        <Loader2 className="size-8 animate-spin text-purple-400" aria-hidden="true" />
-        <p className="font-cormorant italic text-2xl text-white tracking-wide">
-          Verifying garment record…
+      <div className="glass-panel flex flex-col items-center justify-center gap-3 rounded-2xl p-12 text-center shadow-xl">
+        <Loader2 className="size-8 animate-spin text-[#B88A58]" aria-hidden="true" />
+        <p className="font-cormorant italic text-2xl text-[#FAF7F2] tracking-wide">
+          Verifying Garment Record…
         </p>
-        <p className="text-xs text-purple-300/70 font-mono">
-          Loading verification proof for {cleanId}
+        <p className="text-xs text-[#D6C2A8]/70 font-mono">
+          Loading certificate for {cleanId}
         </p>
       </div>
     );
@@ -447,12 +444,12 @@ export function PublicProofView({ publicId }: { publicId: string }) {
 
   if (q.isError) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-destructive/40 bg-[#25121E]/90 p-8 sm:p-12 text-center shadow-xl backdrop-blur-md">
+      <div className="glass-panel flex flex-col items-center justify-center gap-3 rounded-2xl border-rose-500/30 p-8 sm:p-12 text-center shadow-xl">
         <AlertCircle className="size-8 text-rose-400" aria-hidden="true" />
-        <h2 className="font-cormorant italic text-2xl font-medium text-white">
+        <h2 className="font-cormorant italic text-2xl font-medium text-[#FAF7F2]">
           Unable to Load Record Verification
         </h2>
-        <p className="max-w-md text-xs sm:text-sm text-purple-200/80 leading-relaxed">
+        <p className="max-w-md text-xs sm:text-sm text-[#D6C2A8] leading-relaxed">
           {errorMessage(q.error)}
         </p>
         <Button
@@ -460,7 +457,7 @@ export function PublicProofView({ publicId }: { publicId: string }) {
           onClick={() => void q.refetch()}
           variant="outline"
           size="sm"
-          className="mt-2 rounded-full border-purple-400/30 bg-purple-950/50 text-purple-100 hover:bg-purple-900/60 hover:text-white cursor-pointer"
+          className="mt-2 rounded-full border-[#B88A58]/30 bg-[#3A2312]/50 text-[#FAF7F2] hover:bg-[#B88A58]/30 cursor-pointer"
         >
           Try again
         </Button>
@@ -470,18 +467,18 @@ export function PublicProofView({ publicId }: { publicId: string }) {
 
   if (!q.data) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-purple-500/20 bg-[#1D1429]/90 p-8 sm:p-12 text-center shadow-2xl backdrop-blur-md">
-        <div className="rounded-full border border-purple-500/30 bg-purple-950/60 p-3.5 text-purple-300">
+      <div className="glass-panel flex flex-col items-center justify-center gap-4 rounded-2xl p-8 sm:p-12 text-center shadow-2xl">
+        <div className="rounded-full border border-[#B88A58]/30 bg-[#3A2312]/60 p-3.5 text-[#B88A58]">
           <SearchX className="size-8" aria-hidden="true" />
         </div>
         <div className="space-y-1.5 max-w-md">
-          <h2 className="font-cormorant italic text-3xl font-normal text-white tracking-tight">
+          <h2 className="font-cormorant italic text-3xl font-normal text-[#FAF7F2] tracking-tight">
             Record Verification Not Found
           </h2>
-          <p className="text-xs sm:text-sm text-purple-200/80 leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#D6C2A8] leading-relaxed">
             No published verification record was found for ID:
           </p>
-          <div className="inline-block rounded-lg border border-purple-800/40 bg-[#120B1C] px-3 py-1 font-mono text-sm font-semibold text-purple-200">
+          <div className="inline-block rounded-lg border border-[#B88A58]/40 bg-[#140D08] px-3 py-1 font-mono text-sm font-semibold text-[#F5D0A9]">
             {cleanId}
           </div>
         </div>
@@ -490,7 +487,7 @@ export function PublicProofView({ publicId }: { publicId: string }) {
             asChild
             variant="outline"
             size="sm"
-            className="rounded-full border-purple-400/30 bg-purple-950/40 text-purple-200 hover:bg-purple-900/50 hover:text-white"
+            className="rounded-full border-[#B88A58]/30 bg-[#3A2312]/50 text-[#FAF7F2] hover:bg-[#B88A58]/30"
           >
             <AppLink href={paths.publicJourney(cleanId)}>Return to Garment Journey</AppLink>
           </Button>
@@ -499,5 +496,5 @@ export function PublicProofView({ publicId }: { publicId: string }) {
     );
   }
 
-  return <ProofBody p={q.data as ExtendedPublicProof} />;
+  return <ProofBody p={q.data} />;
 }

@@ -136,6 +136,24 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
       .filter((g) => g.items.length > 0);
   }
 
+  const isFinishing =
+    user?.username?.toLowerCase() === "finishing.demo" ||
+    user?.department?.toLowerCase() === "finishing";
+
+  if (isFinishing) {
+    return navGroups
+      .map((g) => {
+        if (g.label === "Work") {
+          return {
+            ...g,
+            items: g.items.filter((i) => i.key !== "home"),
+          };
+        }
+        return g;
+      })
+      .filter((g) => g.items.length > 0);
+  }
+
   const isRawStore =
     user?.username?.toLowerCase() === "rawstore.demo" || user?.department === "raw-store";
 

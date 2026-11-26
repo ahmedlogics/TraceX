@@ -1,28 +1,13 @@
 import { cn } from "@/lib/utils";
 
-/** Geometric chevron mark matching the TraceX aesthetic. */
+/** Authentic TraceX brand mark using the finalized emblem shield icon (transparent). */
 export function TraceXMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 44 38"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className ?? "size-7 text-[#8C6D53]"}
-      aria-hidden="true"
-    >
-      <path
-        d="M22 2L42 36H36L22 12L8 36H2L22 2Z"
-        fill="currentColor"
-      />
-      <path
-        d="M22 15L32 32H27.5L22 22L16.5 32H12L22 15Z"
-        fill="currentColor"
-      />
-      <path
-        d="M22 25L25 30H19L22 25Z"
-        fill="currentColor"
-      />
-    </svg>
+    <img
+      src="/images/tracex-icon-dark-optimized.png"
+      alt="TraceX Icon"
+      className={cn("h-7 w-auto object-contain drop-shadow-sm", className)}
+    />
   );
 }
 

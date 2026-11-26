@@ -72,7 +72,7 @@ export function StationShell() {
 
   const qStation = useWtQuery(["rfid-station", effectiveStation], (c) =>
     c.getRfidStationData(effectiveStation),
-    { refetchInterval: 3000 },
+    { refetchInterval: 1000 },
   );
 
   return (
@@ -196,7 +196,7 @@ export function StationShell() {
                 </div>
 
                 {/* Durable Scan Feedback */}
-                {lastOutcome && (
+                {lastOutcome && effectiveStation !== "finishing" && (
                   <div
                     className={`mt-4 rounded-lg border p-3 text-xs flex items-start gap-2.5 ${
                       lastOutcome.resolution === "accepted"

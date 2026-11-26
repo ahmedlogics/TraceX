@@ -7,6 +7,7 @@ import { normalizeTagUid } from "../contracts/rfid";
 import type { ISubjectRevisionService } from "../contracts/services";
 import { toActorRef, EXCLUDED_LOT_CODES } from "../materials/materials-service";
 import { createInternalCommitment } from "../ledger/commitment-service";
+import { getOrCreateChecklistVersion } from "../quality/quality-service";
 import type { ScanOutcome, ScanResolution } from "@/domain/types";
 import type {
   ApproveOrderInput,
@@ -1330,6 +1331,38 @@ export async function executeRoutineScan(
         revision: { increment: 1 },
       },
     });
+
+    // If finishing is completed, queue an open Final QC inspection record for qc.demo
+    if (input.stationCode === "finishing") {
+      try {
+        const qcUser = await db.staff_users.findFirst({
+          where: { OR: [{ username: "qc.demo" }, { department_code: "quality" }] },
+        });
+        const inspectorId = qcUser?.id || staffUserId;
+        const existingOpen = await db.inspections.findFirst({
+          where: { garment_id: garment.id, submitted_at: null },
+        });
+        if (!existingOpen) {
+          const checklistVer = await getOrCreateChecklistVersion(db, "final", inspectorId);
+          const inspectionCode = `INSP-QA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          await db.inspections.create({
+            data: {
+              code: inspectionCode,
+              scope: "final",
+              checklist_version_id: checklistVer.id,
+              garment_id: garment.id,
+              inspector_id: inspectorId,
+              outcome: null,
+              answers: {},
+              notes: "Generated from Station 5 Finishing completion. Awaiting Final QC.",
+              created_at: now,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn("[executeRoutineScan] Error creating final QC inspection:", err);
+      }
+    }
 
     // Record trace event (public journey & manufacturing history)
     const traceEvent = await db.trace_events.create({
