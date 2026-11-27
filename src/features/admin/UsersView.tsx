@@ -187,7 +187,7 @@ export function UsersView() {
     <div className="space-y-6">
       <PageHeader
         title="Staff administration"
-        description="Manage factory personnel, allocate roles and departmental grants, and issue single-use credential tokens."
+        description="Manage personnel accounts, operational roles, and access credentials."
         crumbs={[
           { label: "Staff", href: paths.home },
           { label: "Administration" },

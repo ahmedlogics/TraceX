@@ -7,6 +7,7 @@ import { Loadable, EmptyState } from "@/components/wt/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlanOrderDialog } from "@/features/production/OrdersView";
+import { useMe } from "@/features/shared/useMe";
 import type { MaterialLot, ProductionOrder } from "@/domain/types";
 import {
   Boxes,
@@ -27,6 +28,8 @@ import {
 import { toast } from "sonner";
 
 export function RawStoreDashboard() {
+  const me = useMe();
+  const isAdmin = me.role === "A" || me.username?.toLowerCase() === "admin.demo";
   const navigate = useAppNavigate();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"passed" | "awaiting" | "orders">("passed");
@@ -44,27 +47,33 @@ export function RawStoreDashboard() {
 
   const handleOrderCreated = (newOrderId: string) => {
     void qOrders.refetch();
-    toast.success(`Order ${newOrderId} created. Navigate to Station 2 to scan bundle tag!`);
+    toast.success(`Order ${newOrderId} created.`);
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Home"
-        description="Department of Raw Material Store · Verified Incoming QC Queue & Production Allocation"
+        title={isAdmin ? "Raw Store & QC Queue" : "Home"}
+        description={
+          isAdmin
+            ? "Inventory monitor of verified incoming QC fabric rolls and allocation demand."
+            : "Department of Raw Material Store · Verified Incoming QC Queue & Production Allocation"
+        }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <PlanOrderDialog
-              triggerLabel="+ New Order"
-              onSuccess={handleOrderCreated}
-            />
-            <Button
-              className="gap-1.5 font-semibold bg-primary text-primary-foreground shadow-xs"
-              onClick={() => void navigate(paths.workstation)}
-            >
-              <Cpu className="size-4" /> Go to Station 2 Workstation
-            </Button>
-          </div>
+          isAdmin ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <PlanOrderDialog
+                triggerLabel="+ New Order"
+                onSuccess={handleOrderCreated}
+              />
+              <Button
+                className="gap-1.5 font-semibold bg-primary text-primary-foreground shadow-xs"
+                onClick={() => void navigate(paths.workstation)}
+              >
+                <Cpu className="size-4" /> Go to Station 2 Workstation
+              </Button>
+            </div>
+          )
         }
       />
 
@@ -196,15 +205,17 @@ export function RawStoreDashboard() {
                   </div>
 
                   {/* HARDWARE RFID VERIFICATION POLICY NOTICE BANNER */}
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs text-foreground space-y-1">
-                    <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
-                      <ShieldCheck className="size-4.5" />
-                      Station 2 Hardware RFID Verification Policy (Scanner 2 · GPIO 12)
+                  {!isAdmin && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs text-foreground space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
+                        <ShieldCheck className="size-4.5" />
+                        Station 2 Hardware RFID Verification Policy (Scanner 2 · GPIO 12)
+                      </div>
+                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                        When a manager creates a production order and scans a bundle card at Station 2, the system validates that the scanned tag is present in the <strong>Approved Incoming QC Queue</strong>. Any bundle that has not passed <code>qc.incoming</code> inspection is strictly rejected by the reader (<code>WT_ERR_QC_NOT_PASSED</code>).
+                      </p>
                     </div>
-                    <p className="text-muted-foreground text-[11px] leading-relaxed">
-                      When a manager creates a production order and scans a bundle card at Station 2, the system validates that the scanned tag is present in the <strong>Approved Incoming QC Queue</strong>. Any bundle that has not passed <code>qc.incoming</code> inspection is strictly rejected by the reader (<code>WT_ERR_QC_NOT_PASSED</code>).
-                    </p>
-                  </div>
+                  )}
 
                   {/* SEARCH AND TAB FILTER BAR */}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -346,13 +357,15 @@ export function RawStoreDashboard() {
                                   <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                                     Cleared for Cutting
                                   </span>
-                                  <Button
-                                    size="sm"
-                                    className="h-7 text-[11px] gap-1 font-semibold"
-                                    onClick={() => void navigate(paths.workstation)}
-                                  >
-                                    Issue at Station 2 <ArrowRight className="size-3" />
-                                  </Button>
+                                  {!isAdmin && (
+                                    <Button
+                                      size="sm"
+                                      className="h-7 text-[11px] gap-1 font-semibold"
+                                      onClick={() => void navigate(paths.workstation)}
+                                    >
+                                      Issue at Station 2 <ArrowRight className="size-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -449,13 +462,15 @@ export function RawStoreDashboard() {
                                   <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                                     Awaiting Allocation
                                   </span>
-                                  <Button
-                                    size="sm"
-                                    className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
-                                    onClick={() => void navigate(paths.workstation)}
-                                  >
-                                    <Cpu className="size-3.5" /> Issue at Station 2 <ArrowRight className="size-3" />
-                                  </Button>
+                                  {!isAdmin && (
+                                    <Button
+                                      size="sm"
+                                      className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground font-semibold"
+                                      onClick={() => void navigate(paths.workstation)}
+                                    >
+                                      <Cpu className="size-3.5" /> Issue at Station 2 <ArrowRight className="size-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             );

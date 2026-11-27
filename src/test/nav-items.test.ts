@@ -94,4 +94,33 @@ describe("Staff Navigation Items", () => {
     expect(workGroup!.items.some((i) => i.key === "home")).toBe(false);
     expect(workGroup!.items.some((i) => i.key === "workstation")).toBe(true);
   });
+
+  it("configures dedicated admin navigation without ledger and with warehouseLocator and productPassports", () => {
+    const adminUser: StaffUser = {
+      id: "u-admin",
+      username: "admin.demo",
+      displayName: "Avery Admin",
+      role: "A",
+      department: "technical-admin",
+      email: "admin@example.com",
+      scope: "*",
+      status: "active",
+    };
+    const groups = getNavGroups(adminUser);
+    const allKeys = groups.flatMap((g) => g.items.map((i) => i.key));
+
+    expect(allKeys).not.toContain("ledger");
+    expect(allKeys).toContain("home");
+    expect(allKeys).toContain("rawStore");
+    expect(allKeys).toContain("warehouseLocator");
+    expect(allKeys).toContain("productPassports");
+    expect(allKeys).toContain("audit");
+    expect(allKeys).toContain("reports");
+    expect(allKeys).toContain("adminUsers");
+    expect(allKeys).toContain("settings");
+
+    expect(canAccessRoute(adminUser, "ledger")).toBe(false);
+    expect(canAccessRoute(adminUser, "warehouseLocator")).toBe(true);
+    expect(canAccessRoute(adminUser, "productPassports")).toBe(true);
+  });
 });

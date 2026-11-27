@@ -40,7 +40,9 @@ export type RouteKey =
   | "reports"
   | "adminUsers"
   | "settings"
-  | "nfcHub";
+  | "nfcHub"
+  | "warehouseLocator"
+  | "productPassports";
 
 const ALL: Role[] = ["A", "M", "O", "P", "Q", "L"];
 
@@ -63,16 +65,23 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   fulfilment: ["M", "L"],
   shipments: ["M", "L"],
   shipment: ["M", "L"],
-  ledger: ["A", "M"],
+  ledger: ["M"],
   audit: ["A", "M"],
   reports: ["A", "M"],
   adminUsers: ["A"],
   settings: ["A", "M"],
   nfcHub: ["M"],
+  warehouseLocator: ["A", "M"],
+  productPassports: ["A", "M"],
 };
 
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   if (!user || user.status !== "active") return false;
+
+  // Ledger screen removed for admin.demo
+  if (key === "ledger" && (user.role === "A" || user.username === "admin.demo")) {
+    return false;
+  }
 
   // NFC Tag Passport screen is strictly reserved for manager.demo
   if (key === "nfcHub") {

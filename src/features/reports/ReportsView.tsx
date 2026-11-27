@@ -16,7 +16,7 @@ export function ReportsView() {
       return "Quality inspection metrics, pass/fail ratios, and defect breakdown.";
     }
     if (me.role === "A") {
-      return "Personnel account statuses, ledger commitment health, and security audit volumes.";
+      return "Personnel account statuses, operational volumes, and security audit metrics.";
     }
     return "Factory production throughput, material lot balances, cutting yields, and dispatch progress.";
   };
@@ -29,16 +29,18 @@ export function ReportsView() {
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Reports" }]}
       />
 
-      <div className="rounded-lg border bg-accent/30 px-4 py-2.5 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Calendar className="size-3.5 text-primary" aria-hidden />
-          <span>
-            Reporting scope: <strong>{roleLabels[me.role]}</strong> (
-            {departmentLabels[me.department]})
-          </span>
+      {me.role !== "A" && (
+        <div className="rounded-lg border bg-accent/30 px-4 py-2.5 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Calendar className="size-3.5 text-primary" aria-hidden />
+            <span>
+              Reporting scope: <strong>{roleLabels[me.role]}</strong> (
+              {departmentLabels[me.department]})
+            </span>
+          </div>
+          <span className="font-mono text-[11px]">Units: integer units / meters</span>
         </div>
-        <span className="font-mono text-[11px]">Units: integer units / meters</span>
-      </div>
+      )}
 
       <Loadable query={q}>
         {(r) => (

@@ -17,6 +17,10 @@ import {
   Wrench,
   Search,
   ScanLine,
+  PackageCheck,
+  Truck,
+  Layers,
+  QrCode,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppLink } from "@/app/navigation";
@@ -852,8 +856,479 @@ function GeneralDashboard({ me }: { me: ReturnType<typeof useMe> }) {
   );
 }
 
+function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
+  const qLots = useWtQuery(["lots"], (c) => c.listLots());
+  const qOrders = useWtQuery(["orders"], (c) => c.listOrders());
+  const qGarments = useWtQuery(["garments"], (c) => c.listGarments());
+  const qFulfilment = useWtQuery(["fulfilment"], (c) => c.getFulfilment());
+
+  const isLoading =
+    qLots.isPending ||
+    qOrders.isPending ||
+    qGarments.isPending ||
+    qFulfilment.isPending ||
+    !qLots.data ||
+    !qOrders.data ||
+    !qGarments.data ||
+    !qFulfilment.data;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Overview"
+          description="Enterprise Supply Chain Diagnostics & Department Status"
+        />
+        <LoadingState label="Loading department metrics and live pipeline state…" />
+      </div>
+    );
+  }
+
+  const lots = qLots.data;
+  const orders = qOrders.data;
+  const garments = qGarments.data;
+  const fulfilment = qFulfilment.data;
+  const packages = fulfilment.packages || [];
+
+  // 1. Raw Materials Department Metrics
+  const passedLots = lots.filter((l) => l.status === "accepted");
+  const quarantineLots = lots.filter((l) => l.status === "awaiting-inspection");
+  const totalStockMeters = lots.reduce((acc, l) => acc + (Number(l.balanceQty) || 0), 0);
+  const passedStockMeters = passedLots.reduce((acc, l) => acc + (Number(l.balanceQty) || 0), 0);
+
+  // 2. Production Orders Metrics
+  const completedOrders = orders.filter((o) => o.status === "completed");
+  const activeOrders = orders.filter((o) => o.status !== "completed");
+  const plannedUnits = orders.reduce((acc, o) => acc + (Number(o.plannedQty) || 0), 0);
+
+  // 3. Station 3: Cutting Metrics
+  const pendingCuttingOrders = orders.filter(
+    (o) => o.status !== "completed" && (!o.issues || o.issues.length === 0 || !o.lotCodes?.length),
+  );
+  const cutGarments = garments.length;
+
+  // 4. Station 4: Stitching Metrics
+  const stitchingPending = garments.filter(
+    (g) => g.stage === "cutting" || (g.stage === "stitching" && g.status !== "stitched"),
+  );
+  const stitchingDone = garments.filter(
+    (g) =>
+      ["finishing", "final_qc", "packing", "warehouse", "dispatched"].includes(g.stage) ||
+      g.status === "stitched",
+  );
+
+  // 5. Station 5: Finishing Metrics
+  const finishingPending = garments.filter((g) => g.stage === "finishing");
+  const finishingDone = garments.filter(
+    (g) =>
+      ["final_qc", "packing", "warehouse", "dispatched"].includes(g.stage) ||
+      g.status === "finished",
+  );
+
+  // 6. Station 6: Final Quality Assurance Metrics
+  const qcPending = garments.filter((g) => g.stage === "final_qc");
+  const qcPassed = garments.filter(
+    (g) =>
+      ["packing", "warehouse", "dispatched"].includes(g.stage) ||
+      g.disposition === "pass",
+  );
+  const inReworkOrHold = garments.filter((g) => Boolean(g.hold) || g.disposition === "rework");
+
+  // 7. Stations 7 & 8: Packing & Warehouse Metrics
+  const packedCartonsCount = packages.length;
+  const warehousedGarments = garments.filter(
+    (g) => g.stage === "warehouse" || g.stage === "dispatched" || Boolean(g.packageId),
+  );
+  const storedBins = new Set(packages.map((p) => p.binId).filter(Boolean)).size;
+
+  // 8. Station 9: Dispatch & Transparency Metrics
+  const dispatchedGarments = garments.filter((g) => g.stage === "dispatched");
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Overview"
+        description="Enterprise Supply Chain Diagnostics & Department Status"
+      />
+
+      {/* TOP 4 EXECUTIVE KPI CARDS */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Total Fabric Stock
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Boxes className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+            {lots.length} <span className="text-sm font-normal text-muted-foreground">Rolls</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {totalStockMeters.toLocaleString()} m in stock · {passedLots.length} passed QC
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Production Orders
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <Scissors className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+            {orders.length} <span className="text-sm font-normal text-muted-foreground">Orders</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {completedOrders.length} completed · {activeOrders.length} active ({plannedUnits} pcs planned)
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Garments Tracked
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              <Shirt className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+            {garments.length} <span className="text-sm font-normal text-muted-foreground">Units</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {cutGarments} cut &amp; tagged · {qcPassed.length} passed final QC
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Dispatched &amp; Live
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Truck className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+            {dispatchedGarments.length} <span className="text-sm font-normal text-muted-foreground">Dispatched</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {dispatchedGarments.length} public customer transparency passports live
+          </p>
+        </div>
+      </div>
+
+      {/* DEPARTMENT PIPELINE BREAKDOWN SECTION */}
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Department Pipeline Status</h2>
+          <p className="text-xs text-muted-foreground">
+            Real-time status of orders, rolls, and garments across each manufacturing and logistics department.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* 1. RAW MATERIALS STORE */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
+                    <Layers className="size-4" />
+                  </div>
+                  <span className="font-bold text-sm text-foreground">Raw Material Store</span>
+                </div>
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 border border-emerald-500/20">
+                  {passedLots.length} Ready
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="rounded-lg bg-muted/40 p-2.5">
+                  <p className="text-[11px] text-muted-foreground">Total Bundles / Rolls</p>
+                  <p className="text-lg font-bold text-foreground mt-0.5">{lots.length}</p>
+                  <p className="text-[10px] text-muted-foreground">{totalStockMeters.toFixed(0)}m total</p>
+                </div>
+                <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Bundles Passed QC</p>
+                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{passedLots.length}</p>
+                  <p className="text-[10px] text-muted-foreground">{passedStockMeters.toFixed(0)}m ready to issue</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 px-1">
+                <span className="text-muted-foreground">Awaiting Incoming QC:</span>
+                <span className="font-semibold text-amber-600">{quarantineLots.length} rolls in quarantine</span>
+              </div>
+            </div>
+            <div className="pt-2 border-t">
+              <Button asChild variant="outline" size="sm" className="w-full text-xs h-8">
+                <AppLink href={paths.rawStore}>
+                  View Raw Store Queue <ArrowRight className="size-3.5 ml-1" />
+                </AppLink>
+              </Button>
+            </div>
+          </div>
+
+          {/* 2. PRODUCTION PLANNING */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-blue-500/10 text-blue-600">
+                    <Scissors className="size-4" />
+                  </div>
+                  <span className="font-bold text-sm text-foreground">Production Planning</span>
+                </div>
+                <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-600 border border-blue-500/20">
+                  {orders.length} Total
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="rounded-lg bg-muted/40 p-2.5">
+                  <p className="text-[11px] text-muted-foreground">Orders Created</p>
+                  <p className="text-lg font-bold text-foreground mt-0.5">{orders.length}</p>
+                  <p className="text-[10px] text-muted-foreground">{plannedUnits} pcs volume</p>
+                </div>
+                <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Orders Completed</p>
+                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{completedOrders.length}</p>
+                  <p className="text-[10px] text-muted-foreground">{activeOrders.length} currently active</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 px-1">
+                <span className="text-muted-foreground">Awaiting Fabric Issue:</span>
+                <span className="font-semibold text-primary">{pendingCuttingOrders.length} orders pending</span>
+              </div>
+            </div>
+            <div className="pt-2 border-t">
+              <Button asChild variant="outline" size="sm" className="w-full text-xs h-8">
+                <AppLink href={paths.rawStore}>
+                  Review Orders in Queue <ArrowRight className="size-3.5 ml-1" />
+                </AppLink>
+              </Button>
+            </div>
+          </div>
+
+          {/* 3. CUTTING (STATION 3) */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-purple-500/10 text-purple-600">
+                    <Scissors className="size-4" />
+                  </div>
+                  <span className="font-bold text-sm text-foreground">Cutting (Station 3)</span>
+                </div>
+                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-600 border border-purple-500/20">
+                  {cutGarments} Cut
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Pending Cutting</p>
+                  <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{pendingCuttingOrders.length}</p>
+                  <p className="text-[10px] text-muted-foreground">orders awaiting cut</p>
+                </div>
+                <div className="rounded-lg bg-purple-500/5 p-2.5 border border-purple-500/20">
+                  <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">Done in Cutting</p>
+                  <p className="text-lg font-bold text-purple-700 dark:text-purple-400 mt-0.5">{cutGarments}</p>
+                  <p className="text-[10px] text-muted-foreground">units cut &amp; tagged</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 px-1">
+                <span className="text-muted-foreground">Station 3 RFID State:</span>
+                <span className="font-semibold text-foreground">Automated UID tagging active</span>
+              </div>
+            </div>
+            <div className="pt-2 border-t text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
+                <CheckCircle2 className="size-3.5" /> Bundle issuance linked to cutting tables
+              </span>
+            </div>
+          </div>
+
+          {/* 4. STITCHING (STATION 4) */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-600">
+                    <Shirt className="size-4" />
+                  </div>
+                  <span className="font-bold text-sm text-foreground">Stitching (Station 4)</span>
+                </div>
+                <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-600 border border-indigo-500/20">
+                  {stitchingDone.length} Stitched
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Pending Stitching</p>
+                  <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{stitchingPending.length}</p>
+                  <p className="text-[10px] text-muted-foreground">units in assembly</p>
+                </div>
+                <div className="rounded-lg bg-indigo-500/5 p-2.5 border border-indigo-500/20">
+                  <p className="text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">Done in Stitching</p>
+                  <p className="text-lg font-bold text-indigo-700 dark:text-indigo-400 mt-0.5">{stitchingDone.length}</p>
+                  <p className="text-[10px] text-muted-foreground">sewing completed</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 px-1">
+                <span className="text-muted-foreground">Assembly Rate:</span>
+                <span className="font-semibold text-foreground">
+                  {cutGarments > 0 ? Math.round((stitchingDone.length / cutGarments) * 100) : 100}% completed
+                </span>
+              </div>
+            </div>
+            <div className="pt-2 border-t text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 font-medium text-muted-foreground">
+                <Cpu className="size-3.5" /> Station 4 tap reader active
+              </span>
+            </div>
+          </div>
+
+          {/* 5. FINISHING & QUALITY (STATIONS 5 & 6) */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-teal-500/10 text-teal-600">
+                    <ShieldCheck className="size-4" />
+                  </div>
+                  <span className="font-bold text-sm text-foreground">Finishing &amp; Final QC (5 &amp; 6)</span>
+                </div>
+                <span className="rounded-full bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold text-teal-600 border border-teal-500/20">
+                  {qcPassed.length} Passed
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="rounded-lg bg-muted/40 p-2.5">
+                  <p className="text-[11px] text-muted-foreground">Pending in Finishing</p>
+                  <p className="text-lg font-bold text-foreground mt-0.5">{finishingPending.length}</p>
+                  <p className="text-[10px] text-muted-foreground">trimming &amp; pressing</p>
+                </div>
+                <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Passed Final QC</p>
+                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{qcPassed.length}</p>
+                  <p className="text-[10px] text-muted-foreground">cleared for packaging</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 px-1">
+                <span className="text-muted-foreground">Quarantine / Rework:</span>
+                <span className={`font-semibold ${inReworkOrHold.length > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                  {inReworkOrHold.length} units in hold
+                </span>
+              </div>
+            </div>
+            <div className="pt-2 border-t text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
+                <CheckCircle2 className="size-3.5" /> Station 6 AQL inspection active
+              </span>
+            </div>
+          </div>
+
+          {/* 6. WAREHOUSE & PACKING (STATIONS 7 & 8) */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-amber-500/10 text-amber-600">
+                    <PackageCheck className="size-4" />
+                  </div>
+                  <span className="font-bold text-sm text-foreground">Packing &amp; Warehouse (7 &amp; 8)</span>
+                </div>
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 border border-amber-500/20">
+                  {storedBins} Bins
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="rounded-lg bg-muted/40 p-2.5">
+                  <p className="text-[11px] text-muted-foreground">Cartons Packed</p>
+                  <p className="text-lg font-bold text-foreground mt-0.5">{packedCartonsCount}</p>
+                  <p className="text-[10px] text-muted-foreground">master boxes sealed</p>
+                </div>
+                <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">In Storage Bins</p>
+                  <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{warehousedGarments.length}</p>
+                  <p className="text-[10px] text-muted-foreground">binned in warehouse</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 px-1">
+                <span className="text-muted-foreground">Storage Locations:</span>
+                <span className="font-semibold text-foreground">{storedBins} active storage zones</span>
+              </div>
+            </div>
+            <div className="pt-2 border-t">
+              <Button asChild variant="outline" size="sm" className="w-full text-xs h-8">
+                <AppLink href={paths.warehouseLocator}>
+                  Open Warehouse Locator <ArrowRight className="size-3.5 ml-1" />
+                </AppLink>
+              </Button>
+            </div>
+          </div>
+
+          {/* 7. DISPATCH & TRANSPARENCY (STATION 9) */}
+          <div className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-5 shadow-xs space-y-4 md:col-span-2 lg:col-span-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
+                    <Truck className="size-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-sm text-foreground">Dispatch &amp; Transparency Passports (Station 9)</span>
+                    <p className="text-[11px] text-muted-foreground">
+                      Completed end-to-end items verified from Station 1 through Station 9.
+                    </p>
+                  </div>
+                </div>
+                <Button asChild size="sm" className="h-8 text-xs font-semibold">
+                  <AppLink href={paths.productPassports}>
+                    <QrCode className="size-3.5 mr-1" /> View Product QR Codes &amp; URLs
+                  </AppLink>
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-2 text-xs">
+                <div className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-[11px] text-muted-foreground">Completed &amp; Dispatched</p>
+                  <p className="text-xl font-bold text-foreground mt-0.5">{dispatchedGarments.length}</p>
+                  <p className="text-[10px] text-muted-foreground">units departing facility</p>
+                </div>
+                <div className="rounded-lg bg-emerald-500/5 p-3 border border-emerald-500/20">
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Full Lifecycle Complete</p>
+                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{dispatchedGarments.length}</p>
+                  <p className="text-[10px] text-muted-foreground">Stations 1 → 9 verified</p>
+                </div>
+                <div className="rounded-lg bg-blue-500/5 p-3 border border-blue-500/20">
+                  <p className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">Public Digital Passports</p>
+                  <p className="text-xl font-bold text-blue-700 dark:text-blue-400 mt-0.5">{dispatchedGarments.length}</p>
+                  <p className="text-[10px] text-muted-foreground">URL &amp; QR ready</p>
+                </div>
+                <div className="rounded-lg bg-purple-500/5 p-3 border border-purple-500/20">
+                  <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">Cryptographic Trail</p>
+                  <p className="text-xl font-bold text-purple-700 dark:text-purple-400 mt-0.5">100%</p>
+                  <p className="text-[10px] text-muted-foreground">immutable audit record</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DashboardView() {
   const me = useMe();
+  const isAdmin = me.role === "A" || me.username?.toLowerCase() === "admin.demo";
+
+  if (isAdmin) {
+    return <AdminDashboard me={me} />;
+  }
+
   const isIncomingQC = me.username?.toLowerCase() === "qc.incoming";
 
   if (isIncomingQC) {

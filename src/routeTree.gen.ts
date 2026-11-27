@@ -23,10 +23,12 @@ import { Route as StaffWorkspaceAuditRouteImport } from './routes/staff/_workspa
 import { Route as StaffWorkspaceFulfilmentRouteImport } from './routes/staff/_workspace/fulfilment'
 import { Route as StaffWorkspaceLedgerRouteImport } from './routes/staff/_workspace/ledger'
 import { Route as StaffWorkspaceNfcPassportsRouteImport } from './routes/staff/_workspace/nfc-passports'
+import { Route as StaffWorkspaceProductPassportsRouteImport } from './routes/staff/_workspace/product-passports'
 import { Route as StaffWorkspaceRawStoreRouteImport } from './routes/staff/_workspace/raw-store'
 import { Route as StaffWorkspaceReportsRouteImport } from './routes/staff/_workspace/reports'
 import { Route as StaffWorkspaceSettingsRouteImport } from './routes/staff/_workspace/settings'
 import { Route as StaffWorkspaceTasksRouteImport } from './routes/staff/_workspace/tasks'
+import { Route as StaffWorkspaceWarehouseLocatorRouteImport } from './routes/staff/_workspace/warehouse-locator'
 import { Route as StaffWorkspaceWorkstationRouteImport } from './routes/staff/_workspace/workstation'
 import { Route as StaffCredentialsTokenRouteImport } from './routes/staff/credentials.$token'
 import { Route as StaffWorkspaceAdminUsersRouteImport } from './routes/staff/_workspace/admin/users'
@@ -114,6 +116,12 @@ const StaffWorkspaceNfcPassportsRoute =
     path: '/nfc-passports',
     getParentRoute: () => StaffWorkspaceRouteRoute,
   } as any)
+const StaffWorkspaceProductPassportsRoute =
+  StaffWorkspaceProductPassportsRouteImport.update({
+    id: '/product-passports',
+    path: '/product-passports',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
 const StaffWorkspaceRawStoreRoute = StaffWorkspaceRawStoreRouteImport.update({
   id: '/raw-store',
   path: '/raw-store',
@@ -134,6 +142,12 @@ const StaffWorkspaceTasksRoute = StaffWorkspaceTasksRouteImport.update({
   path: '/tasks',
   getParentRoute: () => StaffWorkspaceRouteRoute,
 } as any)
+const StaffWorkspaceWarehouseLocatorRoute =
+  StaffWorkspaceWarehouseLocatorRouteImport.update({
+    id: '/warehouse-locator',
+    path: '/warehouse-locator',
+    getParentRoute: () => StaffWorkspaceRouteRoute,
+  } as any)
 const StaffWorkspaceWorkstationRoute =
   StaffWorkspaceWorkstationRouteImport.update({
     id: '/workstation',
@@ -236,10 +250,12 @@ export interface FileRoutesByFullPath {
   '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
+  '/staff/product-passports': typeof StaffWorkspaceProductPassportsRoute
   '/staff/raw-store': typeof StaffWorkspaceRawStoreRoute
   '/staff/reports': typeof StaffWorkspaceReportsRoute
   '/staff/settings': typeof StaffWorkspaceSettingsRoute
   '/staff/tasks': typeof StaffWorkspaceTasksRoute
+  '/staff/warehouse-locator': typeof StaffWorkspaceWarehouseLocatorRoute
   '/staff/workstation': typeof StaffWorkspaceWorkstationRoute
   '/staff/credentials/$token': typeof StaffCredentialsTokenRoute
   '/p/$publicId/': typeof PPublicIdIndexRoute
@@ -270,10 +286,12 @@ export interface FileRoutesByTo {
   '/staff/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
+  '/staff/product-passports': typeof StaffWorkspaceProductPassportsRoute
   '/staff/raw-store': typeof StaffWorkspaceRawStoreRoute
   '/staff/reports': typeof StaffWorkspaceReportsRoute
   '/staff/settings': typeof StaffWorkspaceSettingsRoute
   '/staff/tasks': typeof StaffWorkspaceTasksRoute
+  '/staff/warehouse-locator': typeof StaffWorkspaceWarehouseLocatorRoute
   '/staff/workstation': typeof StaffWorkspaceWorkstationRoute
   '/staff/credentials/$token': typeof StaffCredentialsTokenRoute
   '/p/$publicId': typeof PPublicIdIndexRoute
@@ -305,10 +323,12 @@ export interface FileRoutesById {
   '/staff/_workspace/fulfilment': typeof StaffWorkspaceFulfilmentRoute
   '/staff/_workspace/ledger': typeof StaffWorkspaceLedgerRoute
   '/staff/_workspace/nfc-passports': typeof StaffWorkspaceNfcPassportsRoute
+  '/staff/_workspace/product-passports': typeof StaffWorkspaceProductPassportsRoute
   '/staff/_workspace/raw-store': typeof StaffWorkspaceRawStoreRoute
   '/staff/_workspace/reports': typeof StaffWorkspaceReportsRoute
   '/staff/_workspace/settings': typeof StaffWorkspaceSettingsRoute
   '/staff/_workspace/tasks': typeof StaffWorkspaceTasksRoute
+  '/staff/_workspace/warehouse-locator': typeof StaffWorkspaceWarehouseLocatorRoute
   '/staff/_workspace/workstation': typeof StaffWorkspaceWorkstationRoute
   '/staff/credentials/$token': typeof StaffCredentialsTokenRoute
   '/p/$publicId/': typeof PPublicIdIndexRoute
@@ -341,10 +361,12 @@ export interface FileRouteTypes {
     | '/staff/fulfilment'
     | '/staff/ledger'
     | '/staff/nfc-passports'
+    | '/staff/product-passports'
     | '/staff/raw-store'
     | '/staff/reports'
     | '/staff/settings'
     | '/staff/tasks'
+    | '/staff/warehouse-locator'
     | '/staff/workstation'
     | '/staff/credentials/$token'
     | '/p/$publicId/'
@@ -375,10 +397,12 @@ export interface FileRouteTypes {
     | '/staff/fulfilment'
     | '/staff/ledger'
     | '/staff/nfc-passports'
+    | '/staff/product-passports'
     | '/staff/raw-store'
     | '/staff/reports'
     | '/staff/settings'
     | '/staff/tasks'
+    | '/staff/warehouse-locator'
     | '/staff/workstation'
     | '/staff/credentials/$token'
     | '/p/$publicId'
@@ -409,10 +433,12 @@ export interface FileRouteTypes {
     | '/staff/_workspace/fulfilment'
     | '/staff/_workspace/ledger'
     | '/staff/_workspace/nfc-passports'
+    | '/staff/_workspace/product-passports'
     | '/staff/_workspace/raw-store'
     | '/staff/_workspace/reports'
     | '/staff/_workspace/settings'
     | '/staff/_workspace/tasks'
+    | '/staff/_workspace/warehouse-locator'
     | '/staff/_workspace/workstation'
     | '/staff/credentials/$token'
     | '/p/$publicId/'
@@ -539,6 +565,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StaffWorkspaceNfcPassportsRouteImport
       parentRoute: typeof StaffWorkspaceRouteRoute
     }
+    '/staff/_workspace/product-passports': {
+      id: '/staff/_workspace/product-passports'
+      path: '/product-passports'
+      fullPath: '/staff/product-passports'
+      preLoaderRoute: typeof StaffWorkspaceProductPassportsRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
     '/staff/_workspace/raw-store': {
       id: '/staff/_workspace/raw-store'
       path: '/raw-store'
@@ -565,6 +598,13 @@ declare module '@tanstack/react-router' {
       path: '/tasks'
       fullPath: '/staff/tasks'
       preLoaderRoute: typeof StaffWorkspaceTasksRouteImport
+      parentRoute: typeof StaffWorkspaceRouteRoute
+    }
+    '/staff/_workspace/warehouse-locator': {
+      id: '/staff/_workspace/warehouse-locator'
+      path: '/warehouse-locator'
+      fullPath: '/staff/warehouse-locator'
+      preLoaderRoute: typeof StaffWorkspaceWarehouseLocatorRouteImport
       parentRoute: typeof StaffWorkspaceRouteRoute
     }
     '/staff/_workspace/workstation': {
@@ -694,10 +734,12 @@ interface StaffWorkspaceRouteRouteChildren {
   StaffWorkspaceFulfilmentRoute: typeof StaffWorkspaceFulfilmentRoute
   StaffWorkspaceLedgerRoute: typeof StaffWorkspaceLedgerRoute
   StaffWorkspaceNfcPassportsRoute: typeof StaffWorkspaceNfcPassportsRoute
+  StaffWorkspaceProductPassportsRoute: typeof StaffWorkspaceProductPassportsRoute
   StaffWorkspaceRawStoreRoute: typeof StaffWorkspaceRawStoreRoute
   StaffWorkspaceReportsRoute: typeof StaffWorkspaceReportsRoute
   StaffWorkspaceSettingsRoute: typeof StaffWorkspaceSettingsRoute
   StaffWorkspaceTasksRoute: typeof StaffWorkspaceTasksRoute
+  StaffWorkspaceWarehouseLocatorRoute: typeof StaffWorkspaceWarehouseLocatorRoute
   StaffWorkspaceWorkstationRoute: typeof StaffWorkspaceWorkstationRoute
   StaffWorkspaceIndexRoute: typeof StaffWorkspaceIndexRoute
   StaffWorkspaceAdminUsersRoute: typeof StaffWorkspaceAdminUsersRoute
@@ -721,10 +763,12 @@ const StaffWorkspaceRouteRouteChildren: StaffWorkspaceRouteRouteChildren = {
   StaffWorkspaceFulfilmentRoute: StaffWorkspaceFulfilmentRoute,
   StaffWorkspaceLedgerRoute: StaffWorkspaceLedgerRoute,
   StaffWorkspaceNfcPassportsRoute: StaffWorkspaceNfcPassportsRoute,
+  StaffWorkspaceProductPassportsRoute: StaffWorkspaceProductPassportsRoute,
   StaffWorkspaceRawStoreRoute: StaffWorkspaceRawStoreRoute,
   StaffWorkspaceReportsRoute: StaffWorkspaceReportsRoute,
   StaffWorkspaceSettingsRoute: StaffWorkspaceSettingsRoute,
   StaffWorkspaceTasksRoute: StaffWorkspaceTasksRoute,
+  StaffWorkspaceWarehouseLocatorRoute: StaffWorkspaceWarehouseLocatorRoute,
   StaffWorkspaceWorkstationRoute: StaffWorkspaceWorkstationRoute,
   StaffWorkspaceIndexRoute: StaffWorkspaceIndexRoute,
   StaffWorkspaceAdminUsersRoute: StaffWorkspaceAdminUsersRoute,

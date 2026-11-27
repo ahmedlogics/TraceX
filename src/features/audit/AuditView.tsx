@@ -49,10 +49,10 @@ export function AuditView() {
         title="Audit trail"
         description={
           me.role === "M"
-            ? "Factory-wide immutable activity trail. Read-only."
+            ? "Factory-wide activity trail."
             : me.role === "Q"
-              ? "Quality, rework, and material movement compliance records. Read-only."
-              : "Access, authentication, administration, and ledger event trail. Read-only."
+              ? "Quality, rework, and material movement compliance records."
+              : "System access, authentication, and administrative event trail."
         }
         crumbs={[{ label: "Staff", href: paths.home }, { label: "Audit log" }]}
       />

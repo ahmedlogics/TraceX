@@ -350,7 +350,7 @@ export function SettingsView() {
 
               <Section
                 title="Logical RFID Stations (Nine-Reader Layout)"
-                description="Logical stations map workflow order to stable station codes. Measured hardware indices reflect bench verification status."
+                description="RFID reader stations and checkpoint mappings."
               >
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">

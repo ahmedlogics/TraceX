@@ -28,6 +28,8 @@ export const paths = {
   adminUsers: "/staff/admin/users",
   settings: "/staff/settings",
   nfcHub: "/staff/nfc-passports",
+  warehouseLocator: "/staff/warehouse-locator",
+  productPassports: "/staff/product-passports",
   about: "/about",
   publicJourney: (publicId: string) => `/p/${encodeURIComponent(publicId)}`,
   publicProof: (publicId: string) => `/p/${encodeURIComponent(publicId)}/proof`,

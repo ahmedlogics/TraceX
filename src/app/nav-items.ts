@@ -10,6 +10,7 @@ import {
   Layers,
   Link2,
   PackageCheck,
+  QrCode,
   Scissors,
   Settings,
   Shirt,
@@ -46,6 +47,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
       { key: "rawStore", label: "Raw Store & QC Queue", href: paths.rawStore, icon: Layers },
       { key: "garments", label: "Garments", href: paths.garments, icon: Shirt },
       { key: "nfcHub", label: "NFC Tag Passports", href: paths.nfcHub, icon: Zap },
+      { key: "productPassports", label: "Product Passports", href: paths.productPassports, icon: QrCode },
     ],
   },
   {
@@ -58,6 +60,7 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Logistics",
     items: [
+      { key: "warehouseLocator", label: "Warehouse Locator", href: paths.warehouseLocator, icon: PackageCheck },
       { key: "fulfilment", label: "Fulfilment", href: paths.fulfilment, icon: PackageCheck },
       { key: "shipments", label: "Shipments", href: paths.shipments, icon: Truck },
     ],
@@ -82,6 +85,43 @@ export const navGroups: { label: string; items: NavItem[] }[] = [
 export const ActivityIcon = Activity;
 
 export function getNavGroups(user?: StaffUser | null): { label: string; items: NavItem[] }[] {
+  const isAdmin =
+    user?.username?.toLowerCase() === "admin.demo" ||
+    user?.role === "A";
+
+  if (isAdmin) {
+    return [
+      {
+        label: "Work",
+        items: [
+          { key: "home" as const, label: "Home", href: paths.home, icon: Home },
+        ],
+      },
+      {
+        label: "Inventory & Tracking",
+        items: [
+          { key: "rawStore" as const, label: "Raw Store & QC Queue", href: paths.rawStore, icon: Layers },
+          { key: "warehouseLocator" as const, label: "Warehouse Locator", href: paths.warehouseLocator, icon: PackageCheck },
+          { key: "productPassports" as const, label: "Product Passports", href: paths.productPassports, icon: QrCode },
+        ],
+      },
+      {
+        label: "Oversight",
+        items: [
+          { key: "audit" as const, label: "Audit log", href: paths.audit, icon: FileClock },
+          { key: "reports" as const, label: "Reports", href: paths.reports, icon: BarChart3 },
+        ],
+      },
+      {
+        label: "Administration",
+        items: [
+          { key: "adminUsers" as const, label: "Staff directory", href: paths.adminUsers, icon: Users },
+          { key: "settings" as const, label: "Settings", href: paths.settings, icon: Settings },
+        ],
+      },
+    ];
+  }
+
   const isFinalQc = user?.username?.toLowerCase() === "qc.demo";
   if (isFinalQc) {
     return navGroups.map((g) => ({
