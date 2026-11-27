@@ -11,23 +11,9 @@ export function ReportsView() {
   const me = useMe();
   const q = useWtQuery(["reports"], (c) => c.getReports());
 
-  const getScopeDescription = () => {
-    if (me.role === "Q") {
-      return "Quality inspection metrics, pass/fail ratios, and defect breakdown.";
-    }
-    if (me.role === "A") {
-      return "Personnel account statuses, operational volumes, and security audit metrics.";
-    }
-    return "Factory production throughput, material lot balances, cutting yields, and dispatch progress.";
-  };
-
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Operational reports"
-        description={getScopeDescription()}
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Reports" }]}
-      />
+      <PageHeader title="Operational reports" />
 
       {me.role !== "A" && (
         <div className="rounded-lg border bg-accent/30 px-4 py-2.5 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">

@@ -54,11 +54,7 @@ export function ProductPassportsView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Product Passports & Transparency URLs"
-        description="Public transparency URLs and active QR codes for products completing lifecycle verification from Station 1 through Station 9."
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Product Passports" }]}
-      />
+      <PageHeader title="Product Passports & Transparency URLs" />
 
       <Loadable query={qGarments}>
         {(garments) => (
@@ -138,9 +134,6 @@ export function ProductPassportsView() {
                             {dispatchedGarments.length}{" "}
                             <span className="text-sm font-normal text-muted-foreground">Units</span>
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            100% verified Stations 1 → 9 complete
-                          </p>
                         </div>
 
                         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
@@ -155,9 +148,6 @@ export function ProductPassportsView() {
                           <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
                             {warehouseReadyGarments.length}{" "}
                             <span className="text-sm font-normal text-muted-foreground">Units</span>
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Packaged in storage bins awaiting departure
                           </p>
                         </div>
 
@@ -174,9 +164,6 @@ export function ProductPassportsView() {
                             {garments.length}{" "}
                             <span className="text-sm font-normal text-muted-foreground">Tracked</span>
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            RFID serialized garments across lifecycle
-                          </p>
                         </div>
 
                         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
@@ -190,9 +177,6 @@ export function ProductPassportsView() {
                           </div>
                           <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
                             Active
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Scan-ready QR &amp; public web journeys
                           </p>
                         </div>
                       </div>
@@ -265,9 +249,6 @@ export function ProductPassportsView() {
                           <h3 className="font-bold text-sm text-foreground">
                             Completed Scan Products ({displayedGarments.length})
                           </h3>
-                          <span className="text-xs text-muted-foreground">
-                            Click &apos;Copy URL&apos; or &apos;QR Code&apos; to copy customer journey links.
-                          </span>
                         </div>
 
                         {displayedGarments.length === 0 ? (
@@ -314,9 +295,13 @@ export function ProductPassportsView() {
                                           )}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground font-mono">
-                                          <span>Garment Serial: <strong className="text-foreground">{g.id}</strong></span>
-                                          <span>·</span>
-                                          <span>Style: <strong className="text-foreground">{g.styleCode}</strong></span>
+                                          <span>Serial: <strong className="text-foreground">{g.id}</strong></span>
+                                          {g.styleCode && (
+                                            <>
+                                              <span>·</span>
+                                              <span>Style: <strong className="text-foreground">{g.styleCode}</strong></span>
+                                            </>
+                                          )}
                                           {g.rfidUid && (
                                             <>
                                               <span>·</span>
@@ -343,14 +328,11 @@ export function ProductPassportsView() {
                                   </div>
 
                                   {/* VERIFIED HIERARCHY TRACE PILLS */}
-                                  <div className="rounded-lg bg-muted/30 p-3 space-y-1.5">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                      Verified Lifecycle Hierarchy (Station 1 → Station 9)
-                                    </p>
+                                  <div className="rounded-lg bg-muted/30 p-2.5">
                                     <div className="flex flex-wrap items-center gap-2 text-xs">
                                       <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                         <CheckCircle2 className="size-3 text-emerald-600" />
-                                        Station 1 &amp; 2: Fabric Lot #{g.lotId || "FAB-VERIFIED"}
+                                        Station 1 &amp; 2: Lot #{g.lotId || "FAB-VERIFIED"}
                                       </span>
                                       <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                         <CheckCircle2 className="size-3 text-emerald-600" />
@@ -358,29 +340,26 @@ export function ProductPassportsView() {
                                       </span>
                                       <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                         <CheckCircle2 className="size-3 text-emerald-600" />
-                                        Station 4 &amp; 5: Assembled &amp; Finished
+                                        Station 4 &amp; 5: Assembled
                                       </span>
                                       <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                         <CheckCircle2 className="size-3 text-emerald-600" />
-                                        Station 6: Passed Final QC
+                                        Station 6: Passed QC
                                       </span>
                                       <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                         <CheckCircle2 className="size-3 text-emerald-600" />
-                                        Station 7 &amp; 8: Packed &amp; Warehoused
+                                        Station 7 &amp; 8: Warehoused
                                       </span>
                                       <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                                         <CheckCircle2 className="size-3 text-emerald-600" />
-                                        Station 9: Dispatched &amp; Anchored
+                                        Station 9: Dispatched
                                       </span>
                                     </div>
                                   </div>
 
                                   {/* PUBLIC TRANSPARENCY URL & COPY BUTTONS */}
                                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
-                                    <div className="flex-1 space-y-1">
-                                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                                        Public Consumer Journey URL:
-                                      </p>
+                                    <div className="flex-1">
                                       <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-1.5 font-mono text-xs select-all">
                                         <span className="truncate flex-1 text-primary font-medium">
                                           {journeyUrl}

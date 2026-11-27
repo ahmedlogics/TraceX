@@ -317,10 +317,7 @@ export function SettingsView() {
 
   return (
     <>
-      <PageHeader
-        title="Settings & Hardware Configuration"
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Settings" }]}
-      />
+      <PageHeader title="Settings & Hardware Configuration" />
       <Loadable query={q}>
         {(s) => (
           <Tabs defaultValue={deviceEditable ? "rfid" : "production"}>

@@ -45,17 +45,7 @@ export function AuditView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Audit trail"
-        description={
-          me.role === "M"
-            ? "Factory-wide activity trail."
-            : me.role === "Q"
-              ? "Quality, rework, and material movement compliance records."
-              : "System access, authentication, and administrative event trail."
-        }
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Audit log" }]}
-      />
+      <PageHeader title="Audit trail" />
 
       <FilterBar>
         <div className="w-full sm:w-48">

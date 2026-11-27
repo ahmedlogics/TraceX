@@ -100,7 +100,6 @@ export function getNavGroups(user?: StaffUser | null): { label: string; items: N
       {
         label: "Inventory & Tracking",
         items: [
-          { key: "rawStore" as const, label: "Raw Store & QC Queue", href: paths.rawStore, icon: Layers },
           { key: "warehouseLocator" as const, label: "Warehouse Locator", href: paths.warehouseLocator, icon: PackageCheck },
           { key: "productPassports" as const, label: "Product Passports", href: paths.productPassports, icon: QrCode },
         ],

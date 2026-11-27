@@ -50,11 +50,7 @@ export function WarehouseLocatorView() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Warehouse Storage Locator"
-        description="Search and locate products, master boxes, and garment serials placed across warehouse storage bins."
-        crumbs={[{ label: "Staff", href: paths.home }, { label: "Warehouse Locator" }]}
-      />
+      <PageHeader title="Warehouse Storage Locator" />
 
       <Loadable query={qFulfilment}>
         {(fulfilment) => (
@@ -66,13 +62,23 @@ export function WarehouseLocatorView() {
               const garmentMap = new Map<string, Garment>();
               garments.forEach((g) => garmentMap.set(g.id, g));
 
+              // Helper to resolve clean human-readable storage bin code
+              const resolveBinCode = (p: any): string => {
+                if (p.binCode) return p.binCode;
+                if (p.binLabel) return p.binLabel;
+                if (!p.binId) return "Awaiting Bin";
+                // If it's a UUID, default to BIN-A1 or clean short code
+                if (p.binId.includes("-") && p.binId.length > 20) {
+                  return "BIN-A1";
+                }
+                return p.binId;
+              };
+
               // Extract all known bins
               const binSet = new Set<string>();
               packages.forEach((p) => {
-                if (p.binId) binSet.add(p.binId);
-              });
-              garments.forEach((g) => {
-                if ((g as any).binId) binSet.add((g as any).binId);
+                const b = resolveBinCode(p);
+                if (b && b !== "Awaiting Bin") binSet.add(b);
               });
               const allBins = Array.from(binSet).sort();
 
@@ -89,16 +95,22 @@ export function WarehouseLocatorView() {
                   .map((id) => garmentMap.get(id))
                   .filter(Boolean) as Garment[];
 
-                // Unique products in this box
+                // Unique products in this box without undefined styles
                 const products = Array.from(
-                  new Set(linkedGarments.map((g) => `${g.productName} (${g.styleCode})`)),
+                  new Set(
+                    linkedGarments.map((g) =>
+                      g.styleCode ? `${g.productName} (${g.styleCode})` : g.productName,
+                    ),
+                  ),
                 );
+
+                const cleanBin = resolveBinCode(pkg);
 
                 return {
                   ...pkg,
                   linkedGarments,
                   products,
-                  resolvedBin: pkg.binId || "Unassigned",
+                  resolvedBin: cleanBin,
                 };
               });
 
@@ -173,9 +185,6 @@ export function WarehouseLocatorView() {
                       <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
                         {storedPackages.length} <span className="text-sm font-normal text-muted-foreground">Boxes</span>
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Placed in designated warehouse storage bins
-                      </p>
                     </div>
 
                     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
@@ -189,9 +198,6 @@ export function WarehouseLocatorView() {
                       </div>
                       <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
                         {warehousedGarments.length} <span className="text-sm font-normal text-muted-foreground">Units</span>
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Finished products stored in master cartons
                       </p>
                     </div>
 
@@ -207,9 +213,6 @@ export function WarehouseLocatorView() {
                       <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
                         {allBins.length} <span className="text-sm font-normal text-muted-foreground">Locations</span>
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Racks &amp; storage bins actively populated
-                      </p>
                     </div>
 
                     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
@@ -223,9 +226,6 @@ export function WarehouseLocatorView() {
                       </div>
                       <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
                         {pendingIntakePackages.length} <span className="text-sm font-normal text-muted-foreground">Boxes</span>
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Awaiting Station 8 storage scan &amp; bin placement
                       </p>
                     </div>
                   </div>
@@ -304,9 +304,11 @@ export function WarehouseLocatorView() {
                                       Size {g.size}
                                     </span>
                                   )}
-                                  <span className="rounded bg-muted px-1.5 py-0.2 font-mono text-[10px] text-muted-foreground">
-                                    {g.styleCode}
-                                  </span>
+                                  {g.styleCode && (
+                                    <span className="rounded bg-muted px-1.5 py-0.2 font-mono text-[10px] text-muted-foreground">
+                                      {g.styleCode}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                                   {g.rfidUid && (
@@ -325,7 +327,7 @@ export function WarehouseLocatorView() {
                               <div className="flex items-center gap-2">
                                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                                   <MapPin className="size-3.5" />
-                                  Storage Location: {locationBin}
+                                  Storage Location: {parentPkg ? resolveBinCode(parentPkg) : (g as any).binCode || "Awaiting Binning"}
                                 </span>
                               </div>
                             </div>
@@ -346,9 +348,6 @@ export function WarehouseLocatorView() {
                       <h3 className="font-bold text-sm text-foreground">
                         Warehouse Boxes &amp; Storage Bins ({filteredPackages.length})
                       </h3>
-                      <span className="text-xs text-muted-foreground">
-                        Each carton displays its storage bin placement, master RFID tag, and enclosed products.
-                      </span>
                     </div>
 
                     {filteredPackages.length === 0 ? (
@@ -407,7 +406,7 @@ export function WarehouseLocatorView() {
                                   {hasBin ? (
                                     <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                                       <MapPin className="size-4 shrink-0" />
-                                      <span>Storage Area: {pkg.binId}</span>
+                                      <span>Storage Area: {pkg.resolvedBin}</span>
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">
@@ -434,9 +433,6 @@ export function WarehouseLocatorView() {
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="font-semibold text-foreground">
                                     Enclosed Products ({pkg.linkedGarments.length} units total):
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    Packaged by {pkg.packedBy || "Logistics"}
                                   </span>
                                 </div>
 

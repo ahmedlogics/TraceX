@@ -186,13 +186,7 @@ export function UsersView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Staff administration"
-        description="Manage personnel accounts, operational roles, and access credentials."
-        crumbs={[
-          { label: "Staff", href: paths.home },
-          { label: "Administration" },
-          { label: "Staff directory" },
-        ]}
+        title="Staff directory"
         actions={
           <InviteDialog
             onTokenCreated={(token, uname) => {

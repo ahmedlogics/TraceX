@@ -51,7 +51,7 @@ export const routeAccess: Record<RouteKey, Role[]> = {
   home: ALL,
   tasks: ["M", "O", "P", "Q", "L"],
   workstation: ["M", "O", "P", "Q", "L"],
-  rawStore: ["M", "O", "Q", "A", "P", "L"],
+  rawStore: ["M", "O", "Q", "P", "L"],
   materialLots: ["M", "O", "Q"],
   materialLot: ["M", "O", "Q"],
   productionOrders: ["M", "A", "P", "O", "Q"],
@@ -78,8 +78,8 @@ export const routeAccess: Record<RouteKey, Role[]> = {
 export function canAccessRoute(user: StaffUser | null, key: RouteKey): boolean {
   if (!user || user.status !== "active") return false;
 
-  // Ledger screen removed for admin.demo
-  if (key === "ledger" && (user.role === "A" || user.username === "admin.demo")) {
+  // Ledger & Raw Store screens removed for admin.demo (admin has Overview KPIs)
+  if ((key === "ledger" || key === "rawStore") && (user.role === "A" || user.username === "admin.demo")) {
     return false;
   }
 

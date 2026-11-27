@@ -946,10 +946,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Overview"
-        description="Enterprise Supply Chain Diagnostics & Department Status"
-      />
+      <PageHeader title="Overview" />
 
       {/* TOP 4 EXECUTIVE KPI CARDS */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -966,7 +963,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             {lots.length} <span className="text-sm font-normal text-muted-foreground">Rolls</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {totalStockMeters.toLocaleString()} m in stock · {passedLots.length} passed QC
+            {totalStockMeters.toLocaleString()} m in stock
           </p>
         </div>
 
@@ -983,7 +980,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             {orders.length} <span className="text-sm font-normal text-muted-foreground">Orders</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {completedOrders.length} completed · {activeOrders.length} active ({plannedUnits} pcs planned)
+            {completedOrders.length} completed · {activeOrders.length} active
           </p>
         </div>
 
@@ -1000,7 +997,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             {garments.length} <span className="text-sm font-normal text-muted-foreground">Units</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {cutGarments} cut &amp; tagged · {qcPassed.length} passed final QC
+            {cutGarments} cut · {qcPassed.length} passed QC
           </p>
         </div>
 
@@ -1017,7 +1014,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             {dispatchedGarments.length} <span className="text-sm font-normal text-muted-foreground">Dispatched</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {dispatchedGarments.length} public customer transparency passports live
+            Digital passports verified
           </p>
         </div>
       </div>
@@ -1026,9 +1023,6 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
       <div className="space-y-4">
         <div>
           <h2 className="text-base font-bold text-foreground">Department Pipeline Status</h2>
-          <p className="text-xs text-muted-foreground">
-            Real-time status of orders, rolls, and garments across each manufacturing and logistics department.
-          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -1048,27 +1042,20 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
                 <div className="rounded-lg bg-muted/40 p-2.5">
-                  <p className="text-[11px] text-muted-foreground">Total Bundles / Rolls</p>
+                  <p className="text-[11px] text-muted-foreground">Total Rolls</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{lots.length}</p>
                   <p className="text-[10px] text-muted-foreground">{totalStockMeters.toFixed(0)}m total</p>
                 </div>
                 <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Bundles Passed QC</p>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Passed QC</p>
                   <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{passedLots.length}</p>
-                  <p className="text-[10px] text-muted-foreground">{passedStockMeters.toFixed(0)}m ready to issue</p>
+                  <p className="text-[10px] text-muted-foreground">{passedStockMeters.toFixed(0)}m ready</p>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 px-1">
                 <span className="text-muted-foreground">Awaiting Incoming QC:</span>
-                <span className="font-semibold text-amber-600">{quarantineLots.length} rolls in quarantine</span>
+                <span className="font-semibold text-amber-600">{quarantineLots.length} in quarantine</span>
               </div>
-            </div>
-            <div className="pt-2 border-t">
-              <Button asChild variant="outline" size="sm" className="w-full text-xs h-8">
-                <AppLink href={paths.rawStore}>
-                  View Raw Store Queue <ArrowRight className="size-3.5 ml-1" />
-                </AppLink>
-              </Button>
             </div>
           </div>
 
@@ -1090,25 +1077,18 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                 <div className="rounded-lg bg-muted/40 p-2.5">
                   <p className="text-[11px] text-muted-foreground">Orders Created</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{orders.length}</p>
-                  <p className="text-[10px] text-muted-foreground">{plannedUnits} pcs volume</p>
+                  <p className="text-[10px] text-muted-foreground">{plannedUnits} pcs planned</p>
                 </div>
                 <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
                   <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Orders Completed</p>
                   <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{completedOrders.length}</p>
-                  <p className="text-[10px] text-muted-foreground">{activeOrders.length} currently active</p>
+                  <p className="text-[10px] text-muted-foreground">{activeOrders.length} active</p>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 px-1">
                 <span className="text-muted-foreground">Awaiting Fabric Issue:</span>
-                <span className="font-semibold text-primary">{pendingCuttingOrders.length} orders pending</span>
+                <span className="font-semibold text-primary">{pendingCuttingOrders.length} pending</span>
               </div>
-            </div>
-            <div className="pt-2 border-t">
-              <Button asChild variant="outline" size="sm" className="w-full text-xs h-8">
-                <AppLink href={paths.rawStore}>
-                  Review Orders in Queue <ArrowRight className="size-3.5 ml-1" />
-                </AppLink>
-              </Button>
             </div>
           </div>
 
@@ -1130,7 +1110,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                 <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
                   <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Pending Cutting</p>
                   <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{pendingCuttingOrders.length}</p>
-                  <p className="text-[10px] text-muted-foreground">orders awaiting cut</p>
+                  <p className="text-[10px] text-muted-foreground">orders in queue</p>
                 </div>
                 <div className="rounded-lg bg-purple-500/5 p-2.5 border border-purple-500/20">
                   <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">Done in Cutting</p>
@@ -1139,14 +1119,11 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 px-1">
-                <span className="text-muted-foreground">Station 3 RFID State:</span>
-                <span className="font-semibold text-foreground">Automated UID tagging active</span>
+                <span className="text-muted-foreground">Cutting Progress:</span>
+                <span className="font-semibold text-foreground">
+                  {plannedUnits > 0 ? Math.round((cutGarments / plannedUnits) * 100) : 100}% of planned output
+                </span>
               </div>
-            </div>
-            <div className="pt-2 border-t text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
-                <CheckCircle2 className="size-3.5" /> Bundle issuance linked to cutting tables
-              </span>
             </div>
           </div>
 
@@ -1183,11 +1160,6 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                 </span>
               </div>
             </div>
-            <div className="pt-2 border-t text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5 font-medium text-muted-foreground">
-                <Cpu className="size-3.5" /> Station 4 tap reader active
-              </span>
-            </div>
           </div>
 
           {/* 5. FINISHING & QUALITY (STATIONS 5 & 6) */}
@@ -1206,7 +1178,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
                 <div className="rounded-lg bg-muted/40 p-2.5">
-                  <p className="text-[11px] text-muted-foreground">Pending in Finishing</p>
+                  <p className="text-[11px] text-muted-foreground">In Finishing</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{finishingPending.length}</p>
                   <p className="text-[10px] text-muted-foreground">trimming &amp; pressing</p>
                 </div>
@@ -1219,14 +1191,9 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
               <div className="flex items-center justify-between text-xs pt-1 px-1">
                 <span className="text-muted-foreground">Quarantine / Rework:</span>
                 <span className={`font-semibold ${inReworkOrHold.length > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                  {inReworkOrHold.length} units in hold
+                  {inReworkOrHold.length} in hold
                 </span>
               </div>
-            </div>
-            <div className="pt-2 border-t text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600">
-                <CheckCircle2 className="size-3.5" /> Station 6 AQL inspection active
-              </span>
             </div>
           </div>
 
@@ -1248,17 +1215,17 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                 <div className="rounded-lg bg-muted/40 p-2.5">
                   <p className="text-[11px] text-muted-foreground">Cartons Packed</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{packedCartonsCount}</p>
-                  <p className="text-[10px] text-muted-foreground">master boxes sealed</p>
+                  <p className="text-[10px] text-muted-foreground">boxes sealed</p>
                 </div>
                 <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
                   <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">In Storage Bins</p>
                   <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{warehousedGarments.length}</p>
-                  <p className="text-[10px] text-muted-foreground">binned in warehouse</p>
+                  <p className="text-[10px] text-muted-foreground">units binned</p>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 px-1">
                 <span className="text-muted-foreground">Storage Locations:</span>
-                <span className="font-semibold text-foreground">{storedBins} active storage zones</span>
+                <span className="font-semibold text-foreground">{storedBins} active storage bins</span>
               </div>
             </div>
             <div className="pt-2 border-t">
@@ -1280,9 +1247,6 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                   </div>
                   <div>
                     <span className="font-bold text-sm text-foreground">Dispatch &amp; Transparency Passports (Station 9)</span>
-                    <p className="text-[11px] text-muted-foreground">
-                      Completed end-to-end items verified from Station 1 through Station 9.
-                    </p>
                   </div>
                 </div>
                 <Button asChild size="sm" className="h-8 text-xs font-semibold">
@@ -1293,24 +1257,20 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-2 text-xs">
                 <div className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-[11px] text-muted-foreground">Completed &amp; Dispatched</p>
+                  <p className="text-[11px] text-muted-foreground">Dispatched Units</p>
                   <p className="text-xl font-bold text-foreground mt-0.5">{dispatchedGarments.length}</p>
-                  <p className="text-[10px] text-muted-foreground">units departing facility</p>
                 </div>
                 <div className="rounded-lg bg-emerald-500/5 p-3 border border-emerald-500/20">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Full Lifecycle Complete</p>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Lifecycle Complete</p>
                   <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{dispatchedGarments.length}</p>
-                  <p className="text-[10px] text-muted-foreground">Stations 1 → 9 verified</p>
                 </div>
                 <div className="rounded-lg bg-blue-500/5 p-3 border border-blue-500/20">
-                  <p className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">Public Digital Passports</p>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">Digital Passports</p>
                   <p className="text-xl font-bold text-blue-700 dark:text-blue-400 mt-0.5">{dispatchedGarments.length}</p>
-                  <p className="text-[10px] text-muted-foreground">URL &amp; QR ready</p>
                 </div>
                 <div className="rounded-lg bg-purple-500/5 p-3 border border-purple-500/20">
                   <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">Cryptographic Trail</p>
                   <p className="text-xl font-bold text-purple-700 dark:text-purple-400 mt-0.5">100%</p>
-                  <p className="text-[10px] text-muted-foreground">immutable audit record</p>
                 </div>
               </div>
             </div>

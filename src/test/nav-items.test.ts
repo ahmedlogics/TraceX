@@ -110,8 +110,8 @@ describe("Staff Navigation Items", () => {
     const allKeys = groups.flatMap((g) => g.items.map((i) => i.key));
 
     expect(allKeys).not.toContain("ledger");
+    expect(allKeys).not.toContain("rawStore");
     expect(allKeys).toContain("home");
-    expect(allKeys).toContain("rawStore");
     expect(allKeys).toContain("warehouseLocator");
     expect(allKeys).toContain("productPassports");
     expect(allKeys).toContain("audit");
@@ -120,6 +120,7 @@ describe("Staff Navigation Items", () => {
     expect(allKeys).toContain("settings");
 
     expect(canAccessRoute(adminUser, "ledger")).toBe(false);
+    expect(canAccessRoute(adminUser, "rawStore")).toBe(false);
     expect(canAccessRoute(adminUser, "warehouseLocator")).toBe(true);
     expect(canAccessRoute(adminUser, "productPassports")).toBe(true);
   });
