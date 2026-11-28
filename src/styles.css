@@ -9,9 +9,9 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * WearTrail design system — light industrial.
- * Brand: warm off-white #F7F6F2, white surfaces, slate #17202C,
- * muted slate #526071, cobalt #2457D6. All values in oklch.
+ * WearTrail / TraceX design system — warm atelier parchment.
+ * Palette: parchment #FBF7EE, linen sidebar #F3EADB, ivory surfaces #FFFEFA,
+ * espresso #221912, muted umber #6E5E4F, cognac bronze #946E4B. All values in oklch.
  */
 
 @theme inline {
@@ -69,47 +69,47 @@
 
 :root {
   --radius: 0.5rem;
-  --background: oklch(0.973 0.005 95.1); /* #F7F6F2 */
-  --surface: oklch(1 0 0);
-  --foreground: oklch(0.241 0.027 255.8); /* #17202C */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.241 0.027 255.8);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.241 0.027 255.8);
-  --primary: oklch(0.505 0.203 263.9); /* #2457D6 */
-  --primary-foreground: oklch(0.99 0.003 95);
-  --secondary: oklch(0.948 0.006 95);
-  --secondary-foreground: oklch(0.241 0.027 255.8);
-  --muted: oklch(0.948 0.006 95);
-  --muted-foreground: oklch(0.484 0.032 253.4); /* #526071 */
-  --accent: oklch(0.94 0.03 263.9);
-  --accent-foreground: oklch(0.36 0.15 263.9);
-  --destructive: oklch(0.54 0.2 27);
-  --destructive-foreground: oklch(0.99 0.003 95);
-  --success: oklch(0.52 0.12 152);
-  --success-foreground: oklch(0.99 0.003 95);
-  --success-soft: oklch(0.95 0.04 152);
-  --warning: oklch(0.55 0.13 70);
-  --warning-foreground: oklch(0.99 0.003 95);
-  --warning-soft: oklch(0.96 0.05 85);
-  --danger-soft: oklch(0.95 0.035 27);
-  --info-soft: oklch(0.95 0.03 263.9);
-  --border: oklch(0.9 0.006 95);
-  --input: oklch(0.86 0.008 95);
-  --ring: oklch(0.505 0.203 263.9);
-  --chart-1: oklch(0.505 0.203 263.9);
-  --chart-2: oklch(0.52 0.12 152);
-  --chart-3: oklch(0.55 0.13 70);
-  --chart-4: oklch(0.54 0.2 27);
-  --chart-5: oklch(0.484 0.032 253.4);
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.241 0.027 255.8);
-  --sidebar-primary: oklch(0.505 0.203 263.9);
-  --sidebar-primary-foreground: oklch(0.99 0.003 95);
-  --sidebar-accent: oklch(0.948 0.006 95);
-  --sidebar-accent-foreground: oklch(0.241 0.027 255.8);
-  --sidebar-border: oklch(0.9 0.006 95);
-  --sidebar-ring: oklch(0.505 0.203 263.9);
+  --background: oklch(0.978 0.012 85); /* #FBF7EE warm parchment */
+  --surface: oklch(0.996 0.004 85); /* #FFFEFA warm ivory */
+  --foreground: oklch(0.22 0.022 52); /* #221912 deep espresso */
+  --card: oklch(0.996 0.004 85);
+  --card-foreground: oklch(0.22 0.022 52);
+  --popover: oklch(0.996 0.004 85);
+  --popover-foreground: oklch(0.22 0.022 52);
+  --primary: oklch(0.555 0.068 62); /* #946E4B cognac bronze */
+  --primary-foreground: oklch(0.99 0.004 85);
+  --secondary: oklch(0.932 0.016 78); /* #EFE7DA warm oat */
+  --secondary-foreground: oklch(0.25 0.024 52);
+  --muted: oklch(0.942 0.013 78); /* #F2ECE1 */
+  --muted-foreground: oklch(0.475 0.027 58); /* #6E5E4F warm umber */
+  --accent: oklch(0.91 0.022 76); /* #ECE1D1 warm sand highlight */
+  --accent-foreground: oklch(0.35 0.045 56); /* #523922 bronze umber */
+  --destructive: oklch(0.52 0.155 28); /* #A93C2C terracotta crimson */
+  --destructive-foreground: oklch(0.99 0.004 85);
+  --success: oklch(0.515 0.078 136); /* #597143 organic olive sage */
+  --success-foreground: oklch(0.99 0.004 85);
+  --success-soft: oklch(0.94 0.022 132); /* #EBF0E2 soft sage cream */
+  --warning: oklch(0.53 0.088 64); /* #8A6034 warm ochre caramel */
+  --warning-foreground: oklch(0.99 0.004 85);
+  --warning-soft: oklch(0.918 0.035 74); /* #EFE0C9 latte caramel tint */
+  --danger-soft: oklch(0.938 0.028 28); /* #F7E3DE soft terracotta */
+  --info-soft: oklch(0.925 0.02 76); /* #F0E5D5 parchment sand */
+  --border: oklch(0.885 0.017 78); /* #E3D9C8 warm border */
+  --input: oklch(0.84 0.021 76); /* #D7CAB6 outline border */
+  --ring: oklch(0.555 0.068 62);
+  --chart-1: oklch(0.555 0.068 62);
+  --chart-2: oklch(0.515 0.078 136);
+  --chart-3: oklch(0.62 0.085 72);
+  --chart-4: oklch(0.52 0.155 28);
+  --chart-5: oklch(0.475 0.027 58);
+  --sidebar: oklch(0.935 0.017 78); /* #F3EADB warm linen sidebar */
+  --sidebar-foreground: oklch(0.24 0.024 52);
+  --sidebar-primary: oklch(0.555 0.068 62);
+  --sidebar-primary-foreground: oklch(0.99 0.004 85);
+  --sidebar-accent: oklch(0.892 0.021 75); /* #E7DDD0 */
+  --sidebar-accent-foreground: oklch(0.22 0.022 52);
+  --sidebar-border: oklch(0.87 0.019 76); /* #E0D4C2 */
+  --sidebar-ring: oklch(0.555 0.068 62);
 }
 
 @layer base {
@@ -223,11 +223,11 @@
 @keyframes soft-scan-pulse {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.35);
+    box-shadow: 0 0 0 0 rgba(89, 113, 67, 0.35);
   }
   50% {
     transform: scale(1.03);
-    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 10px rgba(89, 113, 67, 0);
   }
 }
 

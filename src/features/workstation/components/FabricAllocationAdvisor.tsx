@@ -41,12 +41,12 @@ export function FabricAllocationAdvisor({
   const best = optimization.bestRecommendation;
 
   return (
-    <div className="rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-card via-card to-purple-500/5 p-4 sm:p-5 shadow-xs space-y-4">
+    <div className="rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-card via-card to-secondary/60 p-4 sm:p-5 shadow-xs space-y-4">
       {/* Advisor Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-2.5">
         <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-purple-600 dark:text-purple-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+          <Sparkles className="size-4 text-primary" />
+          <span className="text-xs font-bold uppercase tracking-wider text-primary">
             AI Fabric Allocation
           </span>
         </div>
@@ -65,11 +65,11 @@ export function FabricAllocationAdvisor({
 
       {/* Case 1: Best Recommendation Found */}
       {best ? (
-        <div className="rounded-xl border border-purple-500/40 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-3">
+        <div className="rounded-xl border border-primary/35 bg-accent/35 p-4 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div className="space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-600 text-white px-2.5 py-0.5 text-xs font-bold shadow-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 text-xs font-bold shadow-xs">
                   <Sparkles className="size-3" /> AI Recommended Pick
                 </span>
                 <span className="font-mono font-bold text-foreground text-sm">
@@ -88,7 +88,7 @@ export function FabricAllocationAdvisor({
 
             <Button
               size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-xs h-8 px-4 shrink-0"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-xs h-8 px-4 shrink-0"
               onClick={() => onSelectRecommendedLot(best.lot)}
             >
               Pre-fill Recommended Roll
@@ -110,7 +110,7 @@ export function FabricAllocationAdvisor({
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
                 Remaining Balance
               </span>
-              <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">
+              <span className="font-bold text-sm text-success">
                 {best.remnantMeters} m
               </span>
             </div>
@@ -119,7 +119,7 @@ export function FabricAllocationAdvisor({
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
                 Batch Yield
               </span>
-              <span className="font-bold text-sm text-purple-700 dark:text-purple-300">
+              <span className="font-bold text-sm text-primary">
                 {best.yieldPercentage}%
               </span>
             </div>
@@ -128,7 +128,7 @@ export function FabricAllocationAdvisor({
               <span className="text-[10px] text-muted-foreground uppercase font-semibold block">
                 Est. Savings
               </span>
-              <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">
+              <span className="font-bold text-sm text-success">
                 +{optimization.estimatedFabricSavedMeters}m
               </span>
             </div>
@@ -136,9 +136,9 @@ export function FabricAllocationAdvisor({
         </div>
       ) : (
         /* Case 2: No Compatible Roll Found */
-        <div className="rounded-xl border border-amber-500/40 bg-amber-50/50 dark:bg-amber-950/20 p-4 text-xs text-amber-900 dark:text-amber-200 space-y-1">
-          <div className="flex items-center gap-2 font-bold text-sm">
-            <AlertTriangle className="size-4 text-amber-600" />
+        <div className="rounded-xl border border-warning/40 bg-warning-soft/50 p-4 text-xs text-foreground space-y-1">
+          <div className="flex items-center gap-2 font-bold text-sm text-warning">
+            <AlertTriangle className="size-4 text-warning" />
             No Single Roll Matches Required Fabric &amp; Color
           </div>
           <p className="text-xs text-muted-foreground">
@@ -173,7 +173,7 @@ export function FabricAllocationAdvisor({
                   key={rec.lot.id}
                   className={`flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border text-xs transition-colors ${
                     rec.isRecommended
-                      ? "border-purple-500/50 bg-purple-500/5"
+                      ? "border-primary/45 bg-accent/40"
                       : "border-border/80 bg-card hover:bg-muted/30"
                   }`}
                 >
@@ -183,7 +183,7 @@ export function FabricAllocationAdvisor({
                         #{rec.rank} Lot {rec.lot.id}
                       </span>
                       {rec.isRecommended && (
-                        <span className="rounded bg-purple-500/15 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 text-[10px] font-bold">
+                        <span className="rounded bg-primary/15 text-primary px-1.5 py-0.5 text-[10px] font-bold">
                           AI Top Pick
                         </span>
                       )}
@@ -196,7 +196,7 @@ export function FabricAllocationAdvisor({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300">
+                    <span className="text-[11px] font-bold text-primary">
                       {rec.yieldPercentage}% Yield
                     </span>
                     <Button

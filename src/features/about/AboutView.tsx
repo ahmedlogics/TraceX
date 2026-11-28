@@ -727,6 +727,21 @@ export function AboutView() {
                 <span>Verify Sample Garment</span>
               </AppLink>
 
+              <a
+                href="/tracex-a4-poster.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  backgroundColor: "#2E1B10",
+                  borderColor: "#B58943",
+                  color: "#FFE2AA",
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border px-5 py-2.5 text-xs sm:text-sm font-bold hover:bg-[#3D2517] transition-colors shadow-sm"
+              >
+                <ExternalLink className="size-4 text-[#D4AF67]" />
+                <span>Exhibition A4 Poster</span>
+              </a>
+
               <AppLink
                 href={paths.home}
                 style={{

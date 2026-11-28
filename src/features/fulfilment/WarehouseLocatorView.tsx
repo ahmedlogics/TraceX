@@ -178,7 +178,7 @@ export function WarehouseLocatorView() {
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                           Warehoused Cartons
                         </span>
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-success/12 text-success">
                           <PackageCheck className="size-4" />
                         </div>
                       </div>
@@ -192,7 +192,7 @@ export function WarehouseLocatorView() {
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                           Units in Storage
                         </span>
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/12 text-primary">
                           <Shirt className="size-4" />
                         </div>
                       </div>
@@ -206,7 +206,7 @@ export function WarehouseLocatorView() {
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                           Active Storage Bins
                         </span>
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-accent-foreground">
                           <MapPin className="size-4" />
                         </div>
                       </div>
@@ -220,7 +220,7 @@ export function WarehouseLocatorView() {
                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                           Pending Intake
                         </span>
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-warning/15 text-warning">
                           <Clock className="size-4" />
                         </div>
                       </div>
@@ -325,7 +325,7 @@ export function WarehouseLocatorView() {
                               </div>
 
                               <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-success-soft border border-success/30 px-2.5 py-1 text-xs font-bold text-success">
                                   <MapPin className="size-3.5" />
                                   Storage Location: {parentPkg ? resolveBinCode(parentPkg) : (g as any).binCode || "Awaiting Binning"}
                                 </span>
@@ -386,7 +386,7 @@ export function WarehouseLocatorView() {
                                         title="Copy Box ID"
                                       >
                                         {copiedId === `box-${pkg.id}` ? (
-                                          <Check className="size-3.5 text-emerald-600" />
+                                          <Check className="size-3.5 text-success" />
                                         ) : (
                                           <Copy className="size-3.5" />
                                         )}
@@ -404,12 +404,12 @@ export function WarehouseLocatorView() {
                                 {/* STORAGE LOCATION CALLOUT BADGE */}
                                 <div className="flex items-center gap-2">
                                   {hasBin ? (
-                                    <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                    <div className="flex items-center gap-1.5 rounded-lg bg-success-soft border border-success/30 px-3 py-1.5 text-xs font-bold text-success">
                                       <MapPin className="size-4 shrink-0" />
                                       <span>Storage Area: {pkg.resolvedBin}</span>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                                    <div className="flex items-center gap-1.5 rounded-lg bg-warning-soft border border-warning/30 px-3 py-1.5 text-xs font-bold text-warning">
                                       <Clock className="size-4 shrink-0" />
                                       <span>Awaiting Station 8 Storage Scan</span>
                                     </div>
@@ -417,9 +417,9 @@ export function WarehouseLocatorView() {
                                   <span
                                     className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                                       pkg.status === "warehoused"
-                                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                        ? "bg-success-soft text-success"
                                         : pkg.status === "dispatched"
-                                        ? "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                                        ? "bg-accent text-accent-foreground"
                                         : "bg-muted text-muted-foreground"
                                     }`}
                                   >

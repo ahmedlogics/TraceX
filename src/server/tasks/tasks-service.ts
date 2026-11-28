@@ -1,4 +1,4 @@
-import { runInTransaction } from "../db/client";
+import { prisma, runInTransaction } from "../db/client";
 import type { PrismaTransactionClient } from "../db/types";
 import { ApiError } from "../middleware/responses";
 import { toActorRef, EXCLUDED_LOT_CODES } from "../materials/materials-service";
@@ -13,7 +13,7 @@ export async function listTasks(
   },
   tx?: PrismaTransactionClient,
 ): Promise<TaskDTO[]> {
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const tasks = await db.work_tasks.findMany({
       where: {
         ...(filters?.department ? { department_code: filters.department } : {}),
@@ -62,7 +62,6 @@ export async function listTasks(
       completedAt: t.completed_at ? t.completed_at.toISOString() : null,
       revision: t.revision,
     }));
-  }, tx);
 }
 
 export async function claimTask(

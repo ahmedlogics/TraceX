@@ -229,7 +229,7 @@ export async function getLotDetail(
   if (typeof lotIdOrCode === "string" && EXCLUDED_LOT_CODES.includes(lotIdOrCode)) {
     return null;
   }
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const lot = await db.material_lots.findFirst({
       where: {
         ...idOrCodeWhere(lotIdOrCode),
@@ -344,7 +344,6 @@ export async function getLotDetail(
       movements,
       issues,
     };
-  }, tx);
 }
 
 // ---------------------------------------------------------------- Receive Material Lot

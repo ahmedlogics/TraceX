@@ -126,7 +126,7 @@ export function ProductPassportsView() {
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                               Dispatched Products
                             </span>
-                            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                            <div className="flex size-8 items-center justify-center rounded-lg bg-success/12 text-success">
                               <Truck className="size-4" />
                             </div>
                           </div>
@@ -141,7 +141,7 @@ export function ProductPassportsView() {
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                               Warehouse Binned
                             </span>
-                            <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/12 text-primary">
                               <MapPin className="size-4" />
                             </div>
                           </div>
@@ -156,7 +156,7 @@ export function ProductPassportsView() {
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                               Total Factory Units
                             </span>
-                            <div className="flex size-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                            <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-accent-foreground">
                               <Shirt className="size-4" />
                             </div>
                           </div>
@@ -171,7 +171,7 @@ export function ProductPassportsView() {
                             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                               Transparency Passports
                             </span>
-                            <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                            <div className="flex size-8 items-center justify-center rounded-lg bg-warning/15 text-warning">
                               <QrCode className="size-4" />
                             </div>
                           </div>
@@ -318,8 +318,8 @@ export function ProductPassportsView() {
                                       <span
                                         className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
                                           g.stage === "dispatched"
-                                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
-                                            : "bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30"
+                                            ? "bg-success-soft text-success border border-success/30"
+                                            : "bg-accent text-accent-foreground border border-primary/25"
                                         }`}
                                       >
                                         Station 9: {g.stage === "dispatched" ? "Dispatched ✓" : `${g.stage} Completed`}
@@ -328,30 +328,30 @@ export function ProductPassportsView() {
                                   </div>
 
                                   {/* VERIFIED HIERARCHY TRACE PILLS */}
-                                  <div className="rounded-lg bg-muted/30 p-2.5">
+                                  <div className="rounded-lg bg-muted/40 p-2.5">
                                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-success">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Station 1 &amp; 2: Lot #{g.lotId || "FAB-VERIFIED"}
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-success">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Station 3: Cut &amp; Tagged
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-success">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Station 4 &amp; 5: Assembled
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-success">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Station 6: Passed QC
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-success">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Station 7 &amp; 8: Warehoused
                                       </span>
-                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-background px-2 py-1 border text-[11px] font-medium text-success">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Station 9: Dispatched
                                       </span>
                                     </div>
@@ -378,7 +378,7 @@ export function ProductPassportsView() {
                                       >
                                         {isUrlCopied ? (
                                           <>
-                                            <Check className="size-3.5 text-emerald-300" /> URL Copied!
+                                            <Check className="size-3.5 text-primary-foreground" /> URL Copied!
                                           </>
                                         ) : (
                                           <>
@@ -436,7 +436,7 @@ export function ProductPassportsView() {
                             </button>
 
                             <div className="space-y-1">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600 border border-emerald-500/20">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-bold text-success border border-success/25">
                                 <ShieldCheck className="size-3" /> Verified Transparency Passport
                               </span>
                               <h3 className="text-lg font-bold text-foreground">

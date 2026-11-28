@@ -293,6 +293,15 @@ export async function resolveSession(
     try {
       const session = await prisma.staff_sessions.findUnique({
         where: { token_digest: new Uint8Array(tokenDigest) },
+        include: {
+          staff_users: {
+            include: {
+              staff_role_grants_staff_role_grants_staff_user_idTostaff_users: {
+                where: { revoked_at: null },
+              },
+            },
+          },
+        },
       });
 
       if (!session) {
@@ -306,21 +315,27 @@ export async function resolveSession(
         return null;
       }
 
-      const user = await prisma.staff_users.findUnique({
-        where: { id: session.staff_user_id },
-      });
+      const user =
+        session.staff_users ??
+        (await prisma.staff_users.findUnique({
+          where: { id: session.staff_user_id },
+        }));
       if (!user || user.suspended_at) {
         sessionCache.set(cacheKey, { result: null, expiresAt: now + 5000 });
         return null;
       }
 
-      // Retrieve active role grants
-      const activeGrants = await prisma.staff_role_grants.findMany({
-        where: {
-          staff_user_id: user.id,
-          revoked_at: null,
-        },
-      });
+      // Retrieve active role grants (fetched in single query; fallback for shallow mocks)
+      const activeGrants =
+        "staff_role_grants_staff_role_grants_staff_user_idTostaff_users" in user &&
+        Array.isArray(user.staff_role_grants_staff_role_grants_staff_user_idTostaff_users)
+          ? user.staff_role_grants_staff_role_grants_staff_user_idTostaff_users
+          : await prisma.staff_role_grants.findMany({
+              where: {
+                staff_user_id: user.id,
+                revoked_at: null,
+              },
+            });
 
       const staffUser = toStaffUserDto(user, activeGrants);
       const actor = createActorContext(staffUser, session.id, SESSION_TTL_MS);

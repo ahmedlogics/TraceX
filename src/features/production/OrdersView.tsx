@@ -120,13 +120,13 @@ export function PlanOrderDialog({
               const rate = matched?.standardConsumptionMeters ?? 2.0;
               const estFabric = Math.round(rate * Number(qty || 1) * 10) / 10;
               return (
-                <div className="rounded-md border border-purple-500/20 bg-purple-500/5 p-2.5 text-xs text-muted-foreground space-y-1">
+                <div className="rounded-md border border-primary/25 bg-accent/40 p-2.5 text-xs text-muted-foreground space-y-1">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-foreground flex items-center gap-1.5">
-                      <Sparkles className="size-3 text-purple-600 dark:text-purple-400" />
+                      <Sparkles className="size-3 text-primary" />
                       Fabric Consumption &amp; Allocation:
                     </p>
-                    <span className="font-semibold text-purple-700 dark:text-purple-300 font-mono text-[11px]">
+                    <span className="font-semibold text-primary font-mono text-[11px]">
                       ~{estFabric} m required
                     </span>
                   </div>
@@ -307,7 +307,7 @@ export function OrdersView() {
                           </Button>
                         )}
                         {((o.lotCodes && o.lotCodes.length > 0) || (o.lotIds && o.lotIds.length > 0) || (o.issues && o.issues.length > 0)) && (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          <span className="inline-flex items-center gap-1 rounded bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success border border-success/25">
                             <CheckCircle2 className="size-2.5" /> Fabric Issued
                           </span>
                         )}

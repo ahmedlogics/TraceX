@@ -193,11 +193,11 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
               <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">PENDING FINISHING</span>
-                  <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
                     <Sparkles className="size-3.5" />
                   </div>
                 </div>
-                <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                <p className="mt-2 text-2xl font-bold tracking-tight text-warning">
                   {finishingQueue.length}
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
@@ -208,11 +208,11 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
               <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">FINISHED TODAY</span>
-                  <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-success/12 text-success">
                     <CheckCircle2 className="size-3.5" />
                   </div>
                 </div>
-                <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                <p className="mt-2 text-2xl font-bold tracking-tight text-success">
                   {completedQueue.length}
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
@@ -238,9 +238,9 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
 
             {/* Live API Mode Hardware Armed Beacon */}
             {!isMock && isArmed && (
-              <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/10 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="rounded-xl border-2 border-success/40 bg-success-soft/60 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
                 <div className="flex items-center gap-2.5">
-                  <div className="relative flex size-7 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-xs">
+                  <div className="relative flex size-7 items-center justify-center rounded-lg bg-success text-success-foreground shadow-xs">
                     <Radio className="size-4 animate-spin" />
                   </div>
                   <div>
@@ -255,7 +255,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+                  className="h-7 text-xs border-success/35 text-success hover:bg-success-soft"
                   onClick={() => setIsArmed(false)}
                 >
                   Stop Listening
@@ -298,10 +298,10 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                   className="h-8 w-44 text-xs bg-card"
                 />
 
-                <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center gap-1.5 rounded-md bg-success-soft border border-success/25 px-2.5 py-1 text-xs font-medium text-success">
                   <span className="relative flex size-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-success" />
                   </span>
                   <span>{isArmed ? "Scanner 5 Armed & Listening" : "Station 5 Ready"}</span>
                 </div>
@@ -352,7 +352,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                     size="sm"
                     className={`h-8 text-xs font-semibold gap-1.5 shadow-xs transition-all ${
                       isArmed
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        ? "bg-success hover:bg-success/90 text-success-foreground"
                         : "bg-primary hover:bg-primary/90 text-primary-foreground"
                     }`}
                     disabled={pending}
@@ -370,7 +370,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
               <div className="space-y-3">
                 {filteredReady.length === 0 ? (
                   <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                    <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/12 text-success">
                       <CheckCircle2 className="size-4" />
                     </div>
                     <p className="text-sm font-medium text-foreground">
@@ -410,11 +410,11 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
 
                           <div className="flex items-center gap-2">
                             {isDone ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-success-soft border border-success/30 px-2.5 py-0.5 text-xs font-semibold text-success">
                                 <CheckCircle2 className="size-3" /> Complete · Sent to QC
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft border border-warning/30 px-2.5 py-0.5 text-xs font-semibold text-warning">
                                 <Clock className="size-3" /> Pending
                               </span>
                             )}
@@ -461,7 +461,7 @@ export function FinishingPanel({ stationData }: { stationData: RfidStationData }
                           </div>
                           <p className="text-muted-foreground">Order: {g.orderId}</p>
                         </div>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-bold text-success border border-success/25">
                           <CheckCircle2 className="size-3" /> Done · Released to QC Gate
                         </span>
                       </div>

@@ -462,7 +462,7 @@ export function TasksSection({
                                           asChild
                                           size="sm"
                                           variant="outline"
-                                          className="h-7 text-xs text-amber-600 border-amber-500/30 hover:bg-amber-500/10"
+                                          className="h-7 text-xs text-warning border-warning/35 hover:bg-warning-soft/70"
                                         >
                                           <AppLink href={paths.workstation}>
                                             Station 1 <ArrowRight className="size-3 ml-0.5" />

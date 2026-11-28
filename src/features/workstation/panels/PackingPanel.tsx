@@ -497,20 +497,20 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       <div className="relative z-10 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
                         <div className="space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-semibold text-success border border-success/30">
+                              <span className="size-2 rounded-full bg-success animate-pulse" />
                               Station 7 · Packaging & Aggregation (Scanner 7)
                             </span>
                             <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
                               Hardware Reader: Armed
                             </span>
                             {isBoxOpen ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-success-soft px-2.5 py-0.5 text-xs font-bold text-success border border-success/30">
                                 <Box className="size-3.5" />
                                 Packing Mode: {activeBox.id}
                               </span>
                             ) : isWaitingForBoxScan ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/15 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse">
+                              <span className="inline-flex items-center gap-1.5 rounded-md bg-warning-soft px-2.5 py-0.5 text-xs font-bold text-warning border border-warning/30 animate-pulse">
                                 <Radio className="size-3.5" />
                                 Awaiting Fresh Box Tag Scan
                               </span>
@@ -540,7 +540,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Hardware Reader:</span>
-                            <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">
+                            <span className="font-mono text-success font-medium">
                               Scanner 7 Active
                             </span>
                           </div>
@@ -553,13 +553,13 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                           <div
                             className={`relative rounded-lg border p-4 shadow-xs transition-all duration-200 ${
                               feedback.type === "accepted_box" || feedback.type === "accepted_product"
-                                ? "border-emerald-500/40 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100"
+                                ? "border-success/40 bg-success-soft/70 text-foreground"
                                 : feedback.type === "sealed"
                                 ? "border-primary/40 bg-primary/10 text-foreground"
                                 : feedback.type === "rejected"
-                                ? "border-destructive/40 bg-destructive/10 text-destructive dark:text-destructive-foreground"
+                                ? "border-destructive/40 bg-danger-soft text-destructive"
                                 : feedback.type === "waiting_box"
-                                ? "border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                                ? "border-warning/40 bg-warning-soft/70 text-foreground"
                                 : "border-primary/20 bg-muted/30 text-foreground"
                             }`}
                           >
@@ -574,7 +574,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
 
                             <div className="flex items-start gap-3 pr-6">
                               {feedback.type === "accepted_box" || feedback.type === "accepted_product" ? (
-                                <ShieldCheck className="size-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                                <ShieldCheck className="size-6 text-success shrink-0 mt-0.5" />
                               ) : feedback.type === "sealed" ? (
                                 <PackageCheck className="size-6 text-primary shrink-0 mt-0.5" />
                               ) : feedback.type === "rejected" ? (
@@ -621,7 +621,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                     </span>
                                   )}
                                   {feedback.totalPacked !== undefined && (
-                                    <span className="rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 border border-emerald-500/30">
+                                    <span className="rounded bg-success-soft text-success font-bold px-2 py-0.5 border border-success/30">
                                       Carton Total: {feedback.totalPacked} units
                                     </span>
                                   )}
@@ -694,7 +694,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             </div>
                           ) : (
                             <div className="space-y-4 pt-2">
-                              <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/15 border border-amber-500/30 px-4 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 animate-pulse">
+                              <div className="inline-flex items-center gap-2 rounded-full bg-warning-soft border border-warning/35 px-4 py-1.5 text-xs font-semibold text-warning animate-pulse">
                                 <Radio className="size-4 animate-spin" />
                                 Listening for Box RFID Scan on Hardware Reader...
                               </div>
@@ -718,7 +718,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 {isMock && (
                                   <Button
                                     size="sm"
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs gap-1.5"
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-mono text-xs gap-1.5"
                                     disabled={pending || !isPackingStaff}
                                     onClick={() => void handleTagScan(testBoxUid)}
                                   >
@@ -735,10 +735,10 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                       /* STATE C: Active Box Open -> Step 2 Product Intake */
                       <div className="space-y-6">
                         {/* Active Box Container Banner */}
-                        <div className="rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-r from-card via-card/95 to-emerald-50/30 dark:to-emerald-950/20 p-6 shadow-md">
+                        <div className="rounded-2xl border-2 border-success/35 bg-gradient-to-r from-card via-card/95 to-success-soft/40 p-6 shadow-md">
                           <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b">
                             <div className="flex items-center gap-3.5">
-                              <div className="flex size-14 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-xs">
+                              <div className="flex size-14 items-center justify-center rounded-xl bg-success-soft text-success border border-success/30 shadow-xs">
                                 <Box className="size-7" />
                               </div>
                               <div>
@@ -759,17 +759,17 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
 
                             <div className="flex items-center gap-4">
                               {/* Live Carton Unit Counter */}
-                              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-2.5 text-center">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                              <div className="rounded-xl border border-success/30 bg-success-soft/60 px-5 py-2.5 text-center">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-success">
                                   Packed Units
                                 </span>
-                                <div className="text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                                <div className="text-3xl font-black font-mono text-success">
                                   {packedGarments.length}
                                 </div>
                               </div>
 
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft border border-success/30 px-3 py-1 text-xs font-bold text-success">
+                                <span className="size-2 rounded-full bg-success animate-pulse" />
                                 open / packing
                               </span>
                             </div>
@@ -811,18 +811,18 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                               </div>
                             ) : !isMock ? (
                               /* Live API Mode: Continuous Hardware Scanning Beacon */
-                              <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                              <div className="rounded-xl border-2 border-success/45 bg-success-soft/50 p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="relative flex size-10 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                                  <div className="relative flex size-10 items-center justify-center rounded-xl bg-success/15 text-success">
                                     <Radio className="size-5 animate-pulse" />
-                                    <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500 animate-ping" />
+                                    <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-success animate-ping" />
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-bold text-emerald-950 dark:text-emerald-100">
+                                      <span className="text-sm font-bold text-foreground">
                                         Scanner 7 Hardware Listening — Continuous Product Scan Active
                                       </span>
-                                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wide">
+                                      <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success uppercase tracking-wide">
                                         Live
                                       </span>
                                     </div>
@@ -934,8 +934,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                           title={`Packed Products in ${activeBox.id} (${packedGarments.length} units)`}
                         >
                           {packedGarments.length === 0 ? (
-                            <div className="rounded-xl border-2 border-dashed border-emerald-500/30 bg-emerald-500/5 p-8 text-center space-y-3">
-                              <PackagePlus className="mx-auto size-10 text-emerald-600/70" />
+                            <div className="rounded-xl border-2 border-dashed border-success/30 bg-success-soft/30 p-8 text-center space-y-3">
+                              <PackagePlus className="mx-auto size-10 text-success/75" />
                               <div className="space-y-1">
                                 <h4 className="text-base font-bold text-foreground">
                                   Carton {activeBox.id} is Open & Ready
@@ -973,8 +973,8 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                   header: "Quality Clearance",
                                   cell: (g) => (
                                     <div className="flex items-center gap-1.5">
-                                      <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-                                        <CheckCircle2 className="size-3 text-emerald-600" />
+                                      <span className="inline-flex items-center gap-1 rounded bg-success-soft px-2 py-0.5 text-xs font-semibold text-success border border-success/30">
+                                        <CheckCircle2 className="size-3 text-success" />
                                         Final QC: Passed
                                       </span>
                                       {g.hold && <HoldBadge />}
@@ -992,7 +992,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                                 {
                                   header: "Status",
                                   cell: () => (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 border border-emerald-500/20">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success border border-success/25">
                                       <Box className="size-3" />
                                       Packed in {activeBox.id}
                                     </span>
@@ -1006,7 +1006,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                           <div className="pt-6 border-t mt-4 flex flex-col sm:flex-row items-center justify-end gap-4">
                             <Button
                               size="lg"
-                              className="w-full sm:w-auto min-w-[220px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md gap-2 h-11"
+                              className="w-full sm:w-auto min-w-[220px] bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md gap-2 h-11"
                               disabled={pending || packedGarments.length === 0 || !isPackingStaff}
                               onClick={() => void handleBoxFilled()}
                             >
@@ -1054,7 +1054,7 @@ export function PackingPanel({ stationData }: { stationData: RfidStationData }) 
                             header: "Quality Status",
                             cell: (g) => (
                               <div className="flex items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                <span className="inline-flex items-center gap-1 rounded bg-success-soft px-2 py-0.5 text-xs font-semibold text-success">
                                   <CheckCircle2 className="size-3" />
                                   Passed
                                 </span>

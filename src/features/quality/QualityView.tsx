@@ -422,7 +422,7 @@ function IncomingLotsTable({
                     );
                   }
                   return (
-                    <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-warning bg-warning-soft px-2 py-0.5 rounded border border-warning/25">
                       Card Pending (Station 1)
                     </span>
                   );
@@ -455,7 +455,7 @@ function IncomingLotsTable({
                         </span>
                       )}
                       {isAwaitingReceiving && (
-                        <span className="text-[11px] font-medium text-amber-600">
+                        <span className="text-[11px] font-medium text-warning">
                           Awaiting Station 1 Scan
                         </span>
                       )}
@@ -526,7 +526,7 @@ function IncomingLotsTable({
                     return (
                       <div className="flex items-center gap-1.5">
                         {canAccessRoute(me, "workstation") && (
-                          <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                          <Button asChild size="sm" variant="outline" className="h-7 text-xs gap-1 text-warning border-warning/35 hover:bg-warning-soft/70">
                             <AppLink href={paths.workstation}>
                               Station 1 <ArrowRight className="size-3" />
                             </AppLink>
@@ -705,9 +705,9 @@ export function QualityView() {
                       <span className="text-xs font-semibold uppercase tracking-wider">
                         Awaiting Receiving
                       </span>
-                      <Radio className="size-4 text-amber-500" />
+                      <Radio className="size-4 text-warning" />
                     </div>
-                    <p className="mt-2 text-2xl font-bold text-amber-600">
+                    <p className="mt-2 text-2xl font-bold text-warning">
                       {awaitingReceivingCount}
                     </p>
                   </div>
@@ -1149,7 +1149,7 @@ export function QualityView() {
                                       />
                                     )}
                                     {discarded ? (
-                                      <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                                      <span className="inline-flex items-center gap-1 rounded bg-warning-soft border border-warning/30 px-1.5 py-0.5 text-[11px] font-semibold text-warning">
                                         Discard
                                       </span>
                                     ) : heldSet.has(i.subjectId) ? (
@@ -1174,7 +1174,7 @@ export function QualityView() {
                                 return (
                                   <div className="flex flex-col gap-0.5">
                                     {discarded ? (
-                                      <span className="inline-flex items-center w-fit gap-1 rounded bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                      <span className="inline-flex items-center w-fit gap-1 rounded bg-warning-soft border border-warning/30 px-2 py-0.5 text-xs font-semibold text-warning">
                                         Discarded
                                       </span>
                                     ) : (

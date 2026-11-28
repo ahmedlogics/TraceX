@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TraceX — A4 Exhibition QR Poster</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --espresso: #22130B;
+      --espresso-dark: #1A0E08;
+      --espresso-light: #3D2819;
+      --gold: #D4AF67;
+      --gold-deep: #B58943;
+      --gold-muted: #A6824B;
+      --cream: #FAF4EA;
+      --sand-border: #D5B584;
+    }
+
+    body {
+      background-color: #5A4738;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: var(--espresso);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 0;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Screen Action Controls */
+    .screen-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      z-index: 100;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+
+    .btn-print {
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
+      color: var(--espresso);
+      border: 1px solid var(--gold);
+    }
+
+    .btn-print:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(212, 175, 103, 0.4);
+    }
+
+    .btn-download {
+      background: linear-gradient(135deg, #3A2312 0%, #22130B 100%);
+      color: var(--gold);
+      border: 1px solid var(--gold);
+    }
+
+    .btn-home {
+      background-color: var(--espresso);
+      color: var(--cream);
+      border: 1px solid #4D3322;
+    }
+
+    .btn-home:hover {
+      background-color: #2E1B10;
+    }
+
+    /* A4 Sheet Container (210mm x 297mm) */
+    .a4-sheet {
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      background: linear-gradient(180deg, #FAF4EA 0%, #F2E2C8 50%, #E8D0AD 100%);
+      padding: 12mm 11mm;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+
+    /* Standee Double Framing & Luxury Corner Brackets */
+    .outer-frame {
+      position: absolute;
+      inset: 6mm;
+      border: 1.5px solid var(--sand-border);
+      pointer-events: none;
+    }
+
+    .inner-frame {
+      position: absolute;
+      inset: 7.6mm;
+      border: 0.7px solid var(--espresso-light);
+      pointer-events: none;
+    }
+
+    .corner {
+      position: absolute;
+      width: 14mm;
+      height: 14mm;
+      border-color: var(--gold-deep);
+      border-style: solid;
+      pointer-events: none;
+    }
+    .corner-tl { top: 6mm; left: 6mm; border-width: 3px 0 0 3px; }
+    .corner-tr { top: 6mm; right: 6mm; border-width: 3px 3px 0 0; }
+    .corner-bl { bottom: 6mm; left: 6mm; border-width: 0 0 3px 3px; }
+    .corner-br { bottom: 6mm; right: 6mm; border-width: 0 3px 3px 0; }
+
+    /* Inner Layout */
+    .content-box {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      text-align: center;
+      padding: 4mm 4mm 3mm;
+    }
+
+    /* 1. Brand & Project Title Header */
+    .header-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4mm;
+      width: 100%;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4mm;
+    }
+
+    .brand-logo-img {
+      height: 18mm;
+      width: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 4px rgba(34, 19, 11, 0.14));
+    }
+
+    .brand-title {
+      font-size: 16mm;
+      font-weight: 900;
+      line-height: 0.92;
+      letter-spacing: -0.6px;
+      color: #1E1109;
+    }
+
+    .brand-title span {
+      color: var(--gold-muted);
+    }
+
+    .project-title {
+      font-size: 6.2mm;
+      font-weight: 800;
+      line-height: 1.24;
+      color: var(--espresso);
+      max-width: 168mm;
+      letter-spacing: -0.2px;
+    }
+
+    .header-divider {
+      width: 36mm;
+      height: 0.6mm;
+      background-color: #C59B52;
+      border-radius: 999px;
+    }
+
+    /* 2. Oversized Prominent QR Card */
+    .qr-card {
+      width: 166mm;
+      height: 166mm;
+      background-color: #FFFFFF;
+      border: 1.4mm solid var(--espresso-light);
+      outline: 0.8mm solid var(--sand-border);
+      outline-offset: -4.5mm;
+      border-radius: 12mm;
+      padding: 13mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 34px rgba(34, 19, 11, 0.18);
+    }
+
+    .qr-code-img {
+      width: 140mm;
+      height: 140mm;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    /* 3. Principal Investigator Contact Box */
+    .contact-box {
+      width: 180mm;
+      background-color: var(--espresso);
+      border: 1mm solid #C59B52;
+      outline: 0.45mm solid #5A3B28;
+      outline-offset: -3.2mm;
+      border-radius: 8.5mm;
+      padding: 6mm 8mm;
+      color: var(--cream);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3.5mm;
+      box-shadow: 0 8px 24px rgba(34, 19, 11, 0.25);
+    }
+
+    .pi-row {
+      font-size: 5.2mm;
+      font-weight: 800;
+      color: #FAF4EA;
+      letter-spacing: -0.15px;
+    }
+
+    .email-pill {
+      background-color: #3A2215;
+      border: 0.7mm solid var(--gold);
+      border-radius: 9999px;
+      padding: 2.2mm 8mm;
+      font-size: 4.6mm;
+      font-weight: 800;
+      color: #FFE29E;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      letter-spacing: 0.1px;
+    }
+
+    .institution-text {
+      font-size: 3.1mm;
+      font-weight: 600;
+      color: #E6D0B3;
+      letter-spacing: 0.1px;
+    }
+
+    /* Print Rules */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 0;
+      }
+
+      body {
+        background-color: transparent;
+        padding: 0;
+        margin: 0;
+      }
+
+      .screen-controls {
+        display: none !important;
+      }
+
+      .a4-sheet {
+        box-shadow: none !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        max-height: 297mm !important;
+        page-break-after: avoid;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen Action Bar -->
+  <div class="screen-controls">
+    <button class="btn btn-print" onclick="window.print()">
+      🖨️ Print / Save as A4 PDF
+    </button>
+    <a href="/images/tracex-a4-poster-300dpi.png" download="TraceX-A4-Poster-300DPI.png" class="btn btn-download">
+      💾 Download High-Res 300 DPI Image
+    </a>
+    <a href="/about" class="btn btn-home">
+      ← Back to About Page
+    </a>
+  </div>
+
+  <!-- A4 Printable Sheet -->
+  <div class="a4-sheet">
+    <!-- Double Frames & Corner Accents -->
+    <div class="outer-frame"></div>
+    <div class="inner-frame"></div>
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+
+    <div class="content-box">
+      <!-- 1. Brand & Project Title -->
+      <div class="header-section">
+        <div class="brand-row">
+          <img src="/images/tracex-icon.png" alt="TraceX Logo" class="brand-logo-img">
+          <h1 class="brand-title">Trace<span>X</span></h1>
+        </div>
+
+        <h2 class="project-title">
+          A Blockchain-Based Real-Time Smart<br>
+          Supply Chain Traceability System
+        </h2>
+
+        <div class="header-divider"></div>
+      </div>
+
+      <!-- 2. Prominent Oversized QR Code -->
+      <div class="qr-card">
+        <img src="/images/tracex-qr-code.png" alt="TraceX QR Code" class="qr-code-img">
+      </div>
+
+      <!-- 3. Principal Investigator Contact Box -->
+      <div class="contact-box">
+        <div class="pi-row">
+          Principal Investigator: Dr. Kashif Mehboob Khan
+        </div>
+        <a href="mailto:kashifmehboob@neduet.edu.pk" class="email-pill">
+          Contact: &nbsp;kashifmehboob@neduet.edu.pk
+        </a>
+        <div class="institution-text">
+          Department of Software Engineering &bull; NED University of Engineering &amp; Technology, Karachi
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

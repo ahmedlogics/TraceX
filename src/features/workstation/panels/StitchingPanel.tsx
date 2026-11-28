@@ -202,10 +202,10 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                   </Tabs>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5 rounded-md bg-success-soft border border-success/25 px-2.5 py-1 text-xs font-medium text-success">
                       <span className="relative flex size-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                        <span className="relative inline-flex size-2 rounded-full bg-success" />
                       </span>
                       <span>Station 4 Ready</span>
                     </div>
@@ -258,7 +258,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                   >
                     {stitchingQueue.length === 0 ? (
                       <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/12 text-success">
                           <CheckCircle2 className="size-4" />
                         </div>
                         <p className="text-sm font-medium text-foreground">
@@ -298,12 +298,12 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
 
                               <div className="flex items-center gap-2">
                                 {isDone ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-success-soft border border-success/30 px-2.5 py-0.5 text-xs font-semibold text-success">
                                     <CheckCircle2 className="size-3" /> Done · Stitched
                                   </span>
                                 ) : (
                                   <>
-                                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                    <span className="inline-flex items-center rounded-full bg-warning-soft border border-warning/30 px-2.5 py-0.5 text-xs font-semibold text-warning">
                                       Ready to Stitch
                                     </span>
                                     <Button
@@ -333,7 +333,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
                   >
                     {stitchingRework.length === 0 ? (
                       <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+                        <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/12 text-success">
                           <CheckCircle2 className="size-4" />
                         </div>
                         <p className="text-sm font-medium text-foreground">
@@ -368,7 +368,7 @@ export function StitchingPanel({ stationData }: { stationData: RfidStationData }
 
                               <div className="flex items-center gap-2">
                                 {isRepaired ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-success-soft border border-success/30 px-2.5 py-0.5 text-xs font-semibold text-success">
                                     <CheckCircle2 className="size-3" /> Repaired · Returned to QC
                                   </span>
                                 ) : (

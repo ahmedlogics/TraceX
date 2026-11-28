@@ -93,7 +93,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       Unassigned (Dashboard Verified)
                     </span>
                   ) : (
-                    <span className="text-xs font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                    <span className="text-xs font-semibold text-warning bg-warning-soft border border-warning/25 px-2 py-0.5 rounded">
                       Card Pending (Station 1)
                     </span>
                   )}
@@ -111,7 +111,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       </Button>
                     ) : (
                       canAccessRoute(me, "workstation") && (
-                        <Button asChild size="sm" variant="outline" className="text-amber-600 border-amber-500/30 hover:bg-amber-500/10">
+                        <Button asChild size="sm" variant="outline" className="text-warning border-warning/35 hover:bg-warning-soft/70">
                           <AppLink href={paths.workstation}>
                             Assign Card at Station 1 <ArrowRight className="size-3.5 ml-1" />
                           </AppLink>
@@ -186,7 +186,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                       ) : lot.status === "accepted" ? (
                         <span className="text-muted-foreground italic">Unassigned (Dashboard Verified)</span>
                       ) : (
-                        <span className="text-amber-600 font-medium">None (bind at Station 1)</span>
+                        <span className="text-warning font-medium">None (bind at Station 1)</span>
                       ),
                     },
                     {
@@ -214,7 +214,7 @@ export function LotDetailView({ lotId }: { lotId: string }) {
                           <StatusBadge status={inspection.status} />
                         </span>
                       ) : lot.status === "awaiting-inspection" && (!lot.rfidUid || lot.rfidUid === "unassigned") ? (
-                        <span className="text-amber-600 font-medium">Awaiting Station 1 Receiving Scan</span>
+                        <span className="text-warning font-medium">Awaiting Station 1 Receiving Scan</span>
                       ) : (
                         <span className="text-warning font-medium">Ready for Incoming QC Inspection</span>
                       ),

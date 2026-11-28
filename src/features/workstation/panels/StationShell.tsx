@@ -117,9 +117,9 @@ export function StationShell() {
                 aria-label="Active Station Context"
                 className={`relative overflow-hidden rounded-xl border-2 border-primary/25 p-5 shadow-xs ${
                   effectiveStation === "stitching"
-                    ? "bg-gradient-to-r from-card via-card/95 to-amber-50/40 dark:to-card/85"
+                    ? "bg-gradient-to-r from-card via-card/95 to-accent/40"
                     : effectiveStation === "warehouse"
-                    ? "bg-gradient-to-r from-card via-card/95 to-amber-50/30 dark:to-card/85"
+                    ? "bg-gradient-to-r from-card via-card/95 to-accent/35"
                     : "bg-card"
                 }`}
               >

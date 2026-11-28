@@ -209,10 +209,10 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                         {/* Hardware RFID Status */}
                         <div className="flex items-center gap-2 md:justify-end">
                           <span className="relative flex size-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full size-2.5 bg-emerald-500"></span>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                            <span className="relative inline-flex rounded-full size-2.5 bg-success"></span>
                           </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success-soft px-2.5 py-1 text-xs font-semibold text-success">
                             <Radio className="size-3.5" />
                             {isArmed ? "Dock Reader: Armed & Listening" : "Dock Reader: Ready"}
                           </span>
@@ -224,13 +224,13 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                         <div
                           className={`mt-4 rounded-lg border p-4 text-xs transition-all shadow-xs ${
                             lastOutcome.resolution === "accepted"
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
-                              : "border-destructive/40 bg-destructive/10 text-destructive"
+                              ? "border-success/40 bg-success-soft/70 text-foreground"
+                              : "border-destructive/40 bg-danger-soft text-destructive"
                           }`}
                         >
                           <div className="flex items-start gap-3">
                             {lastOutcome.resolution === "accepted" ? (
-                              <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+                              <CheckCircle2 className="size-5 shrink-0 text-success mt-0.5" />
                             ) : (
                               <XCircle className="size-5 shrink-0 text-destructive mt-0.5" />
                             )}
@@ -283,9 +283,9 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                               Scan Box Tag on Hardware
                             </Button>
                           ) : (
-                            <div className="rounded-xl border-2 border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20 p-4 flex items-center justify-between">
-                              <div className="inline-flex items-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                                <Radio className="size-5 animate-spin text-emerald-600" />
+                            <div className="rounded-xl border-2 border-success/45 bg-success-soft/60 p-4 flex items-center justify-between">
+                              <div className="inline-flex items-center gap-2 text-sm font-bold text-success">
+                                <Radio className="size-5 animate-spin text-success" />
                                 Scanner 9 Dock Reader Armed & Listening for Master Box Tag
                               </div>
                               <Button
@@ -457,7 +457,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                 return holds ? (
                                   <HoldBadge />
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success">
                                     <CheckCircle2 className="size-3.5" /> Clear
                                   </span>
                                 );
@@ -590,7 +590,7 @@ export function DispatchPanel({ stationData }: { stationData: RfidStationData })
                                           {isHeld ? (
                                             <HoldBadge />
                                           ) : (
-                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success">
                                               <CheckCircle2 className="size-3" /> Passed
                                             </span>
                                           )}

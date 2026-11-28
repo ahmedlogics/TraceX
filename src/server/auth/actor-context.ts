@@ -257,6 +257,16 @@ export function createPrismaAuthMiddleware(prisma: PrismaClient): RequestHandler
   };
 }
 
+type CachedDevActor = {
+  actor: ReturnType<typeof toServerActorContext>;
+  staffUser: unknown;
+  expiresAt: number;
+};
+
+const DEV_ACTOR_CACHE_TTL_MS = 15_000;
+const devActorCache = new Map<string, CachedDevActor>();
+const inFlightDevActors = new Map<string, Promise<CachedDevActor>>();
+
 /**
  * Global session resolution middleware.
  * Attempts to extract and resolve a staff session from Authorization headers or cookies.
@@ -282,45 +292,107 @@ export function createSessionResolverMiddleware(prisma: PrismaClient): RequestHa
         const headerDept = req.headers["x-actor-dept"] as string | undefined;
 
         if (headerRole || headerId || headerUser) {
-          let dbUser = null;
-          if (headerId) {
-            dbUser = await prisma.staff_users.findUnique({
-              where: { id: headerId },
-            }).catch(() => null);
-          } else if (headerUser) {
-            dbUser = await prisma.staff_users.findFirst({
-              where: { username: headerUser, suspended_at: null },
-            }).catch(() => null);
+          const isTestEnv = process.env["NODE_ENV"] === "test";
+          const cacheKey = `${headerId ?? ""}|${headerUser ?? ""}|${headerRole ?? ""}|${headerDept ?? ""}`;
+          const now = Date.now();
+
+          if (!isTestEnv) {
+            const cached = devActorCache.get(cacheKey);
+            if (cached && cached.expiresAt > now) {
+              req.actor = cached.actor;
+              (req as unknown as { staffUser?: unknown }).staffUser = cached.staffUser;
+              return next();
+            }
           }
 
-          const primaryGrant = dbUser
-            ? await prisma.staff_role_grants.findFirst({
-                where: { staff_user_id: dbUser.id, revoked_at: null },
-              }).catch(() => null)
-            : null;
+          const existingInFlight = !isTestEnv ? inFlightDevActors.get(cacheKey) : undefined;
+          const loadDevActor =
+            existingInFlight ??
+            (async (): Promise<CachedDevActor> => {
+              const grantInclude = {
+                staff_role_grants_staff_role_grants_staff_user_idTostaff_users: {
+                  where: { revoked_at: null },
+                  take: 1,
+                },
+              };
 
-          const resolvedRole = (headerRole as any) || (primaryGrant?.role as any) || "admin";
-          const resolvedDept = (headerDept as any) || (primaryGrant?.department_code as any) || "raw_store";
-          const resolvedId = dbUser?.id || headerId || "03221414-8e7e-4063-8054-e2426d7677c1";
-          const resolvedUsername = dbUser?.username || headerUser || "rawstore.demo";
-          const resolvedDisplayName = dbUser?.display_name || headerUser || "Operator";
+              let dbUser: any = null;
+              if (headerId) {
+                dbUser = await prisma.staff_users
+                  .findUnique({
+                    where: { id: headerId },
+                    include: grantInclude,
+                  })
+                  .catch(() => null);
+              } else if (headerUser) {
+                dbUser = await prisma.staff_users
+                  .findFirst({
+                    where: { username: headerUser, suspended_at: null },
+                    include: grantInclude,
+                  })
+                  .catch(() => null);
+              }
 
-          req.actor = {
-            actorId: resolvedId,
-            username: resolvedUsername,
-            displayName: resolvedDisplayName,
-            role: resolvedRole,
-            department: resolvedDept,
-            authenticatedAt: new Date(),
-          };
-          (req as unknown as { staffUser?: unknown }).staffUser = {
-            id: req.actor.actorId,
-            username: req.actor.username,
-            displayName: req.actor.displayName,
-            role: req.actor.role,
-            department: req.actor.department,
-            status: "active",
-          };
+              const includedGrant =
+                dbUser?.staff_role_grants_staff_role_grants_staff_user_idTostaff_users?.[0];
+              const primaryGrant =
+                includedGrant !== undefined
+                  ? includedGrant
+                  : dbUser
+                    ? await prisma.staff_role_grants
+                        .findFirst({
+                          where: { staff_user_id: dbUser.id, revoked_at: null },
+                        })
+                        .catch(() => null)
+                    : null;
+
+              const resolvedRole = (headerRole as any) || (primaryGrant?.role as any) || "admin";
+              const resolvedDept =
+                (headerDept as any) || (primaryGrant?.department_code as any) || "raw_store";
+              const resolvedId = dbUser?.id || headerId || "03221414-8e7e-4063-8054-e2426d7677c1";
+              const resolvedUsername = dbUser?.username || headerUser || "rawstore.demo";
+              const resolvedDisplayName = dbUser?.display_name || headerUser || "Operator";
+
+              const actor: ReturnType<typeof toServerActorContext> = {
+                actorId: resolvedId,
+                username: resolvedUsername,
+                displayName: resolvedDisplayName,
+                role: resolvedRole,
+                department: resolvedDept,
+                authenticatedAt: new Date(),
+              };
+              const staffUser = {
+                id: actor.actorId,
+                username: actor.username,
+                displayName: actor.displayName,
+                role: actor.role,
+                department: actor.department,
+                status: "active",
+              };
+              const entry: CachedDevActor = {
+                actor,
+                staffUser,
+                expiresAt: Date.now() + DEV_ACTOR_CACHE_TTL_MS,
+              };
+              if (!isTestEnv) {
+                devActorCache.set(cacheKey, entry);
+              }
+              return entry;
+            })();
+
+          if (!isTestEnv && !existingInFlight) {
+            inFlightDevActors.set(cacheKey, loadDevActor);
+          }
+
+          try {
+            const entry = await loadDevActor;
+            req.actor = entry.actor;
+            (req as unknown as { staffUser?: unknown }).staffUser = entry.staffUser;
+          } finally {
+            if (!isTestEnv && !existingInFlight) {
+              inFlightDevActors.delete(cacheKey);
+            }
+          }
         }
       }
       next();

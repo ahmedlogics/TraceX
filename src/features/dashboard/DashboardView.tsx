@@ -89,7 +89,7 @@ function ReceivingLotsQueue() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                    <span className="inline-flex items-center rounded-full bg-warning-soft border border-warning/30 px-2.5 py-0.5 text-xs font-semibold text-warning">
                       Card Pending
                     </span>
                     <Button asChild size="sm" className="h-8 text-xs gap-1.5">
@@ -127,7 +127,7 @@ function IncomingQcQueue() {
           if (awaitingReceiving.length > 0) {
             return (
               <div className="rounded-xl border border-dashed p-6 text-center space-y-3 bg-muted/20">
-                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-warning/15 text-warning">
                   <Radio className="size-4" />
                 </div>
                 <div className="space-y-1">
@@ -181,7 +181,7 @@ function IncomingQcQueue() {
                     <span className="font-bold text-foreground wt-id">{lot.id}</span>
                     <span className="text-muted-foreground">·</span>
                     <span className="font-medium text-foreground">{lot.material}</span>
-                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-success bg-success-soft px-2 py-0.5 rounded border border-success/25">
                       <Radio className="size-2.5" /> Tag: {lot.rfidUid}
                     </span>
                   </div>
@@ -190,7 +190,7 @@ function IncomingQcQueue() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex items-center rounded-full bg-warning-soft border border-warning/30 px-2.5 py-0.5 text-xs font-semibold text-warning">
                     Awaiting QC
                   </span>
                   <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
@@ -218,7 +218,7 @@ function RawStoreDashboard() {
       <div className="space-y-6">
         <PageHeader title="Home" description="Department of Raw Material Store" />
         <div className="rounded-xl border border-dashed p-8 text-center space-y-3 bg-muted/10">
-          <AlertTriangle className="size-6 text-amber-500 mx-auto" />
+          <AlertTriangle className="size-6 text-warning mx-auto" />
           <p className="text-sm font-medium text-foreground">
             Unable to load warehouse bundles right now.
           </p>
@@ -291,11 +291,11 @@ function RawStoreDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Available Bundles</span>
-            <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-success/12 text-success">
               <CheckCircle2 className="size-3.5" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-success">
             {acceptedLots.length}
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
@@ -306,7 +306,7 @@ function RawStoreDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Total Stock</span>
-            <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary/12 text-primary">
               <Boxes className="size-3.5" />
             </div>
           </div>
@@ -321,11 +321,11 @@ function RawStoreDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Awaiting Incoming QC</span>
-            <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
               <Clock className="size-3.5" />
             </div>
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-warning">
             {quarantineLots.length}
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
@@ -336,7 +336,7 @@ function RawStoreDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Active Orders</span>
-            <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-secondary text-accent-foreground">
               <Scissors className="size-3.5" />
             </div>
           </div>
@@ -379,7 +379,7 @@ function RawStoreDashboard() {
           >
             {displayedLots.length === 0 ? (
               <div className="rounded-xl border border-dashed p-6 text-center space-y-2 bg-muted/20">
-                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/12 text-success">
                   <CheckCircle2 className="size-4" />
                 </div>
                 <p className="text-sm font-medium text-foreground">
@@ -412,7 +412,7 @@ function RawStoreDashboard() {
                           <span className="text-muted-foreground">·</span>
                           <span className="font-medium text-foreground">{lot.material}</span>
                           {lot.rfidUid && (
-                            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-success bg-success-soft px-2 py-0.5 rounded border border-success/25">
                               <Radio className="size-2.5" /> Tag: {lot.rfidUid}
                             </span>
                           )}
@@ -424,7 +424,7 @@ function RawStoreDashboard() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-success-soft border border-success/30 px-2.5 py-0.5 text-xs font-semibold text-success">
                           <CheckCircle2 className="size-3" /> Passed qc.incoming
                         </span>
                         <Button asChild size="sm" className="h-8 text-xs gap-1.5 bg-primary">
@@ -570,11 +570,11 @@ function StitchingDashboard() {
                     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-muted-foreground">READY FOR STITCHING</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
                           <Scissors className="size-3.5" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                      <p className="mt-2 text-2xl font-bold tracking-tight text-warning">
                         {readyQueue.length}
                       </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -585,11 +585,11 @@ function StitchingDashboard() {
                     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-muted-foreground">STITCHED TODAY</span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-success/12 text-success">
                           <CheckCircle2 className="size-3.5" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                      <p className="mt-2 text-2xl font-bold tracking-tight text-success">
                         {completedQueue.length}
                       </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
@@ -646,7 +646,7 @@ function StitchingDashboard() {
                     <div className="space-y-3">
                       {filteredReady.length === 0 ? (
                         <div className="rounded-xl border border-dashed p-8 text-center space-y-2 bg-muted/20">
-                          <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <div className="mx-auto flex size-8 items-center justify-center rounded-full bg-success/12 text-success">
                             <CheckCircle2 className="size-4" />
                           </div>
                           <p className="text-sm font-medium text-foreground">
@@ -685,12 +685,12 @@ function StitchingDashboard() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {isDone ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-success-soft border border-success/30 px-2.5 py-0.5 text-xs font-semibold text-success">
                                       <CheckCircle2 className="size-3" /> Done · Stitched
                                     </span>
                                   ) : (
                                     <>
-                                      <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                      <span className="inline-flex items-center rounded-full bg-warning-soft border border-warning/30 px-2.5 py-0.5 text-xs font-semibold text-warning">
                                         Ready to Stitch
                                       </span>
                                       <Button
@@ -735,7 +735,7 @@ function StitchingDashboard() {
                                 </div>
                                 <p className="text-muted-foreground">Order: {g.orderId}</p>
                               </div>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-bold text-success border border-success/25">
                                 <CheckCircle2 className="size-3" /> Done · Advanced to Finishing
                               </span>
                             </div>
@@ -955,7 +955,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Total Fabric Stock
             </span>
-            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-success/12 text-success">
               <Boxes className="size-4" />
             </div>
           </div>
@@ -972,7 +972,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Production Orders
             </span>
-            <div className="flex size-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/12 text-primary">
               <Scissors className="size-4" />
             </div>
           </div>
@@ -989,7 +989,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Garments Tracked
             </span>
-            <div className="flex size-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-secondary text-accent-foreground">
               <Shirt className="size-4" />
             </div>
           </div>
@@ -1006,7 +1006,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Dispatched &amp; Live
             </span>
-            <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-warning/15 text-warning">
               <Truck className="size-4" />
             </div>
           </div>
@@ -1031,30 +1031,30 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-success/12 text-success">
                     <Layers className="size-4" />
                   </div>
                   <span className="font-bold text-sm text-foreground">Raw Material Store</span>
                 </div>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 border border-emerald-500/20">
+                <span className="rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-bold text-success border border-success/25">
                   {passedLots.length} Ready
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="rounded-lg bg-muted/60 p-2.5">
                   <p className="text-[11px] text-muted-foreground">Total Rolls</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{lots.length}</p>
                   <p className="text-[10px] text-muted-foreground">{totalStockMeters.toFixed(0)}m total</p>
                 </div>
-                <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Passed QC</p>
-                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{passedLots.length}</p>
+                <div className="rounded-lg bg-success-soft/60 p-2.5 border border-success/25">
+                  <p className="text-[11px] text-success font-medium">Passed QC</p>
+                  <p className="text-lg font-bold text-success mt-0.5">{passedLots.length}</p>
                   <p className="text-[10px] text-muted-foreground">{passedStockMeters.toFixed(0)}m ready</p>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 px-1">
                 <span className="text-muted-foreground">Awaiting Incoming QC:</span>
-                <span className="font-semibold text-amber-600">{quarantineLots.length} in quarantine</span>
+                <span className="font-semibold text-warning">{quarantineLots.length} in quarantine</span>
               </div>
             </div>
           </div>
@@ -1064,24 +1064,24 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-blue-500/10 text-blue-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-primary/12 text-primary">
                     <Scissors className="size-4" />
                   </div>
                   <span className="font-bold text-sm text-foreground">Production Planning</span>
                 </div>
-                <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-600 border border-blue-500/20">
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-accent-foreground border border-border">
                   {orders.length} Total
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="rounded-lg bg-muted/60 p-2.5">
                   <p className="text-[11px] text-muted-foreground">Orders Created</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{orders.length}</p>
                   <p className="text-[10px] text-muted-foreground">{plannedUnits} pcs planned</p>
                 </div>
-                <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Orders Completed</p>
-                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{completedOrders.length}</p>
+                <div className="rounded-lg bg-success-soft/60 p-2.5 border border-success/25">
+                  <p className="text-[11px] text-success font-medium">Orders Completed</p>
+                  <p className="text-lg font-bold text-success mt-0.5">{completedOrders.length}</p>
                   <p className="text-[10px] text-muted-foreground">{activeOrders.length} active</p>
                 </div>
               </div>
@@ -1097,24 +1097,24 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-purple-500/10 text-purple-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-secondary text-accent-foreground">
                     <Scissors className="size-4" />
                   </div>
                   <span className="font-bold text-sm text-foreground">Cutting (Station 3)</span>
                 </div>
-                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-bold text-purple-600 border border-purple-500/20">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
                   {cutGarments} Cut
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Pending Cutting</p>
-                  <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{pendingCuttingOrders.length}</p>
+                <div className="rounded-lg bg-warning-soft/60 p-2.5 border border-warning/25">
+                  <p className="text-[11px] text-warning font-medium">Pending Cutting</p>
+                  <p className="text-lg font-bold text-warning mt-0.5">{pendingCuttingOrders.length}</p>
                   <p className="text-[10px] text-muted-foreground">orders in queue</p>
                 </div>
-                <div className="rounded-lg bg-purple-500/5 p-2.5 border border-purple-500/20">
-                  <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">Done in Cutting</p>
-                  <p className="text-lg font-bold text-purple-700 dark:text-purple-400 mt-0.5">{cutGarments}</p>
+                <div className="rounded-lg bg-accent/55 p-2.5 border border-border">
+                  <p className="text-[11px] text-accent-foreground font-medium">Done in Cutting</p>
+                  <p className="text-lg font-bold text-accent-foreground mt-0.5">{cutGarments}</p>
                   <p className="text-[10px] text-muted-foreground">units cut &amp; tagged</p>
                 </div>
               </div>
@@ -1132,24 +1132,24 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-primary/12 text-primary">
                     <Shirt className="size-4" />
                   </div>
                   <span className="font-bold text-sm text-foreground">Stitching (Station 4)</span>
                 </div>
-                <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold text-indigo-600 border border-indigo-500/20">
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-accent-foreground border border-border">
                   {stitchingDone.length} Stitched
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Pending Stitching</p>
-                  <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{stitchingPending.length}</p>
+                <div className="rounded-lg bg-warning-soft/60 p-2.5 border border-warning/25">
+                  <p className="text-[11px] text-warning font-medium">Pending Stitching</p>
+                  <p className="text-lg font-bold text-warning mt-0.5">{stitchingPending.length}</p>
                   <p className="text-[10px] text-muted-foreground">units in assembly</p>
                 </div>
-                <div className="rounded-lg bg-indigo-500/5 p-2.5 border border-indigo-500/20">
-                  <p className="text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">Done in Stitching</p>
-                  <p className="text-lg font-bold text-indigo-700 dark:text-indigo-400 mt-0.5">{stitchingDone.length}</p>
+                <div className="rounded-lg bg-accent/55 p-2.5 border border-border">
+                  <p className="text-[11px] text-accent-foreground font-medium">Done in Stitching</p>
+                  <p className="text-lg font-bold text-accent-foreground mt-0.5">{stitchingDone.length}</p>
                   <p className="text-[10px] text-muted-foreground">sewing completed</p>
                 </div>
               </div>
@@ -1167,30 +1167,30 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-teal-500/10 text-teal-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-success/12 text-success">
                     <ShieldCheck className="size-4" />
                   </div>
                   <span className="font-bold text-sm text-foreground">Finishing &amp; Final QC (5 &amp; 6)</span>
                 </div>
-                <span className="rounded-full bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold text-teal-600 border border-teal-500/20">
+                <span className="rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-bold text-success border border-success/25">
                   {qcPassed.length} Passed
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="rounded-lg bg-muted/60 p-2.5">
                   <p className="text-[11px] text-muted-foreground">In Finishing</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{finishingPending.length}</p>
                   <p className="text-[10px] text-muted-foreground">trimming &amp; pressing</p>
                 </div>
-                <div className="rounded-lg bg-emerald-500/5 p-2.5 border border-emerald-500/20">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Passed Final QC</p>
-                  <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{qcPassed.length}</p>
+                <div className="rounded-lg bg-success-soft/60 p-2.5 border border-success/25">
+                  <p className="text-[11px] text-success font-medium">Passed Final QC</p>
+                  <p className="text-lg font-bold text-success mt-0.5">{qcPassed.length}</p>
                   <p className="text-[10px] text-muted-foreground">cleared for packaging</p>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs pt-1 px-1">
                 <span className="text-muted-foreground">Quarantine / Rework:</span>
-                <span className={`font-semibold ${inReworkOrHold.length > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                <span className={`font-semibold ${inReworkOrHold.length > 0 ? "text-warning" : "text-success"}`}>
                   {inReworkOrHold.length} in hold
                 </span>
               </div>
@@ -1202,24 +1202,24 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-amber-500/10 text-amber-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-warning/15 text-warning">
                     <PackageCheck className="size-4" />
                   </div>
                   <span className="font-bold text-sm text-foreground">Packing &amp; Warehouse (7 &amp; 8)</span>
                 </div>
-                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 border border-amber-500/20">
+                <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-bold text-warning border border-warning/25">
                   {storedBins} Bins
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
-                <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="rounded-lg bg-muted/60 p-2.5">
                   <p className="text-[11px] text-muted-foreground">Cartons Packed</p>
                   <p className="text-lg font-bold text-foreground mt-0.5">{packedCartonsCount}</p>
                   <p className="text-[10px] text-muted-foreground">boxes sealed</p>
                 </div>
-                <div className="rounded-lg bg-amber-500/5 p-2.5 border border-amber-500/20">
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">In Storage Bins</p>
-                  <p className="text-lg font-bold text-amber-700 dark:text-amber-400 mt-0.5">{warehousedGarments.length}</p>
+                <div className="rounded-lg bg-warning-soft/60 p-2.5 border border-warning/25">
+                  <p className="text-[11px] text-warning font-medium">In Storage Bins</p>
+                  <p className="text-lg font-bold text-warning mt-0.5">{warehousedGarments.length}</p>
                   <p className="text-[10px] text-muted-foreground">units binned</p>
                 </div>
               </div>
@@ -1242,7 +1242,7 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600">
+                  <div className="flex size-7 items-center justify-center rounded-md bg-success/12 text-success">
                     <Truck className="size-4" />
                   </div>
                   <div>
@@ -1256,21 +1256,21 @@ function AdminDashboard({ me }: { me: ReturnType<typeof useMe> }) {
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 pt-2 text-xs">
-                <div className="rounded-lg bg-muted/40 p-3">
+                <div className="rounded-lg bg-muted/60 p-3">
                   <p className="text-[11px] text-muted-foreground">Dispatched Units</p>
                   <p className="text-xl font-bold text-foreground mt-0.5">{dispatchedGarments.length}</p>
                 </div>
-                <div className="rounded-lg bg-emerald-500/5 p-3 border border-emerald-500/20">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">Lifecycle Complete</p>
-                  <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{dispatchedGarments.length}</p>
+                <div className="rounded-lg bg-success-soft/60 p-3 border border-success/25">
+                  <p className="text-[11px] text-success font-medium">Lifecycle Complete</p>
+                  <p className="text-xl font-bold text-success mt-0.5">{dispatchedGarments.length}</p>
                 </div>
-                <div className="rounded-lg bg-blue-500/5 p-3 border border-blue-500/20">
-                  <p className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">Digital Passports</p>
-                  <p className="text-xl font-bold text-blue-700 dark:text-blue-400 mt-0.5">{dispatchedGarments.length}</p>
+                <div className="rounded-lg bg-primary/8 p-3 border border-primary/20">
+                  <p className="text-[11px] text-primary font-medium">Digital Passports</p>
+                  <p className="text-xl font-bold text-primary mt-0.5">{dispatchedGarments.length}</p>
                 </div>
-                <div className="rounded-lg bg-purple-500/5 p-3 border border-purple-500/20">
-                  <p className="text-[11px] text-purple-700 dark:text-purple-400 font-medium">Cryptographic Trail</p>
-                  <p className="text-xl font-bold text-purple-700 dark:text-purple-400 mt-0.5">100%</p>
+                <div className="rounded-lg bg-accent/55 p-3 border border-border">
+                  <p className="text-[11px] text-accent-foreground font-medium">Cryptographic Trail</p>
+                  <p className="text-xl font-bold text-accent-foreground mt-0.5">100%</p>
                 </div>
               </div>
             </div>

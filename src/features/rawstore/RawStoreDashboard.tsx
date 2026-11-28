@@ -131,16 +131,16 @@ export function RawStoreDashboard() {
                         <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           PASSED QC QUEUE
                         </span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-success/12 text-success">
                           <CheckCircle2 className="size-4" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                      <p className="mt-2 text-2xl font-bold tracking-tight text-success">
                         {passedLots.length} <span className="text-sm font-normal text-muted-foreground">Rolls</span>
                       </p>
                       <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                         <span>{passedStockMeters.toLocaleString()}m verified fabric</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        <span className="font-semibold text-success">
                           Ready for Issue
                         </span>
                       </div>
@@ -152,7 +152,7 @@ export function RawStoreDashboard() {
                         <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           TOTAL WAREHOUSE STOCK
                         </span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/12 text-primary">
                           <Boxes className="size-4" />
                         </div>
                       </div>
@@ -170,16 +170,16 @@ export function RawStoreDashboard() {
                         <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           AWAITING INCOMING QC
                         </span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-warning/15 text-warning">
                           <Clock className="size-4" />
                         </div>
                       </div>
-                      <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+                      <p className="mt-2 text-2xl font-bold tracking-tight text-warning">
                         {awaitingLots.length} <span className="text-sm font-normal text-muted-foreground">Rolls</span>
                       </p>
                       <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                         <span>{awaitingStockMeters.toLocaleString()}m pending</span>
-                        <span className="font-medium text-amber-600 dark:text-amber-400">
+                        <span className="font-medium text-warning">
                           Allocation Blocked
                         </span>
                       </div>
@@ -191,7 +191,7 @@ export function RawStoreDashboard() {
                         <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                           ORDERS ACTIVE
                         </span>
-                        <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                        <div className="flex size-7 items-center justify-center rounded-lg bg-secondary text-accent-foreground">
                           <Scissors className="size-4" />
                         </div>
                       </div>
@@ -206,8 +206,8 @@ export function RawStoreDashboard() {
 
                   {/* HARDWARE RFID VERIFICATION POLICY NOTICE BANNER */}
                   {!isAdmin && (
-                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-xs text-foreground space-y-1">
-                      <div className="flex items-center gap-2 font-bold text-emerald-700 dark:text-emerald-400">
+                    <div className="rounded-xl border border-success/30 bg-success-soft/50 p-4 text-xs text-foreground space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-success">
                         <ShieldCheck className="size-4.5" />
                         Station 2 Hardware RFID Verification Policy (Scanner 2 · GPIO 12)
                       </div>
@@ -229,7 +229,7 @@ export function RawStoreDashboard() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <CheckCircle2 className="size-3.5 text-success" />
                         Available bundles ({passedLots.length})
                       </button>
                       <button
@@ -241,7 +241,7 @@ export function RawStoreDashboard() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        <Clock className="size-3.5 text-amber-600 dark:text-amber-400" />
+                        <Clock className="size-3.5 text-warning" />
                         Awaiting QC ({awaitingLots.length})
                       </button>
                       <button
@@ -253,7 +253,7 @@ export function RawStoreDashboard() {
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        <Scissors className="size-3.5 text-purple-600 dark:text-purple-400" />
+                        <Scissors className="size-3.5 text-primary" />
                         Orders Awaiting Fabric ({ordersAwaitingFabric.length})
                       </button>
                     </div>
@@ -297,7 +297,7 @@ export function RawStoreDashboard() {
                                         Lot #{lot.id}
                                       </span>
                                     </div>
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-bold text-success border border-success/25">
                                       <CheckCircle2 className="size-3" /> Passed qc.incoming
                                     </span>
                                   </div>
@@ -326,7 +326,7 @@ export function RawStoreDashboard() {
                                         title="Copy tag UID"
                                       >
                                         {copiedUid === lot.rfidUid ? (
-                                          <Check className="size-3 text-emerald-600" />
+                                          <Check className="size-3 text-success" />
                                         ) : (
                                           <Copy className="size-3" />
                                         )}
@@ -345,7 +345,7 @@ export function RawStoreDashboard() {
                                     </div>
                                     <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                                       <div
-                                        className="h-full bg-emerald-500 transition-all"
+                                        className="h-full bg-success transition-all"
                                         style={{ width: `${pct}%` }}
                                       />
                                     </div>
@@ -354,7 +354,7 @@ export function RawStoreDashboard() {
 
                                 {/* Card Bottom Action: Station 2 Issue */}
                                 <div className="mt-4 pt-3 border-t flex items-center justify-between gap-2">
-                                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                  <span className="text-[10px] font-medium text-success">
                                     Cleared for Cutting
                                   </span>
                                   {!isAdmin && (
@@ -378,10 +378,10 @@ export function RawStoreDashboard() {
                   {/* TAB 2: AWAITING INCOMING QC */}
                   {activeTab === "awaiting" && (
                     <div className="space-y-3">
-                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
-                        <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div className="rounded-xl border border-warning/30 bg-warning-soft/50 p-3.5 text-xs text-foreground flex items-start gap-2.5">
+                        <AlertTriangle className="size-4 shrink-0 text-warning mt-0.5" />
                         <div>
-                          <p className="font-bold">Rolls in this queue cannot be issued to production</p>
+                          <p className="font-bold text-warning">Rolls in this queue cannot be issued to production</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
                             Any bundle tag scanned at Station 2 from this section will trigger an automatic hardware scan rejection because inspection by <code>qc.incoming</code> has not been completed.
                           </p>
@@ -398,11 +398,11 @@ export function RawStoreDashboard() {
                           {displayedAwaitingLots.map((lot) => (
                             <div
                               key={lot.id}
-                              className="rounded-xl border border-amber-500/30 bg-card p-4 shadow-xs opacity-90"
+                              className="rounded-xl border border-warning/35 bg-card p-4 shadow-xs opacity-95"
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold text-sm text-foreground">Lot #{lot.id}</span>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-bold text-warning border border-warning/25">
                                   <Clock className="size-3" /> Awaiting QC
                                 </span>
                               </div>
@@ -412,7 +412,7 @@ export function RawStoreDashboard() {
                               <p className="text-[11px] text-muted-foreground mt-1">
                                 Qty: {lot.balanceQty ?? lot.receivedQty}m · Tag: {lot.rfidUid || "Unassigned"}
                               </p>
-                              <div className="mt-3 rounded-md bg-amber-500/10 p-2 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                              <div className="mt-3 rounded-md bg-warning-soft/70 p-2 text-[10px] font-medium text-warning">
                                 🔒 Locked: Blocked from Station 2 issuance until approved by qc.incoming
                               </div>
                             </div>
@@ -459,7 +459,7 @@ export function RawStoreDashboard() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                                  <span className="inline-flex items-center rounded-full bg-warning-soft border border-warning/30 px-2.5 py-0.5 text-xs font-semibold text-warning">
                                     Awaiting Allocation
                                   </span>
                                   {!isAdmin && (

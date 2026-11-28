@@ -415,7 +415,7 @@ export function QAPanel({
               : confirmedOutcome.type === "failed"
                 ? "border-destructive/60 bg-danger-soft text-foreground"
                 : confirmedOutcome.type === "discarded"
-                  ? "border-amber-500/60 bg-amber-500/10 text-foreground"
+                  ? "border-warning/60 bg-warning-soft text-foreground"
                   : "border-destructive/60 bg-danger-soft text-foreground"
           }`}
         >
@@ -425,7 +425,7 @@ export function QAPanel({
                 {confirmedOutcome.type === "passed" && <ShieldCheck className="size-5 text-success" />}
                 {confirmedOutcome.type === "failed" && <ShieldAlert className="size-5 text-destructive" />}
                 {confirmedOutcome.type === "discarded" && (
-                  <Trash2 className="size-5 text-amber-600 dark:text-amber-400" />
+                  <Trash2 className="size-5 text-warning" />
                 )}
                 {confirmedOutcome.type === "rejected" && <XCircle className="size-5 text-destructive" />}
               </div>
@@ -598,15 +598,15 @@ export function QAPanel({
                           <span className="font-semibold">{g.id}</span>
                           <span className="text-[10px] opacity-80">({g.rfidUid})</span>
                           {isPassed ? (
-                            <span className="text-[9px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold rounded px-1 ml-0.5">
+                            <span className="text-[9px] bg-success-soft text-success font-semibold rounded px-1 ml-0.5">
                               Passed
                             </span>
                           ) : g.hold ? (
-                            <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold rounded px-1 ml-0.5">
+                            <span className="text-[9px] bg-warning-soft text-warning font-semibold rounded px-1 ml-0.5">
                               On Hold
                             </span>
                           ) : (
-                            <span className="text-[9px] bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold rounded px-1 ml-0.5">
+                            <span className="text-[9px] bg-accent text-accent-foreground font-semibold rounded px-1 ml-0.5">
                               Ready
                             </span>
                           )}
@@ -818,7 +818,7 @@ export function QAPanel({
               </Field>
 
               {/* Discard Product Option */}
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 flex items-start gap-2.5">
+              <div className="rounded-lg border border-warning/40 bg-warning-soft/70 p-3 flex items-start gap-2.5">
                 <Checkbox
                   id="discard-toggle"
                   checked={discardProduct}
@@ -828,12 +828,12 @@ export function QAPanel({
                 <div className="space-y-0.5">
                   <label
                     htmlFor="discard-toggle"
-                    className="text-xs font-bold text-amber-900 dark:text-amber-200 cursor-pointer flex items-center gap-1.5"
+                    className="text-xs font-bold text-foreground cursor-pointer flex items-center gap-1.5"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-3.5 text-warning" />
                     Discard Product (Scrap Permanently)
                   </label>
-                  <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  <p className="text-[11px] text-warning">
                     Check if the defect is beyond repair. Bypasses department repair routing and permanently decommissions the garment.
                   </p>
                 </div>

@@ -91,7 +91,7 @@ export async function runInTransaction<T>(
           return callback(tx as PrismaTransactionClient);
         },
         {
-          maxWait: 10000,
+          maxWait: 20000,
           timeout: 30000,
         },
       );
@@ -102,6 +102,8 @@ export async function runInTransaction<T>(
         msg.includes("max clients reached") ||
         msg.includes("Connection pool timeout") ||
         msg.includes("Connection closed") ||
+        msg.includes("Unable to start a transaction") ||
+        msg.includes("timeout exceeded when trying to connect") ||
         msg.includes("57P01");
 
       if (isTransient && attempts < maxAttempts) {

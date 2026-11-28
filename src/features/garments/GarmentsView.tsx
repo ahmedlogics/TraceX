@@ -251,8 +251,8 @@ export function GarmentsView() {
                           <span
                             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold border ${
                               isMock
-                                ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                                : "bg-success/15 text-success border-success/30"
+                                ? "bg-warning-soft text-warning border-warning/30"
+                                : "bg-success-soft text-success border-success/30"
                             }`}
                           >
                             {isMock ? "Mock Simulation" : "Ready for Scans"}
@@ -580,7 +580,7 @@ export function GarmentsView() {
                       const isDone = Boolean(completedIds[g.id]);
                       if (isDone) {
                         return (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-success">
                             <CheckCircle2 className="size-3.5" /> Done
                           </span>
                         );

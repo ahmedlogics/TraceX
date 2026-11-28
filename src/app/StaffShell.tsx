@@ -43,8 +43,8 @@ function NavList({ user, onNavigate }: { user: StaffUser; onNavigate?: () => voi
                     onClick={onNavigate}
                     aria-current={isActive(i.href) ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                      isActive(i.href) && "bg-accent font-medium text-accent-foreground",
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
+                      isActive(i.href) && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
                     )}
                   >
                     <i.icon className="size-4 shrink-0" aria-hidden />
@@ -110,7 +110,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-3 backdrop-blur sm:px-5">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-sidebar-border/80 bg-background/95 px-3 backdrop-blur sm:px-5">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button
@@ -122,7 +122,7 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
                 <Menu />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 overflow-y-auto">
+            <SheetContent side="left" className="w-72 overflow-y-auto bg-sidebar text-sidebar-foreground">
               <SheetHeader>
                 <SheetTitle>
                   <Logo height={24} />
@@ -144,14 +144,14 @@ export function StaffShell({ user, children }: { user: StaffUser; children: Reac
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer border",
                 dataMode === "live"
-                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20 dark:text-emerald-400"
-                  : "bg-amber-500/10 text-amber-600 border-amber-500/30 hover:bg-amber-500/20 dark:text-amber-400",
+                  ? "bg-secondary/90 text-foreground border-border hover:bg-accent"
+                  : "bg-warning-soft text-warning border-warning/30 hover:bg-warning-soft/80",
               )}
             >
               <span
                 className={cn(
                   "size-1.5 rounded-full",
-                  dataMode === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500",
+                  dataMode === "live" ? "bg-success animate-pulse" : "bg-warning",
                 )}
               />
               {dataMode === "live" ? "Live API" : "Mock Mode"}

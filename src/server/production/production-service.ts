@@ -111,7 +111,7 @@ export const subjectRevisionService = new SubjectRevisionService();
 export async function listProductSpecs(
   tx?: PrismaTransactionClient,
 ): Promise<ProductSpecDTO[]> {
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const specs = await db.product_spec_versions.findMany({
       include: { staff_users: true },
       orderBy: [{ style_code: "asc" }, { version: "desc" }],
@@ -145,7 +145,6 @@ export async function listProductSpecs(
         approvedAt: sp.approved_at.toISOString(),
       };
     });
-  }, tx);
 }
 
 export async function saveProductSpec(
@@ -294,7 +293,7 @@ export async function getOrderDetail(
   actor?: unknown,
   tx?: PrismaTransactionClient,
 ): Promise<ProductionOrderDetailDTO | null> {
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const order = await db.production_orders.findFirst({
       where: idOrCodeWhere(orderIdOrCode),
       include: {
@@ -428,7 +427,6 @@ export async function getOrderDetail(
       cuttingJobs,
       garments,
     };
-  }, tx);
 }
 
 export async function createProductionOrder(
@@ -1497,7 +1495,7 @@ export async function listGarments(
   filters?: { stage?: string | undefined; orderId?: string | undefined },
   tx?: PrismaTransactionClient,
 ): Promise<GarmentDTO[]> {
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const garments = await db.garments.findMany({
       where: {
         ...(filters?.stage ? { stage: filters.stage as any } : {}),
@@ -1541,7 +1539,6 @@ export async function listGarments(
         null,
       holdReason: (g as any).garment_holds?.[0]?.reason ?? null,
     }));
-  }, tx);
 }
 
 export async function getGarmentDetail(
@@ -1549,7 +1546,7 @@ export async function getGarmentDetail(
   actor?: unknown,
   tx?: PrismaTransactionClient,
 ): Promise<GarmentDetailDTO | null> {
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const garment = await db.garments.findFirst({
       where: {
         OR: [
@@ -1624,7 +1621,6 @@ export async function getGarmentDetail(
         : undefined,
       tagBindingsHistory,
     };
-  }, tx);
 }
 
 // ---------------------------------------------------------------- Public Product Material Data (For Member 4)
@@ -1633,7 +1629,7 @@ export async function getPublicProductMaterialData(
   publicId: string,
   tx?: PrismaTransactionClient,
 ) {
-  return runInTransaction(async (db) => {
+  const db = tx ?? prisma;
     const garment = await db.garments.findUnique({
       where: { public_id: publicId },
       include: {
@@ -1684,5 +1680,4 @@ export async function getPublicProductMaterialData(
       stage: garment.stage,
       qualityDisposition: garment.quality_disposition,
     };
-  }, tx);
 }
